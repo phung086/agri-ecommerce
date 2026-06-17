@@ -28,6 +28,10 @@ public class ApiResponse<T> {
         return new ApiResponse<>(true, message, data, null, 200);
     }
 
+    public static <T> ApiResponse<T> success(String message, T data, int statusCode) {
+        return new ApiResponse<>(true, message, data, null, statusCode);
+    }
+
     public static <T> ApiResponse<T> success(String message) {
         return new ApiResponse<>(true, message, null, null, 200);
     }
