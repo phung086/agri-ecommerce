@@ -31,25 +31,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String token = getTokenFromRequest(request);
+        try {
+            String token = getTokenFromRequest(request);
 
-        if (
-                StringUtils.hasText(token)
-                        && jwtTokenProvider.validateToken(token)
-                        && SecurityContextHolder.getContext().getAuthentication() == null
-        ) {
-            Long userId = jwtTokenProvider.getUserIdFromToken(token);
-            UserDetails userDetails = customUserDetailsService.loadUserById(userId);
+            if (
+                    StringUtils.hasText(token)
+                            && jwtTokenProvider.validateToken(token)
+                            && SecurityContextHolder.getContext().getAuthentication() == null
+            ) {
+                Long userId = jwtTokenProvider.getUserIdFromToken(token);
+                UserDetails userDetails = customUserDetailsService.loadUserById(userId);
 
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
-                    );
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
 
-            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
+        } catch (Exception exception) {
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);
