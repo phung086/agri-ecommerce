@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import com.agri.ecommerce.dto.request.user.ChangePasswordRequest;
 
 @Tag(name = "Customer Profile", description = "API quản lý hồ sơ cá nhân của người dùng đăng nhập")
 @RestController
@@ -21,6 +22,19 @@ import org.springframework.web.bind.annotation.*;
 public class ProfileController {
 
     private final UserService userService;
+
+    @Operation(summary = "Đổi mật khẩu tài khoản đang đăng nhập")
+    @PatchMapping("/change-password")
+    public ResponseEntity<ApiResponse<Object>> changePassword(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        userService.changePassword(principal.getId(), request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Đổi mật khẩu thành công", null, HttpStatus.OK.value())
+        );
+    }
 
     @Operation(summary = "Lấy hồ sơ cá nhân")
     @GetMapping

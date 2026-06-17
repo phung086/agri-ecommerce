@@ -14,7 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.agri.ecommerce.dto.request.user.ChangePasswordRequest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.List;
 
 @Service
@@ -25,6 +26,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
 
+    private final PasswordEncoder passwordEncoder;
     @Override
     @Transactional(readOnly = true)
     public UserResponse getCurrentProfile(Long userId) {
@@ -62,7 +64,27 @@ public class UserServiceImpl implements UserService {
         UserEntity user = findUserById(id);
         return userMapper.toUserResponse(user);
     }
+    @Override
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        UserEntity user = findUserById(userId);
 
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new BadRequestException("Mật khẩu hiện tại không đúng");
+        }
+
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new BadRequestException("Xác nhận mật khẩu mới không khớp");
+        }
+
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new BadRequestException("Mật khẩu mới không được trùng với mật khẩu hiện tại");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+
+        userRepository.save(user);
+    }
     @Override
     @Transactional
     public UserResponse updateUserStatus(Long id, UpdateUserStatusRequest request) {
