@@ -20,6 +20,16 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
     @EntityGraph(attributePaths = "category")
     Optional<ProductEntity> findBySlug(String slug);
 
+    @Override
+    @EntityGraph(attributePaths = "category")
+    Optional<ProductEntity> findById(Long id);
+
     @EntityGraph(attributePaths = "category")
     List<ProductEntity> findByStatus(String status, Pageable pageable);
+
+    boolean existsBySlug(String slug);
+
+    boolean existsBySlugAndIdNot(String slug, Long id);
+
+    boolean existsByCategory_Id(Long categoryId);
 }

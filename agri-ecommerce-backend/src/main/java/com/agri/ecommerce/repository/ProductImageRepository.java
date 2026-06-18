@@ -25,4 +25,6 @@ public interface ProductImageRepository extends JpaRepository<ProductImageEntity
             order by image.id asc
             """)
     List<ProductImageEntity> findAllByProductId(@Param("productId") Long productId);
+
+    void deleteByProduct_Id(Long productId);
 }
