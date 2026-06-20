@@ -1,48 +1,124 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
-  Boxes,
+  Bell,
+  ChevronRight,
+  Clock3,
   FolderTree,
   LayoutDashboard,
-  MessageSquare,
+  Leaf,
+  LogOut,
   Menu,
+  MessageSquare,
   PackageCheck,
   Search,
+  ShieldCheck,
   ShoppingCart,
+  Store,
   TicketPercent,
   Truck,
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { clearAuthSession, getAdminAuthState } from "@/lib/auth-storage";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/users", label: "Quản lí người dùng", icon: Users },
-  { href: "/admin/categories", label: "Quản lí danh mục", icon: FolderTree },
-  { href: "/admin/products", label: "Quản lí sản phẩm", icon: PackageCheck },
-  { href: "/admin/orders", label: "Quản lí đơn hàng", icon: ShoppingCart },
-  { href: "/admin/delivery", label: "Quản lí giao hàng", icon: Truck },
-  { href: "/admin/coupons", label: "Quản lí mã giảm giá", icon: TicketPercent },
-  { href: "/admin/contacts", label: "Quản lí liên hệ", icon: MessageSquare },
+  {
+    href: "/admin",
+    label: "Dashboard",
+    description: "Tổng quan vận hành",
+    icon: LayoutDashboard,
+  },
+  {
+    href: "/admin/users",
+    label: "Người dùng",
+    description: "Khách hàng, nhà bán",
+    icon: Users,
+  },
+  {
+    href: "/admin/categories",
+    label: "Danh mục",
+    description: "Nhóm nông sản",
+    icon: FolderTree,
+  },
+  {
+    href: "/admin/products",
+    label: "Sản phẩm",
+    description: "Giá, kho, hình ảnh",
+    icon: PackageCheck,
+  },
+  {
+    href: "/admin/orders",
+    label: "Đơn hàng",
+    description: "Giỏ hàng, thanh toán",
+    icon: ShoppingCart,
+  },
+  {
+    href: "/admin/delivery",
+    label: "Giao hàng",
+    description: "Tuyến giao tươi",
+    icon: Truck,
+  },
+  {
+    href: "/admin/coupons",
+    label: "Mã giảm giá",
+    description: "Ưu đãi mùa vụ",
+    icon: TicketPercent,
+  },
+  {
+    href: "/admin/contacts",
+    label: "Liên hệ",
+    description: "Phản hồi khách hàng",
+    icon: MessageSquare,
+  },
 ];
+
+function getActiveItem(pathname) {
+  return (
+    navItems.find(
+      (item) =>
+        pathname === item.href ||
+        (item.href !== "/admin" && pathname.startsWith(item.href))
+    ) || navItems[0]
+  );
+}
 
 function SidebarContent({ pathname, onNavigate }) {
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center gap-3 border-b px-5">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-600 text-white">
-          <Boxes className="size-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">Agri Admin</p>
-          <p className="truncate text-xs text-muted-foreground">Quản trị nông sản</p>
+    <div className="flex h-full flex-col bg-[#10291b] text-white">
+      <div className="border-b border-white/10 px-5 py-5">
+        <Link href="/" className="flex items-center gap-3" onClick={onNavigate}>
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-[8px] bg-emerald-400 text-emerald-950 shadow-[0_14px_30px_rgba(16,185,129,0.24)]">
+            <Leaf className="size-6" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-base font-bold">AgriMarket</p>
+            <p className="truncate text-xs font-medium text-emerald-100/75">
+              Sàn nông sản trực tuyến
+            </p>
+          </div>
+        </Link>
+
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <div className="rounded-[8px] border border-white/10 bg-white/[0.08] p-3">
+            <p className="text-lg font-bold leading-none">24</p>
+            <p className="mt-1 text-[11px] font-medium text-emerald-100/70">
+              đơn mới
+            </p>
+          </div>
+          <div className="rounded-[8px] border border-white/10 bg-white/[0.08] p-3">
+            <p className="text-lg font-bold leading-none">98%</p>
+            <p className="mt-1 text-[11px] font-medium text-emerald-100/70">
+              sẵn hàng
+            </p>
+          </div>
         </div>
       </div>
 
@@ -59,27 +135,48 @@ function SidebarContent({ pathname, onNavigate }) {
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
+                "group flex items-center gap-3 rounded-[8px] px-3 py-2.5 text-sm font-semibold transition",
                 active
-                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-white text-emerald-950 shadow-sm"
+                  : "text-emerald-50/75 hover:bg-white/10 hover:text-white"
               )}
             >
-              <Icon className="size-4" />
-              <span className="truncate">{item.label}</span>
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-[8px] transition",
+                  active
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-white/10 text-emerald-100 group-hover:bg-white/15"
+                )}
+              >
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{item.label}</span>
+                <span
+                  className={cn(
+                    "block truncate text-xs font-medium",
+                    active ? "text-emerald-700" : "text-emerald-100/55"
+                  )}
+                >
+                  {item.description}
+                </span>
+              </span>
+              {active && <ChevronRight className="size-4 text-emerald-600" />}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t p-4">
-        <div className="rounded-lg bg-muted/60 p-3">
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <BarChart3 className="size-4 text-emerald-600" />
-            Phiên bản frontend
+      <div className="border-t border-white/10 p-4">
+        <div className="rounded-[8px] border border-white/10 bg-white/[0.08] p-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-emerald-50">
+            <BarChart3 className="size-4 text-amber-300" />
+            Trực vận hành hôm nay
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Một số thao tác đang dùng dữ liệu demo.
+          <p className="mt-2 text-xs leading-5 text-emerald-100/70">
+            Ưu tiên xử lý đơn tươi, tồn kho thấp và các chương trình khuyến mãi
+            theo mùa.
           </p>
         </div>
       </div>
@@ -88,22 +185,81 @@ function SidebarContent({ pathname, onNavigate }) {
 }
 
 export function AdminShell({ children }) {
+  const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authState, setAuthState] = useState({
+    status: "checking",
+    session: null,
+  });
 
-  const pageTitle = useMemo(() => {
+  const activeItem = useMemo(() => getActiveItem(pathname), [pathname]);
+  const pageTitle = activeItem?.label || "Dashboard";
+  const isAuthPage = pathname === "/admin/login";
+  const currentUser = authState.session?.currentUser;
+  const adminName = currentUser?.name || "Admin";
+  const adminRole = currentUser?.roleName || "Quản trị viên";
+  const adminInitial = (adminName || currentUser?.email || "A")
+    .charAt(0)
+    .toUpperCase();
+
+  useEffect(() => {
+    if (isAuthPage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setAuthState(getAdminAuthState());
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isAuthPage, pathname]);
+
+  useEffect(() => {
+    if (
+      isAuthPage ||
+      authState.status === "checking" ||
+      authState.status === "authenticated"
+    ) {
+      return;
+    }
+
+    clearAuthSession();
+    router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
+  }, [authState.status, isAuthPage, pathname, router]);
+
+  function handleLogout() {
+    clearAuthSession();
+    setMobileOpen(false);
+    router.replace("/admin/login");
+  }
+
+  if (isAuthPage) {
+    return children;
+  }
+
+  if (authState.status !== "authenticated") {
     return (
-      navItems.find(
-        (item) =>
-          pathname === item.href ||
-          (item.href !== "/admin" && pathname.startsWith(item.href))
-      )?.label || "Dashboard"
+      <div className="flex min-h-screen items-center justify-center bg-[#f6faef] px-4">
+        <div className="w-full max-w-sm rounded-[8px] border border-emerald-100 bg-white p-5 text-center shadow-[0_18px_55px_rgba(15,61,38,0.08)]">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-[8px] bg-emerald-600 text-white">
+            <Leaf className="size-6" />
+          </div>
+          <p className="mt-4 font-black text-emerald-950">
+            Đang kiểm tra phiên đăng nhập
+          </p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Nếu phiên không hợp lệ, hệ thống sẽ chuyển bạn về màn hình đăng
+            nhập.
+          </p>
+        </div>
+      </div>
     );
-  }, [pathname]);
+  }
 
   return (
-    <div className="min-h-screen bg-[#f6f8f5] text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r bg-background md:flex">
+    <div className="min-h-screen bg-[#f6faef] text-foreground">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-emerald-950/10 md:flex">
         <SidebarContent pathname={pathname} />
       </aside>
 
@@ -112,15 +268,15 @@ export function AdminShell({ children }) {
           <button
             type="button"
             aria-label="Đóng menu"
-            className="absolute inset-0 bg-black/20"
+            className="absolute inset-0 bg-emerald-950/45 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[min(86vw,20rem)] flex-col border-r bg-background shadow-xl">
+          <aside className="absolute inset-y-0 left-0 flex w-[min(88vw,22rem)] flex-col border-r border-emerald-950/10 shadow-2xl">
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="absolute right-3 top-3"
+              className="absolute right-3 top-3 z-10 text-white hover:bg-white/10 hover:text-white"
               onClick={() => setMobileOpen(false)}
               aria-label="Đóng menu"
             >
@@ -134,9 +290,9 @@ export function AdminShell({ children }) {
         </div>
       )}
 
-      <div className="min-h-screen md:pl-64">
-        <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-          <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
+      <div className="min-h-screen md:pl-72">
+        <header className="sticky top-0 z-30 border-b border-emerald-900/10 bg-white/88 backdrop-blur-xl">
+          <div className="flex min-h-16 items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
             <Button
               type="button"
               variant="ghost"
@@ -149,32 +305,70 @@ export function AdminShell({ children }) {
             </Button>
 
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-lg font-semibold tracking-normal">
-                {pageTitle}
-              </h1>
-              <p className="hidden text-xs text-muted-foreground sm:block">
-                Theo dõi vận hành cửa hàng và dữ liệu quản trị.
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-lg font-bold tracking-normal text-emerald-950">
+                  {pageTitle}
+                </h1>
+                <span className="inline-flex h-6 items-center gap-1 rounded-[8px] bg-emerald-50 px-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+                  <Store className="size-3" />
+                  Marketplace
+                </span>
+              </div>
+              <p className="hidden text-sm text-muted-foreground sm:block">
+                Quản trị đơn hàng, tồn kho và trải nghiệm mua nông sản tươi.
               </p>
             </div>
 
-            <div className="hidden h-9 w-64 items-center gap-2 rounded-lg border bg-muted/30 px-3 text-sm text-muted-foreground lg:flex">
-              <Search className="size-4" />
-              <span className="truncate">Tìm nhanh trong từng trang</span>
+            <div className="hidden h-10 w-72 items-center gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50/70 px-3 text-sm text-muted-foreground lg:flex">
+              <Search className="size-4 text-emerald-700" />
+              <span className="truncate">Tìm đơn, sản phẩm, khách hàng...</span>
             </div>
 
-            <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-100 text-sm font-semibold text-emerald-700">
-                A
+            <div className="hidden items-center gap-2 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 xl:flex">
+              <Clock3 className="size-4" />
+              Ca giao sáng
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-lg"
+              className="hidden border-emerald-100 bg-white text-emerald-800 shadow-sm sm:inline-flex"
+              aria-label="Thông báo"
+            >
+              <Bell className="size-4" />
+            </Button>
+
+            <div className="flex items-center gap-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 shadow-sm">
+              <div className="flex size-9 items-center justify-center rounded-[8px] bg-emerald-600 text-sm font-bold text-white">
+                {adminInitial}
               </div>
               <div className="hidden text-sm sm:block">
-                <p className="font-medium leading-none">Admin</p>
-                <p className="mt-1 text-xs text-muted-foreground">Quản trị viên</p>
+                <p className="font-bold leading-none text-emerald-950">
+                  {adminName}
+                </p>
+                <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                  <ShieldCheck className="size-3 text-emerald-600" />
+                  {adminRole}
+                </p>
               </div>
             </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-lg"
+              className="border-emerald-100 bg-white text-emerald-800 shadow-sm"
+              onClick={handleLogout}
+              aria-label="Đăng xuất"
+              title="Đăng xuất"
+            >
+              <LogOut className="size-4" />
+            </Button>
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+        <main className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-6 lg:px-8">
           {children}
         </main>
       </div>

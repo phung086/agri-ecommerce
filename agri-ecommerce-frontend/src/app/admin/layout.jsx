@@ -1,8 +1,8 @@
 import { AdminShell } from "@/components/admin/admin-shell";
 
 export const metadata = {
-  title: "Agri Admin",
-  description: "Trang quản trị hệ thống nông sản trực tuyến",
+  title: "AgriMarket Admin",
+  description: "Trang quản trị sàn thương mại điện tử nông sản AgriMarket.",
 };
 
 export default function AdminLayout({ children }) {

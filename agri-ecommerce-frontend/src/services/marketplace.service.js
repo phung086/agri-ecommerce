@@ -1,0 +1,15 @@
+import axiosClient from "@/lib/axios-client";
+
+const unwrapApiData = (response) => response?.data ?? response;
+
+export const marketplaceService = {
+  getCategories: async () => {
+    const response = await axiosClient.get("/public/categories");
+    return unwrapApiData(response);
+  },
+
+  getProducts: async (params = {}) => {
+    const response = await axiosClient.get("/public/products", { params });
+    return unwrapApiData(response);
+  },
+};

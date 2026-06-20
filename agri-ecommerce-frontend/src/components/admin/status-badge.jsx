@@ -44,7 +44,7 @@ export function StatusBadge({ status, className }) {
     <Badge
       variant="outline"
       className={cn(
-        "h-6 rounded-md border px-2 font-medium",
+        "h-6 rounded-[8px] border px-2 font-bold",
         statusStyles[normalized] || "border-zinc-200 bg-zinc-50 text-zinc-700",
         className
       )}

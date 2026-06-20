@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Search, Truck, UserCheck } from "lucide-react";
 
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { DataTable } from "@/components/admin/data-table";
 import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
@@ -100,6 +101,13 @@ export default function AdminDeliveryPage() {
 
   return (
     <div className="space-y-5">
+      <AdminPageHeader
+        title="Quản lí giao hàng"
+        description="Phân công nhân viên giao hàng, theo dõi trạng thái vận chuyển và các mốc thời gian giao nhận."
+        image="/admin-assets/delivery.svg"
+        badges={["Dữ liệu mẫu", "Theo bảng orders/users"]}
+      />
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Đơn chờ phân công"

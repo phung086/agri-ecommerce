@@ -18,12 +18,15 @@ export function DataTable({
   renderRow,
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+    <div className="overflow-hidden rounded-[8px] border border-emerald-100 bg-white shadow-[0_16px_42px_rgba(15,61,38,0.06)]">
       <Table>
-        <TableHeader className="bg-muted/50">
-          <TableRow>
+        <TableHeader className="bg-emerald-50/80">
+          <TableRow className="border-emerald-100">
             {columns.map((column) => (
-              <TableHead key={column} className="h-11 px-4 text-xs uppercase">
+              <TableHead
+                key={column}
+                className="h-11 px-4 text-xs font-black uppercase tracking-normal text-emerald-800"
+              >
                 {column}
               </TableHead>
             ))}
@@ -45,7 +48,7 @@ export function DataTable({
             <TableRow>
               <TableCell
                 colSpan={columns.length}
-                className="h-28 px-4 text-center text-red-600"
+                className="h-28 px-4 text-center font-medium text-red-600"
               >
                 {error}
               </TableCell>

@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, Search } from "lucide-react";
+import { CheckCircle2, CircleDollarSign, Clock3, Eye, PackageCheck, Search } from "lucide-react";
 
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { DataTable } from "@/components/admin/data-table";
+import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,8 +55,61 @@ export default function AdminOrdersPage() {
     });
   }, [searchTerm, statusFilter]);
 
+  const orderStats = useMemo(() => {
+    const revenue = mockOrders.reduce(
+      (total, order) => total + Number(order.totalPrice || 0),
+      0
+    );
+    const pending = mockOrders.filter((order) => order.status === "pending").length;
+    const processing = mockOrders.filter((order) => order.status === "processing")
+      .length;
+    const completed = mockOrders.filter((order) =>
+      ["delivered", "completed"].includes(order.status)
+    ).length;
+
+    return { revenue, pending, processing, completed };
+  }, []);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <AdminPageHeader
+        title="Quản lí đơn hàng"
+        description="Theo dõi đơn hàng, trạng thái xử lý, thanh toán và chi tiết từng sản phẩm trong đơn."
+        image="/admin-assets/orders.svg"
+        badges={["Dữ liệu mẫu", "Theo bảng orders"]}
+      />
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Tổng doanh thu"
+          value={formatCurrency(orderStats.revenue)}
+          description="Từ danh sách đơn mẫu"
+          icon={CircleDollarSign}
+          tone="green"
+        />
+        <StatCard
+          title="Chờ xử lý"
+          value={orderStats.pending}
+          description="Cần xác nhận đơn"
+          icon={Clock3}
+          tone="amber"
+        />
+        <StatCard
+          title="Đang xử lý"
+          value={orderStats.processing}
+          description="Đang chuẩn bị hoặc giao"
+          icon={PackageCheck}
+          tone="blue"
+        />
+        <StatCard
+          title="Đã hoàn tất"
+          value={orderStats.completed}
+          description="Đã giao/hoàn tất"
+          icon={CheckCircle2}
+          tone="rose"
+        />
+      </section>
+
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm lg:flex-row lg:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

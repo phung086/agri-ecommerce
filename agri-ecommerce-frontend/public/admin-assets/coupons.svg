@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-label="Coupon management">
+  <rect width="960" height="540" rx="28" fill="#fffbeb"/>
+  <path d="M184 176h592c22 0 40 18 40 40v68c-36 0-64 28-64 64s28 64 64 64v28c0 22-18 40-40 40H184c-22 0-40-18-40-40v-28c36 0 64-28 64-64s-28-64-64-64v-68c0-22 18-40 40-40Z" fill="#fbbf24"/>
+  <path d="M360 396 600 156" stroke="#78350f" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="384" cy="210" r="42" fill="#fef3c7"/>
+  <circle cx="576" cy="350" r="42" fill="#fef3c7"/>
+  <path d="M288 176v304" stroke="#fef3c7" stroke-width="14" stroke-dasharray="18 18"/>
+</svg>

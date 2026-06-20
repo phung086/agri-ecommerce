@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Clock3, Percent, Pencil, Plus, Search, TicketPercent, Trash2 } from "lucide-react";
 
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { DataTable } from "@/components/admin/data-table";
+import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +72,19 @@ export default function AdminCouponsPage() {
       return matchesKeyword && matchesStatus;
     });
   }, [coupons, searchTerm, statusFilter]);
+
+  const couponStats = useMemo(() => {
+    const active = coupons.filter((coupon) => getCouponStatus(coupon) === "active")
+      .length;
+    const expired = coupons.filter((coupon) => getCouponStatus(coupon) === "expired")
+      .length;
+    const used = coupons.reduce(
+      (total, coupon) => total + Number(coupon.timesUsed || 0),
+      0
+    );
+
+    return { active, expired, used };
+  }, [coupons]);
 
   function updateForm(field, value) {
     setForm((current) => ({
@@ -158,7 +173,50 @@ export default function AdminCouponsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <AdminPageHeader
+        title="Quản lí mã giảm giá"
+        description="Tạo và theo dõi mã giảm giá, phần trăm giảm, hạn dùng, giới hạn sử dụng và trạng thái bật tắt."
+        image="/admin-assets/coupons.svg"
+        badges={["Dữ liệu mẫu", "Form demo"]}
+      >
+        <Button type="button" onClick={openCreateDialog}>
+          <Plus className="size-4" />
+          Thêm mã
+        </Button>
+      </AdminPageHeader>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Tổng mã"
+          value={coupons.length}
+          description="Đang quản lí trong demo"
+          icon={TicketPercent}
+          tone="green"
+        />
+        <StatCard
+          title="Đang bật"
+          value={couponStats.active}
+          description="Còn hiệu lực sử dụng"
+          icon={Percent}
+          tone="blue"
+        />
+        <StatCard
+          title="Hết hạn"
+          value={couponStats.expired}
+          description="Cần gia hạn hoặc tắt"
+          icon={Clock3}
+          tone="amber"
+        />
+        <StatCard
+          title="Lượt đã dùng"
+          value={formatNumber(couponStats.used)}
+          description="Tổng lượt từ dữ liệu mẫu"
+          icon={TicketPercent}
+          tone="rose"
+        />
+      </section>
+
       <div className="grid gap-3 rounded-lg border bg-card p-4 shadow-sm lg:grid-cols-[1fr_auto_auto] lg:items-center">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -181,11 +239,6 @@ export default function AdminCouponsPage() {
             </option>
           ))}
         </select>
-
-        <Button type="button" onClick={openCreateDialog}>
-          <Plus className="size-4" />
-          Thêm mã
-        </Button>
       </div>
 
       {notice && (
