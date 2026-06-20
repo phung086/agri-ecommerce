@@ -1,9 +1,12 @@
 package com.agri.ecommerce.controller.publicapi;
 
+import com.agri.ecommerce.dto.request.chat.AiAssistantRequest;
 import com.agri.ecommerce.dto.request.chat.GuestChatMessageRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
+import com.agri.ecommerce.dto.response.chat.AiAssistantResponse;
 import com.agri.ecommerce.dto.response.chat.ChatMessageResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
+import com.agri.ecommerce.service.AiAssistantService;
 import com.agri.ecommerce.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -21,6 +24,19 @@ import org.springframework.web.bind.annotation.*;
 public class PublicChatController {
 
     private final ChatService chatService;
+
+    private final AiAssistantService aiAssistantService;
+
+    @Operation(summary = "Ask AI Assistant as guest")
+    @PostMapping("/assistant")
+    public ResponseEntity<ApiResponse<AiAssistantResponse>> askAssistant(
+            @Valid @RequestBody AiAssistantRequest request
+    ) {
+        AiAssistantResponse response = aiAssistantService.askGuest(request);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("AI assistant replied successfully", response, HttpStatus.CREATED.value()));
+    }
 
     @Operation(summary = "Gửi tin nhắn chat từ khách vãng lai")
     @PostMapping("/messages")

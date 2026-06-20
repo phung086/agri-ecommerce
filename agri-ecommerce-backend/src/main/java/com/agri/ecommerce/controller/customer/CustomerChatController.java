@@ -1,10 +1,13 @@
 package com.agri.ecommerce.controller.customer;
 
+import com.agri.ecommerce.dto.request.chat.AiAssistantRequest;
 import com.agri.ecommerce.dto.request.chat.ChatMessageRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
+import com.agri.ecommerce.dto.response.chat.AiAssistantResponse;
 import com.agri.ecommerce.dto.response.chat.ChatMessageResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.security.UserPrincipal;
+import com.agri.ecommerce.service.AiAssistantService;
 import com.agri.ecommerce.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -25,6 +28,20 @@ import org.springframework.web.bind.annotation.*;
 public class CustomerChatController {
 
     private final ChatService chatService;
+
+    private final AiAssistantService aiAssistantService;
+
+    @Operation(summary = "Ask AI Assistant as current customer")
+    @PostMapping("/assistant")
+    public ResponseEntity<ApiResponse<AiAssistantResponse>> askAssistant(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody AiAssistantRequest request
+    ) {
+        AiAssistantResponse response = aiAssistantService.askCustomer(principal.getId(), request);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("AI assistant replied successfully", response, HttpStatus.CREATED.value()));
+    }
 
     @Operation(summary = "Gửi tin nhắn chat từ khách hàng")
     @PostMapping("/messages")
