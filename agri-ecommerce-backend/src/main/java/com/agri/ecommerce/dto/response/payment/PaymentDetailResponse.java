@@ -1,4 +1,4 @@
-package com.agri.ecommerce.dto.response.order;
+package com.agri.ecommerce.dto.response.payment;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -10,9 +10,21 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Builder
-public class PaymentResponse {
+public class PaymentDetailResponse {
 
     private Long id;
+
+    private Long orderId;
+
+    private String orderStatus;
+
+    private Long customerId;
+
+    private String customerName;
+
+    private String customerEmail;
+
+    private String customerPhoneNumber;
 
     private String paymentMethod;
 
@@ -23,6 +35,8 @@ public class PaymentResponse {
     private String status;
 
     private LocalDateTime paidAt;
+
+    private LocalDateTime orderCreatedAt;
 
     private LocalDateTime createdAt;
 

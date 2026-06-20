@@ -1,9 +1,15 @@
 package com.agri.ecommerce.repository;
 
 import com.agri.ecommerce.entity.PaymentEntity;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
@@ -12,13 +18,36 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface PaymentRepository extends JpaRepository<PaymentEntity, Long> {
+public interface PaymentRepository extends JpaRepository<PaymentEntity, Long>, JpaSpecificationExecutor<PaymentEntity> {
 
-    @EntityGraph(attributePaths = "order")
+    @Override
+    @EntityGraph(attributePaths = {"order", "order.user"})
+    Page<PaymentEntity> findAll(Specification<PaymentEntity> specification, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"order", "order.user"})
+    Optional<PaymentEntity> findById(Long id);
+
+    @EntityGraph(attributePaths = {"order", "order.user"})
     Optional<PaymentEntity> findFirstByOrder_IdOrderByCreatedAtDesc(Long orderId);
 
-    @EntityGraph(attributePaths = "order")
+    @EntityGraph(attributePaths = {"order", "order.user"})
+    Optional<PaymentEntity> findFirstByOrder_IdAndOrder_User_IdOrderByCreatedAtDesc(Long orderId, Long userId);
+
+    @EntityGraph(attributePaths = {"order", "order.user"})
     List<PaymentEntity> findByOrder_IdInOrderByCreatedAtDesc(Collection<Long> orderIds);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select payment
+            from PaymentEntity payment
+            join fetch payment.order orderEntity
+            join fetch orderEntity.user
+            where payment.id = :id
+            """)
+    Optional<PaymentEntity> findByIdForUpdate(@Param("id") Long id);
+
+    boolean existsByTransactionIdIgnoreCaseAndIdNot(String transactionId, Long id);
 
     long countByStatus(String status);
 

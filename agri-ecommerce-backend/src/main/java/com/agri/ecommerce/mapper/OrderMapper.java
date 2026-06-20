@@ -78,6 +78,8 @@ public class OrderMapper {
                 .amount(payment.getAmount())
                 .status(payment.getStatus())
                 .paidAt(payment.getPaidAt())
+                .createdAt(payment.getCreatedAt())
+                .updatedAt(payment.getUpdatedAt())
                 .build();
     }
 

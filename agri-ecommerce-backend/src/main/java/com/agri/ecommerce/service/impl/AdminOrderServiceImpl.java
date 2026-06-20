@@ -14,6 +14,7 @@ import com.agri.ecommerce.mapper.UserMapper;
 import com.agri.ecommerce.repository.*;
 import com.agri.ecommerce.service.AdminOrderService;
 import com.agri.ecommerce.service.NotificationService;
+import com.agri.ecommerce.service.PaymentService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -33,6 +34,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private static final String ROLE_DELIVERY_STAFF = "delivery_staff";
     private static final String IN_STOCK_STATUS = "in_stock";
     private static final String OUT_OF_STOCK_STATUS = "out_of_stock";
+    private static final String PAYMENT_METHOD_PAYPAL = "paypal";
     private static final String PAYMENT_PENDING = "pending";
     private static final String PAYMENT_COMPLETED = "completed";
     private static final String PAYMENT_FAILED = "failed";
@@ -84,6 +86,8 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private final UserRepository userRepository;
 
     private final NotificationService notificationService;
+
+    private final PaymentService paymentService;
 
     private final OrderMapper orderMapper;
 
@@ -208,6 +212,10 @@ public class AdminOrderServiceImpl implements AdminOrderService {
             throw new BadRequestException("Không thể chuyển trạng thái đơn hàng từ " + currentStatus + " sang " + nextStatus);
         }
 
+        if (STATUS_PROCESSING.equals(nextStatus)) {
+            validatePaymentBeforeProcessing(order);
+        }
+
         if (STATUS_OUT_FOR_DELIVERY.equals(nextStatus) && order.getDeliveryStaff() == null) {
             throw new BadRequestException("Cần phân nhân viên giao hàng trước khi chuyển sang trạng thái đang giao");
         }
@@ -220,7 +228,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
 
         if (STATUS_DELIVERED.equals(nextStatus)) {
             order.setDeliveredAt(LocalDateTime.now());
-            markPaymentCompletedIfPending(order.getId());
+            paymentService.completeCashPaymentIfPending(order.getId());
         }
 
         if (STATUS_CANCELED.equals(nextStatus)) {
@@ -282,16 +290,6 @@ public class AdminOrderServiceImpl implements AdminOrderService {
         return "/delivery/orders/" + orderId;
     }
 
-    private void markPaymentCompletedIfPending(Long orderId) {
-        paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(orderId)
-                .filter(payment -> PAYMENT_PENDING.equals(payment.getStatus()))
-                .ifPresent(payment -> {
-                    payment.setStatus(PAYMENT_COMPLETED);
-                    payment.setPaidAt(LocalDateTime.now());
-                    paymentRepository.save(payment);
-                });
-    }
-
     private void markPendingPaymentFailed(Long orderId) {
         paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(orderId)
                 .filter(payment -> PAYMENT_PENDING.equals(payment.getStatus()))
@@ -299,6 +297,19 @@ public class AdminOrderServiceImpl implements AdminOrderService {
                     payment.setStatus(PAYMENT_FAILED);
                     paymentRepository.save(payment);
                 });
+    }
+
+    private void validatePaymentBeforeProcessing(OrderEntity order) {
+        PaymentEntity payment = paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(order.getId())
+                .orElseThrow(() -> new BadRequestException("Order has no payment information"));
+
+        if (PAYMENT_FAILED.equals(payment.getStatus())) {
+            throw new BadRequestException("Cannot confirm an order with failed payment");
+        }
+
+        if (PAYMENT_METHOD_PAYPAL.equals(payment.getPaymentMethod()) && !PAYMENT_COMPLETED.equals(payment.getStatus())) {
+            throw new BadRequestException("PayPal orders must be paid before confirmation");
+        }
     }
 
     private void restoreInventoryAndCoupon(OrderEntity order) {

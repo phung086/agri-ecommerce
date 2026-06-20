@@ -11,6 +11,7 @@ import com.agri.ecommerce.mapper.OrderMapper;
 import com.agri.ecommerce.repository.*;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.OrderService;
+import com.agri.ecommerce.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,8 @@ public class OrderServiceImpl implements OrderService {
     private final UserRepository userRepository;
 
     private final NotificationService notificationService;
+
+    private final PaymentService paymentService;
 
     private final OrderMapper orderMapper;
 
@@ -216,13 +219,8 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus(ORDER_COMPLETED);
         OrderEntity savedOrder = orderRepository.save(order);
-        PaymentEntity payment = paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(orderId).orElse(null);
 
-        if (payment != null && PAYMENT_PENDING.equals(payment.getStatus())) {
-            payment.setStatus(PAYMENT_COMPLETED);
-            payment.setPaidAt(LocalDateTime.now());
-            paymentRepository.save(payment);
-        }
+        paymentService.completeCashPaymentIfPending(orderId);
 
         orderStatusHistoryRepository.save(createStatusHistory(
                 savedOrder,

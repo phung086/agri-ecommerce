@@ -13,6 +13,7 @@ import com.agri.ecommerce.repository.OrderStatusHistoryRepository;
 import com.agri.ecommerce.repository.PaymentRepository;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.DeliveryOrderService;
+import com.agri.ecommerce.service.PaymentService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -33,8 +34,6 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private static final String STATUS_OUT_FOR_DELIVERY = "out_for_delivery";
     private static final String STATUS_DELIVERED = "delivered";
     private static final String STATUS_COMPLETED = "completed";
-    private static final String PAYMENT_PENDING = "pending";
-    private static final String PAYMENT_COMPLETED = "completed";
     private static final String NOTIFICATION_TYPE_ORDER = "order";
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ASSIGNED_ORDER_STATUSES = Set.of(
@@ -57,6 +56,8 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private final PaymentRepository paymentRepository;
 
     private final NotificationService notificationService;
+
+    private final PaymentService paymentService;
 
     private final OrderMapper orderMapper;
 
@@ -151,7 +152,7 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
         order.setStatus(STATUS_DELIVERED);
         order.setDeliveredAt(LocalDateTime.now());
         OrderEntity savedOrder = orderRepository.save(order);
-        markPaymentCompletedIfPending(savedOrder.getId());
+        paymentService.completeCashPaymentIfPending(savedOrder.getId());
 
         orderStatusHistoryRepository.save(createStatusHistory(
                 savedOrder,
@@ -173,16 +174,6 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
 
     private String buildOrderLink(Long orderId) {
         return "/orders/" + orderId;
-    }
-
-    private void markPaymentCompletedIfPending(Long orderId) {
-        paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(orderId)
-                .filter(payment -> PAYMENT_PENDING.equals(payment.getStatus()))
-                .ifPresent(payment -> {
-                    payment.setStatus(PAYMENT_COMPLETED);
-                    payment.setPaidAt(LocalDateTime.now());
-                    paymentRepository.save(payment);
-                });
     }
 
     private OrderEntity findAssignedOrderById(Long orderId, Long deliveryStaffId) {
