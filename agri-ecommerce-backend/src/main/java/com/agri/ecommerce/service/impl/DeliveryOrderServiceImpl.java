@@ -11,6 +11,7 @@ import com.agri.ecommerce.repository.OrderItemRepository;
 import com.agri.ecommerce.repository.OrderRepository;
 import com.agri.ecommerce.repository.OrderStatusHistoryRepository;
 import com.agri.ecommerce.repository.PaymentRepository;
+import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.DeliveryOrderService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private static final String STATUS_COMPLETED = "completed";
     private static final String PAYMENT_PENDING = "pending";
     private static final String PAYMENT_COMPLETED = "completed";
+    private static final String NOTIFICATION_TYPE_ORDER = "order";
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ASSIGNED_ORDER_STATUSES = Set.of(
             STATUS_READY_FOR_DELIVERY,
@@ -53,6 +55,8 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
 
     private final PaymentRepository paymentRepository;
+
+    private final NotificationService notificationService;
 
     private final OrderMapper orderMapper;
 
@@ -126,6 +130,11 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 STATUS_OUT_FOR_DELIVERY,
                 cleanBlank(request == null ? null : request.getNote())
         ));
+        notifyCustomer(
+                savedOrder,
+                "Đơn hàng #" + savedOrder.getId() + " đang được giao",
+                buildOrderLink(savedOrder.getId())
+        );
 
         return toOrderResponse(savedOrder, true);
     }
@@ -149,8 +158,21 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 STATUS_DELIVERED,
                 cleanBlank(request == null ? null : request.getNote())
         ));
+        notifyCustomer(
+                savedOrder,
+                "Đơn hàng #" + savedOrder.getId() + " đã được giao thành công",
+                buildOrderLink(savedOrder.getId())
+        );
 
         return toOrderResponse(savedOrder, true);
+    }
+
+    private void notifyCustomer(OrderEntity order, String message, String link) {
+        notificationService.createNotification(order.getUser().getId(), NOTIFICATION_TYPE_ORDER, message, link);
+    }
+
+    private String buildOrderLink(Long orderId) {
+        return "/orders/" + orderId;
     }
 
     private void markPaymentCompletedIfPending(Long orderId) {

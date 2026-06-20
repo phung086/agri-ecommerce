@@ -13,6 +13,7 @@ import com.agri.ecommerce.mapper.OrderMapper;
 import com.agri.ecommerce.mapper.UserMapper;
 import com.agri.ecommerce.repository.*;
 import com.agri.ecommerce.service.AdminOrderService;
+import com.agri.ecommerce.service.NotificationService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -42,6 +43,8 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private static final String STATUS_DELIVERED = "delivered";
     private static final String STATUS_COMPLETED = "completed";
     private static final String STATUS_CANCELED = "canceled";
+    private static final String NOTIFICATION_TYPE_ORDER = "order";
+    private static final String NOTIFICATION_TYPE_DELIVERY = "delivery";
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ALLOWED_STATUSES = Set.of(
             STATUS_PENDING,
@@ -79,6 +82,8 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private final CouponRepository couponRepository;
 
     private final UserRepository userRepository;
+
+    private final NotificationService notificationService;
 
     private final OrderMapper orderMapper;
 
@@ -157,6 +162,18 @@ public class AdminOrderServiceImpl implements AdminOrderService {
                 savedOrder.getStatus(),
                 buildAssignmentNote(deliveryStaff, request.getNote())
         ));
+        notifyUser(
+                deliveryStaff.getId(),
+                NOTIFICATION_TYPE_DELIVERY,
+                "Bạn được phân công giao đơn hàng #" + savedOrder.getId(),
+                buildDeliveryOrderLink(savedOrder.getId())
+        );
+        notifyUser(
+                savedOrder.getUser().getId(),
+                NOTIFICATION_TYPE_ORDER,
+                "Đơn hàng #" + savedOrder.getId() + " đã được phân công nhân viên giao hàng",
+                buildOrderLink(savedOrder.getId())
+        );
 
         return toOrderResponse(savedOrder, true);
     }
@@ -212,6 +229,57 @@ public class AdminOrderServiceImpl implements AdminOrderService {
         }
 
         orderStatusHistoryRepository.save(createStatusHistory(order, nextStatus, note));
+        notifyStatusChange(order, nextStatus);
+    }
+
+    private void notifyStatusChange(OrderEntity order, String nextStatus) {
+        Long orderId = order.getId();
+        Long customerId = order.getUser().getId();
+
+        if (STATUS_PROCESSING.equals(nextStatus)) {
+            notifyUser(customerId, NOTIFICATION_TYPE_ORDER, "Đơn hàng #" + orderId + " đã được xác nhận", buildOrderLink(orderId));
+        }
+
+        if (STATUS_READY_FOR_DELIVERY.equals(nextStatus)) {
+            notifyUser(customerId, NOTIFICATION_TYPE_ORDER, "Đơn hàng #" + orderId + " đã sẵn sàng giao", buildOrderLink(orderId));
+
+            if (order.getDeliveryStaff() != null) {
+                notifyUser(
+                        order.getDeliveryStaff().getId(),
+                        NOTIFICATION_TYPE_DELIVERY,
+                        "Đơn hàng #" + orderId + " đã sẵn sàng để giao",
+                        buildDeliveryOrderLink(orderId)
+                );
+            }
+        }
+
+        if (STATUS_OUT_FOR_DELIVERY.equals(nextStatus)) {
+            notifyUser(customerId, NOTIFICATION_TYPE_ORDER, "Đơn hàng #" + orderId + " đang được giao", buildOrderLink(orderId));
+        }
+
+        if (STATUS_DELIVERED.equals(nextStatus)) {
+            notifyUser(customerId, NOTIFICATION_TYPE_ORDER, "Đơn hàng #" + orderId + " đã được giao thành công", buildOrderLink(orderId));
+        }
+
+        if (STATUS_COMPLETED.equals(nextStatus)) {
+            notifyUser(customerId, NOTIFICATION_TYPE_ORDER, "Đơn hàng #" + orderId + " đã hoàn tất", buildOrderLink(orderId));
+        }
+
+        if (STATUS_CANCELED.equals(nextStatus)) {
+            notifyUser(customerId, NOTIFICATION_TYPE_ORDER, "Đơn hàng #" + orderId + " đã bị hủy", buildOrderLink(orderId));
+        }
+    }
+
+    private void notifyUser(Long userId, String type, String message, String link) {
+        notificationService.createNotification(userId, type, message, link);
+    }
+
+    private String buildOrderLink(Long orderId) {
+        return "/orders/" + orderId;
+    }
+
+    private String buildDeliveryOrderLink(Long orderId) {
+        return "/delivery/orders/" + orderId;
     }
 
     private void markPaymentCompletedIfPending(Long orderId) {

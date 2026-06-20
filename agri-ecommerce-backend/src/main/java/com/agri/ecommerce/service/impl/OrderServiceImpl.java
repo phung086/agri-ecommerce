@@ -9,6 +9,7 @@ import com.agri.ecommerce.exception.BadRequestException;
 import com.agri.ecommerce.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.OrderMapper;
 import com.agri.ecommerce.repository.*;
+import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -32,6 +33,7 @@ public class OrderServiceImpl implements OrderService {
     private static final String ORDER_DELIVERED = "delivered";
     private static final String ORDER_COMPLETED = "completed";
     private static final String ORDER_CANCELED = "canceled";
+    private static final String NOTIFICATION_TYPE_ORDER = "order";
     private static final String PAYMENT_PENDING = "pending";
     private static final String PAYMENT_COMPLETED = "completed";
     private static final String PAYMENT_FAILED = "failed";
@@ -59,6 +61,8 @@ public class OrderServiceImpl implements OrderService {
     private final ProductRepository productRepository;
 
     private final UserRepository userRepository;
+
+    private final NotificationService notificationService;
 
     private final OrderMapper orderMapper;
 
@@ -152,6 +156,11 @@ public class OrderServiceImpl implements OrderService {
         checkoutItems.forEach(this::decreaseProductStock);
         productRepository.saveAll(checkoutItems.stream().map(CheckoutItem::product).toList());
         cartItemRepository.deleteByUser_Id(userId);
+        notifyUser(
+                userId,
+                "Đơn hàng #" + order.getId() + " đã được tạo thành công",
+                buildOrderLink(order.getId())
+        );
 
         return orderMapper.toOrderResponse(order, savedOrderItems, payment, List.of(history));
     }
@@ -187,6 +196,11 @@ public class OrderServiceImpl implements OrderService {
                 ORDER_CANCELED,
                 cleanBlank(request == null ? null : request.getNote())
         ));
+        notifyUser(
+                userId,
+                "Đơn hàng #" + savedOrder.getId() + " đã được hủy thành công",
+                buildOrderLink(savedOrder.getId())
+        );
 
         return toOrderResponse(savedOrder, true);
     }
@@ -215,8 +229,21 @@ public class OrderServiceImpl implements OrderService {
                 ORDER_COMPLETED,
                 cleanBlank(request == null ? null : request.getNote())
         ));
+        notifyUser(
+                userId,
+                "Đơn hàng #" + savedOrder.getId() + " đã hoàn tất",
+                buildOrderLink(savedOrder.getId())
+        );
 
         return toOrderResponse(savedOrder, true);
+    }
+
+    private void notifyUser(Long userId, String message, String link) {
+        notificationService.createNotification(userId, NOTIFICATION_TYPE_ORDER, message, link);
+    }
+
+    private String buildOrderLink(Long orderId) {
+        return "/orders/" + orderId;
     }
 
     private List<OrderResponse> toOrderResponses(List<OrderEntity> orders, boolean includeStatusHistory) {
