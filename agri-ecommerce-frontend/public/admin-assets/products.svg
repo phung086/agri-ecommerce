@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-label="Product management">
+  <rect width="960" height="540" rx="28" fill="#fff7ed"/>
+  <rect x="132" y="148" width="696" height="258" rx="34" fill="#ffffff"/>
+  <path d="M206 332c64-94 156-130 274-130 112 0 208 38 274 130" fill="#fed7aa"/>
+  <circle cx="320" cy="274" r="60" fill="#ef4444"/>
+  <circle cx="462" cy="264" r="56" fill="#22c55e"/>
+  <circle cx="600" cy="282" r="62" fill="#f59e0b"/>
+  <path d="M300 218c18-32 46-42 82-28-22 28-48 38-82 28Z" fill="#16a34a"/>
+  <path d="M444 214c18-34 46-44 84-30-24 30-50 40-84 30Z" fill="#15803d"/>
+  <rect x="202" y="372" width="556" height="18" rx="9" fill="#fdba74"/>
+</svg>

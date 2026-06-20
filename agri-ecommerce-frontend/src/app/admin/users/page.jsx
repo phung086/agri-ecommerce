@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search, ShieldCheck, UserCheck, UserX, Users } from "lucide-react";
 
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { DataTable } from "@/components/admin/data-table";
+import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,6 +105,14 @@ export default function AdminUsersPage() {
     });
   }, [users, searchTerm, statusFilter, roleFilter]);
 
+  const userStats = useMemo(() => {
+    const active = users.filter((user) => user.status === "active").length;
+    const banned = users.filter((user) => user.status === "banned").length;
+    const adminRoles = users.filter((user) => user.roleName === "admin").length;
+
+    return { active, banned, adminRoles };
+  }, [users]);
+
   async function handleStatusChange(userId, status) {
     setUpdatingId(userId);
     setNotice("");
@@ -123,7 +133,50 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <AdminPageHeader
+        title="Quản lí người dùng"
+        description="Kiểm tra tài khoản, vai trò và trạng thái hoạt động. Trang này gọi API admin thật khi có token hợp lệ."
+        image="/admin-assets/users.svg"
+        badges={["Admin API", "Cần accessToken"]}
+      >
+        <Button type="button" variant="outline" onClick={loadUsers}>
+          <RefreshCw className="size-4" />
+          Tải lại
+        </Button>
+      </AdminPageHeader>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Tổng người dùng"
+          value={users.length}
+          description="Theo dữ liệu API admin"
+          icon={Users}
+          tone="green"
+        />
+        <StatCard
+          title="Đang hoạt động"
+          value={userStats.active}
+          description="Có thể đăng nhập và mua hàng"
+          icon={UserCheck}
+          tone="blue"
+        />
+        <StatCard
+          title="Quản trị viên"
+          value={userStats.adminRoles}
+          description="Role admin trong hệ thống"
+          icon={ShieldCheck}
+          tone="amber"
+        />
+        <StatCard
+          title="Bị khóa"
+          value={userStats.banned}
+          description="Cần kiểm tra trước khi mở lại"
+          icon={UserX}
+          tone="rose"
+        />
+      </section>
+
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm lg:flex-row lg:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -159,11 +212,6 @@ export default function AdminUsersPage() {
             </option>
           ))}
         </select>
-
-        <Button type="button" variant="outline" onClick={loadUsers}>
-          <RefreshCw className="size-4" />
-          Tải lại
-        </Button>
       </div>
 
       {notice && (

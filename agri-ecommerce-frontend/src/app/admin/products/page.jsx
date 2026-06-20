@@ -1,9 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ImageIcon, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Boxes,
+  ImageIcon,
+  ImagePlus,
+  PackageCheck,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { DataTable } from "@/components/admin/data-table";
+import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,12 +125,36 @@ export default function AdminProductsPage() {
     });
   }, [products, searchTerm, categoryFilter, statusFilter]);
 
+  const productStats = useMemo(() => {
+    const lowStock = products.filter((product) => Number(product.stock || 0) <= 20)
+      .length;
+    const withImage = products.filter((product) => product.thumbnail).length;
+    const totalStock = products.reduce(
+      (total, product) => total + Number(product.stock || 0),
+      0
+    );
+
+    return { lowStock, withImage, totalStock };
+  }, [products]);
+
   function updateForm(field, value) {
     setForm((current) => ({
       ...current,
       [field]: value,
       ...(field === "name" && !editingProduct ? { slug: slugify(value) } : {}),
     }));
+  }
+
+  function handleThumbnailFile(file) {
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateForm("thumbnail", reader.result || "");
+    };
+    reader.readAsDataURL(file);
   }
 
   function openCreateDialog() {
@@ -203,7 +239,50 @@ export default function AdminProductsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <AdminPageHeader
+        title="Quản lí sản phẩm"
+        description="Theo dõi danh sách sản phẩm, giá bán, tồn kho, trạng thái bán và hình ảnh đại diện cho từng mặt hàng."
+        image="/admin-assets/products.svg"
+        badges={["Public API", "Form demo", "Ảnh local"]}
+      >
+        <Button type="button" onClick={openCreateDialog}>
+          <Plus className="size-4" />
+          Thêm sản phẩm
+        </Button>
+      </AdminPageHeader>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Tổng sản phẩm"
+          value={formatNumber(products.length)}
+          description="Đang hiển thị trong admin"
+          icon={PackageCheck}
+          tone="green"
+        />
+        <StatCard
+          title="Tổng tồn kho"
+          value={formatNumber(productStats.totalStock)}
+          description="Cộng tồn kho từ danh sách"
+          icon={Boxes}
+          tone="blue"
+        />
+        <StatCard
+          title="Sắp hết hàng"
+          value={formatNumber(productStats.lowStock)}
+          description="Tồn kho từ 20 trở xuống"
+          icon={AlertTriangle}
+          tone="amber"
+        />
+        <StatCard
+          title="Có ảnh"
+          value={formatNumber(productStats.withImage)}
+          description="Ảnh API hoặc ảnh chọn từ máy"
+          icon={ImagePlus}
+          tone="rose"
+        />
+      </section>
+
       <div className="grid gap-3 rounded-lg border bg-card p-4 shadow-sm lg:grid-cols-[1fr_auto_auto_auto] lg:items-center">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -239,11 +318,6 @@ export default function AdminProductsPage() {
             </option>
           ))}
         </select>
-
-        <Button type="button" onClick={openCreateDialog}>
-          <Plus className="size-4" />
-          Thêm sản phẩm
-        </Button>
       </div>
 
       {notice && (
@@ -445,6 +519,35 @@ export default function AdminProductsPage() {
                   placeholder="uploads/products/example.jpg"
                 />
               </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
+              <div className="space-y-2">
+                <Label htmlFor="product-thumbnail-file">
+                  Chọn ảnh từ máy tính
+                </Label>
+                <Input
+                  id="product-thumbnail-file"
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) =>
+                    handleThumbnailFile(event.target.files?.[0] || null)
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ảnh được dùng để xem trước trong phiên demo, chưa upload lên backend.
+                </p>
+              </div>
+              <div
+                className="h-32 rounded-lg border bg-muted bg-cover bg-center"
+                role="img"
+                aria-label="Ảnh sản phẩm đang chọn"
+                style={{
+                  backgroundImage: form.thumbnail
+                    ? `url("${getAssetUrl(form.thumbnail)}")`
+                    : "none",
+                }}
+              />
             </div>
 
             <div className="space-y-2">

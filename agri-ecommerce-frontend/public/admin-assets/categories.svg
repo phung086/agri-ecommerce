@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-label="Category management">
+  <rect width="960" height="540" rx="28" fill="#f0fdf4"/>
+  <rect x="114" y="112" width="214" height="144" rx="24" fill="#bbf7d0"/>
+  <rect x="374" y="112" width="214" height="144" rx="24" fill="#dcfce7"/>
+  <rect x="634" y="112" width="214" height="144" rx="24" fill="#a7f3d0"/>
+  <rect x="114" y="302" width="214" height="126" rx="24" fill="#ecfccb"/>
+  <rect x="374" y="302" width="214" height="126" rx="24" fill="#d1fae5"/>
+  <rect x="634" y="302" width="214" height="126" rx="24" fill="#fef9c3"/>
+  <path d="M185 214c16-40 44-58 84-64-18 32-40 52-84 64Z" fill="#16a34a"/>
+  <path d="M448 204c12-48 44-72 84-76-12 44-38 68-84 76Z" fill="#059669"/>
+  <path d="M694 206c36-34 72-42 114-26-30 30-68 40-114 26Z" fill="#65a30d"/>
+</svg>

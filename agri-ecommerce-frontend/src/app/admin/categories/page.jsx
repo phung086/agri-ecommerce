@@ -1,9 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ImageIcon, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  FolderTree,
+  ImageIcon,
+  ImagePlus,
+  Layers,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { DataTable } from "@/components/admin/data-table";
+import { StatCard } from "@/components/admin/stat-card";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -81,6 +92,13 @@ export default function AdminCategoriesPage() {
     });
   }, [categories, searchTerm]);
 
+  const categoryStats = useMemo(() => {
+    const withImage = categories.filter((category) => category.image).length;
+    const demoCount = categories.filter((category) => category.demo).length;
+
+    return { withImage, demoCount };
+  }, [categories]);
+
   function updateForm(field, value) {
     setForm((current) => ({
       ...current,
@@ -89,6 +107,18 @@ export default function AdminCategoriesPage() {
         ? { slug: slugify(value) }
         : {}),
     }));
+  }
+
+  function handleImageFile(file) {
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateForm("image", reader.result || "");
+    };
+    reader.readAsDataURL(file);
   }
 
   function openCreateDialog() {
@@ -152,7 +182,43 @@ export default function AdminCategoriesPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <AdminPageHeader
+        title="Quản lí danh mục"
+        description="Tổ chức sản phẩm theo nhóm, cập nhật mô tả, slug và ảnh đại diện để khách hàng duyệt cửa hàng nhanh hơn."
+        image="/admin-assets/categories.svg"
+        badges={["Public API", "Form demo"]}
+      >
+        <Button type="button" onClick={openCreateDialog}>
+          <Plus className="size-4" />
+          Thêm danh mục
+        </Button>
+      </AdminPageHeader>
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          title="Tổng danh mục"
+          value={categories.length}
+          description="Đọc từ public API"
+          icon={FolderTree}
+          tone="green"
+        />
+        <StatCard
+          title="Có ảnh đại diện"
+          value={categoryStats.withImage}
+          description="Hiển thị trong bảng và form"
+          icon={ImagePlus}
+          tone="blue"
+        />
+        <StatCard
+          title="Dữ liệu demo"
+          value={categoryStats.demoCount}
+          description="Chỉ lưu trên giao diện"
+          icon={Layers}
+          tone="amber"
+        />
+      </section>
+
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm lg:flex-row lg:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -163,11 +229,6 @@ export default function AdminCategoriesPage() {
             className="pl-9"
           />
         </div>
-
-        <Button type="button" onClick={openCreateDialog}>
-          <Plus className="size-4" />
-          Thêm danh mục
-        </Button>
       </div>
 
       {notice && (
@@ -287,6 +348,26 @@ export default function AdminCategoriesPage() {
                 onChange={(event) => updateForm("image", event.target.value)}
                 placeholder="uploads/categories/example.jpg"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="category-image-file">Chọn ảnh từ máy tính</Label>
+              <Input
+                id="category-image-file"
+                type="file"
+                accept="image/*"
+                onChange={(event) =>
+                  handleImageFile(event.target.files?.[0] || null)
+                }
+              />
+              {form.image && (
+                <div
+                  className="h-28 rounded-lg border bg-cover bg-center"
+                  role="img"
+                  aria-label="Ảnh danh mục đang chọn"
+                  style={{ backgroundImage: `url("${getAssetUrl(form.image)}")` }}
+                />
+              )}
             </div>
 
             <div className="space-y-2">

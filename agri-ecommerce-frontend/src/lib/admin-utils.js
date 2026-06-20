@@ -33,7 +33,7 @@ export function getAssetUrl(path) {
     return "";
   }
 
-  if (/^https?:\/\//i.test(path)) {
+  if (/^(https?:|data:|blob:)/i.test(path)) {
     return path;
   }
 

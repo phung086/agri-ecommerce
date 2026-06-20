@@ -9,30 +9,55 @@ export function StatCard({
   tone = "green",
 }) {
   const toneClasses = {
-    green: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-    blue: "bg-blue-50 text-blue-700 ring-blue-100",
-    amber: "bg-amber-50 text-amber-700 ring-amber-100",
-    rose: "bg-rose-50 text-rose-700 ring-rose-100",
+    green: {
+      stripe: "bg-emerald-500",
+      icon: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+      value: "text-emerald-700",
+    },
+    blue: {
+      stripe: "bg-sky-500",
+      icon: "bg-sky-50 text-sky-700 ring-sky-100",
+      value: "text-sky-700",
+    },
+    amber: {
+      stripe: "bg-amber-400",
+      icon: "bg-amber-50 text-amber-700 ring-amber-100",
+      value: "text-amber-700",
+    },
+    rose: {
+      stripe: "bg-rose-500",
+      icon: "bg-rose-50 text-rose-700 ring-rose-100",
+      value: "text-rose-700",
+    },
   };
+  const currentTone = toneClasses[tone] || toneClasses.green;
 
   return (
-    <Card className="rounded-lg border-0 shadow-sm">
+    <Card className="relative rounded-[8px] border border-emerald-100 bg-white py-0 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
+      <div className={cn("h-1 w-full", currentTone.stripe)} />
       <CardContent className="flex items-start justify-between gap-4 p-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="mt-2 text-2xl font-semibold tracking-normal text-foreground">
+          <p className="text-sm font-bold text-muted-foreground">{title}</p>
+          <p
+            className={cn(
+              "mt-2 truncate text-2xl font-black tracking-normal",
+              currentTone.value
+            )}
+          >
             {value}
           </p>
           {description && (
-            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {description}
+            </p>
           )}
         </div>
 
         {Icon && (
           <div
             className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-lg ring-1",
-              toneClasses[tone] || toneClasses.green
+              "flex size-11 shrink-0 items-center justify-center rounded-[8px] ring-1",
+              currentTone.icon
             )}
           >
             <Icon className="size-5" />

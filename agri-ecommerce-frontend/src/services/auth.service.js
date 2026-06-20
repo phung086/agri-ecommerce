@@ -9,6 +9,10 @@ export const authService = {
     return axiosClient.post("/auth/login", payload);
   },
 
+  me: async () => {
+    return axiosClient.get("/auth/me");
+  },
+
   forgotPassword: async (payload) => {
     return axiosClient.post("/auth/forgot-password", payload);
   },
