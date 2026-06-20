@@ -20,8 +20,19 @@ public class OrderMapper {
             PaymentEntity payment,
             List<OrderStatusHistoryEntity> statusHistory
     ) {
+        UserEntity customer = order.getUser();
+        UserEntity deliveryStaff = order.getDeliveryStaff();
+
         return OrderResponse.builder()
                 .id(order.getId())
+                .customerId(customer == null ? null : customer.getId())
+                .customerName(customer == null ? null : customer.getName())
+                .customerEmail(customer == null ? null : customer.getEmail())
+                .customerPhoneNumber(customer == null ? null : customer.getPhoneNumber())
+                .deliveryStaffId(deliveryStaff == null ? null : deliveryStaff.getId())
+                .deliveryStaffName(deliveryStaff == null ? null : deliveryStaff.getName())
+                .deliveryStaffEmail(deliveryStaff == null ? null : deliveryStaff.getEmail())
+                .deliveryStaffPhoneNumber(deliveryStaff == null ? null : deliveryStaff.getPhoneNumber())
                 .status(order.getStatus())
                 .subtotal(order.getSubtotal())
                 .discountAmount(order.getDiscountAmount())
@@ -32,6 +43,8 @@ public class OrderMapper {
                 .payment(toPaymentResponse(payment))
                 .items(toOrderItemResponses(orderItems))
                 .statusHistory(toStatusHistoryResponses(statusHistory))
+                .dispatchedAt(order.getDispatchedAt())
+                .deliveredAt(order.getDeliveredAt())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();
