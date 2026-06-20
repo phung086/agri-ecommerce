@@ -7,7 +7,12 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,4 +37,8 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
     boolean existsBySlugAndIdNot(String slug, Long id);
 
     boolean existsByCategory_Id(Long categoryId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select product from ProductEntity product where product.id in :ids")
+    List<ProductEntity> findAllByIdInForUpdate(@Param("ids") Collection<Long> ids);
 }
