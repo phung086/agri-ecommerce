@@ -37,5 +37,8 @@ public interface ReviewRepository extends JpaRepository<ReviewEntity, Long>, Jpa
     @Query("select coalesce(avg(review.rating), 0) from ReviewEntity review where review.product.id = :productId")
     Double getAverageRatingByProductId(@Param("productId") Long productId);
 
+    @Query("select coalesce(avg(review.rating), 0) from ReviewEntity review")
+    Double getAverageRating();
+
     long countByProduct_Id(Long productId);
 }

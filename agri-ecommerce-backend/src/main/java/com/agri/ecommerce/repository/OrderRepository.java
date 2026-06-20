@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSpecificationExecutor<OrderEntity> {
@@ -34,4 +36,11 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select orderEntity from OrderEntity orderEntity where orderEntity.id = :id")
     Optional<OrderEntity> findByIdForUpdate(@Param("id") Long id);
+
+    long countByStatus(String status);
+
+    long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(LocalDateTime fromDate, LocalDateTime toDate);
+
+    @Query("select orderEntity.status, count(orderEntity.id) from OrderEntity orderEntity group by orderEntity.status")
+    List<Object[]> countOrdersByStatus();
 }

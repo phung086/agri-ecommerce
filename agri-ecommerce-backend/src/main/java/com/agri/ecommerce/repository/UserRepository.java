@@ -20,4 +20,8 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
     @EntityGraph(attributePaths = "role")
     List<UserEntity> findByRole_NameAndStatus(String roleName, com.agri.ecommerce.entity.UserStatus status, Sort sort);
+
+    long countByRole_Name(String roleName);
+
+    long countByRole_NameAndStatus(String roleName, com.agri.ecommerce.entity.UserStatus status);
 }

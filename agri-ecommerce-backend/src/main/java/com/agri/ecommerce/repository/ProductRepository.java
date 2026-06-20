@@ -32,6 +32,15 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
     @EntityGraph(attributePaths = "category")
     List<ProductEntity> findByStatus(String status, Pageable pageable);
 
+    long countByStatus(String status);
+
+    long countByStatusNot(String status);
+
+    long countByStockLessThanEqualAndStatusNot(Integer stock, String status);
+
+    @EntityGraph(attributePaths = "category")
+    List<ProductEntity> findByStockLessThanEqualAndStatusNotOrderByStockAscCreatedAtDesc(Integer stock, String status, Pageable pageable);
+
     boolean existsBySlug(String slug);
 
     boolean existsBySlugAndIdNot(String slug, Long id);
