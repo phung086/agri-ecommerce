@@ -1,7 +1,7 @@
 package com.agri.ecommerce.security;
 
 import com.agri.ecommerce.entity.UserEntity;
-import com.agri.ecommerce.exception.ResourceNotFoundException;
+import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;

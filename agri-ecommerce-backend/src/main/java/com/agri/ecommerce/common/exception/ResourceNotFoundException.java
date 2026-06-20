@@ -1,4 +1,4 @@
-package com.agri.ecommerce.exception;
+package com.agri.ecommerce.common.exception;
 
 public class ResourceNotFoundException extends RuntimeException {
 

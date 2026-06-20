@@ -19,6 +19,15 @@ spring:
       hibernate:
         format_sql: true
 
+  messages:
+    basename: messages/messages
+    encoding: UTF-8
+
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

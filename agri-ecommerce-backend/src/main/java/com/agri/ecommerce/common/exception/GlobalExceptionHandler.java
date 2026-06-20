@@ -1,4 +1,4 @@
-package com.agri.ecommerce.exception;
+package com.agri.ecommerce.common.exception;
 
 import com.agri.ecommerce.dto.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;

@@ -4,7 +4,7 @@ import com.agri.ecommerce.dto.response.dashboard.*;
 import com.agri.ecommerce.entity.CategoryEntity;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.entity.UserStatus;
-import com.agri.ecommerce.exception.BadRequestException;
+import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.repository.*;
 import com.agri.ecommerce.service.AdminDashboardService;
 import lombok.RequiredArgsConstructor;

@@ -1,4 +1,4 @@
-package com.agri.ecommerce.controller.notification;
+package com.agri.ecommerce.controller.customer;
 
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;

@@ -9,8 +9,8 @@ import com.agri.ecommerce.dto.response.review.ReviewResponse;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.entity.ReviewEntity;
 import com.agri.ecommerce.entity.UserEntity;
-import com.agri.ecommerce.exception.BadRequestException;
-import com.agri.ecommerce.exception.ResourceNotFoundException;
+import com.agri.ecommerce.common.exception.BadRequestException;
+import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.ReviewMapper;
 import com.agri.ecommerce.repository.OrderItemRepository;
 import com.agri.ecommerce.repository.ProductRepository;
@@ -161,9 +161,12 @@ public class ReviewServiceImpl implements ReviewService {
 
     private ProductReviewSummaryResponse buildProductReviewSummary(ProductEntity product) {
         long totalReviews = reviewRepository.countByProduct_Id(product.getId());
-        double averageRating = BigDecimal.valueOf(reviewRepository.getAverageRatingByProductId(product.getId()))
-                .setScale(1, RoundingMode.HALF_UP)
-                .doubleValue();
+        Double averageRatingValue = reviewRepository.getAverageRatingByProductId(product.getId());
+        double averageRating = averageRatingValue == null
+                ? 0
+                : BigDecimal.valueOf(averageRatingValue)
+                        .setScale(1, RoundingMode.HALF_UP)
+                        .doubleValue();
 
         return ProductReviewSummaryResponse.builder()
                 .productId(product.getId())
