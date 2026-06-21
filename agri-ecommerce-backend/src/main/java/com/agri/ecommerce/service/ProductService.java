@@ -6,6 +6,8 @@ import com.agri.ecommerce.dto.request.product.ProductStockUpdateRequest;
 import com.agri.ecommerce.dto.request.product.ProductUpdateRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.product.ProductResponse;
+import com.agri.ecommerce.dto.response.product.ProductSearchFacetsResponse;
+import com.agri.ecommerce.dto.response.product.ProductSearchSuggestionResponse;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -24,6 +26,21 @@ public interface ProductService {
     );
 
     List<ProductResponse> getFeaturedProducts(Integer limit);
+
+    List<ProductSearchSuggestionResponse> getSearchSuggestions(
+            String keyword,
+            String categorySlug,
+            BigDecimal maxPrice,
+            Integer limit
+    );
+
+    ProductSearchFacetsResponse getSearchFacets(
+            String keyword,
+            String categorySlug,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            String status
+    );
 
     ProductResponse getProductBySlug(String slug);
 

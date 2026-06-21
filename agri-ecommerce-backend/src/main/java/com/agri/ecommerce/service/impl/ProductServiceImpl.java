@@ -5,7 +5,12 @@ import com.agri.ecommerce.dto.request.product.ProductStatusUpdateRequest;
 import com.agri.ecommerce.dto.request.product.ProductStockUpdateRequest;
 import com.agri.ecommerce.dto.request.product.ProductUpdateRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
+import com.agri.ecommerce.dto.response.product.ProductCategoryFacetResponse;
 import com.agri.ecommerce.dto.response.product.ProductResponse;
+import com.agri.ecommerce.dto.response.product.ProductSearchFacetsResponse;
+import com.agri.ecommerce.dto.response.product.ProductSearchSuggestionResponse;
+import com.agri.ecommerce.dto.response.product.ProductSortOptionResponse;
+import com.agri.ecommerce.dto.response.product.ProductStatusFacetResponse;
 import com.agri.ecommerce.entity.CategoryEntity;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.entity.ProductImageEntity;
@@ -36,6 +41,7 @@ public class ProductServiceImpl implements ProductService {
     private static final String HIDDEN_STATUS = "hidden";
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_FEATURED_LIMIT = 50;
+    private static final int MAX_SUGGESTION_LIMIT = 10;
     private static final Set<String> ALLOWED_STATUSES = Set.of(IN_STOCK_STATUS, OUT_OF_STOCK_STATUS, HIDDEN_STATUS);
     private static final Set<String> PUBLIC_STATUSES = Set.of(IN_STOCK_STATUS, OUT_OF_STOCK_STATUS);
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
@@ -93,6 +99,90 @@ public class ProductServiceImpl implements ProductService {
                         imagesByProductId.getOrDefault(product.getId(), List.of())
                 ))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductSearchSuggestionResponse> getSearchSuggestions(
+            String keyword,
+            String categorySlug,
+            BigDecimal maxPrice,
+            Integer limit
+    ) {
+        int safeLimit = limit == null ? 8 : limit;
+        validateSuggestionLimit(safeLimit);
+        validatePriceRange(null, maxPrice);
+
+        String cleanKeyword = cleanBlank(keyword);
+        String cleanCategorySlug = cleanBlank(categorySlug);
+        Pageable pageable = PageRequest.of(0, Math.min(safeLimit * 3, 30));
+        List<ProductEntity> products = productRepository.findPublicSearchSuggestions(
+                cleanKeyword,
+                cleanCategorySlug,
+                maxPrice,
+                IN_STOCK_STATUS,
+                pageable
+        );
+        Map<Long, List<ProductImageEntity>> imagesByProductId = getImagesByProductId(products);
+
+        return products.stream()
+                .sorted(Comparator
+                        .comparingInt((ProductEntity product) -> scoreSuggestion(product, cleanKeyword)).reversed()
+                        .thenComparing(ProductEntity::getName)
+                        .thenComparing(ProductEntity::getId))
+                .limit(safeLimit)
+                .map(product -> toSuggestionResponse(
+                        product,
+                        imagesByProductId.getOrDefault(product.getId(), List.of())
+                ))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProductSearchFacetsResponse getSearchFacets(
+            String keyword,
+            String categorySlug,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            String status
+    ) {
+        validatePriceRange(minPrice, maxPrice);
+
+        String cleanKeyword = cleanBlank(keyword);
+        String cleanCategorySlug = cleanBlank(categorySlug);
+        String cleanStatus = normalizeOptionalPublicStatus(status);
+        Object[] priceRange = productRepository.findPublicSearchPriceRange(
+                cleanKeyword,
+                cleanCategorySlug,
+                minPrice,
+                maxPrice,
+                cleanStatus,
+                HIDDEN_STATUS
+        );
+
+        return ProductSearchFacetsResponse.builder()
+                .totalProducts(longValue(priceRange, 0))
+                .minPrice(bigDecimalValue(priceRange, 1))
+                .maxPrice(bigDecimalValue(priceRange, 2))
+                .categories(productRepository.findPublicCategoryFacets(
+                        cleanKeyword,
+                        cleanCategorySlug,
+                        minPrice,
+                        maxPrice,
+                        cleanStatus,
+                        HIDDEN_STATUS
+                ).stream().map(this::toCategoryFacetResponse).toList())
+                .statuses(productRepository.findPublicStatusFacets(
+                        cleanKeyword,
+                        cleanCategorySlug,
+                        minPrice,
+                        maxPrice,
+                        cleanStatus,
+                        HIDDEN_STATUS
+                ).stream().map(this::toStatusFacetResponse).toList())
+                .sortOptions(getPublicSortOptions())
+                .build();
     }
 
     @Override
@@ -257,6 +347,29 @@ public class ProductServiceImpl implements ProductService {
         return productMapper.toProductResponse(product, images);
     }
 
+    private ProductSearchSuggestionResponse toSuggestionResponse(ProductEntity product, List<ProductImageEntity> images) {
+        CategoryEntity category = product.getCategory();
+        String thumbnail = images.stream()
+                .map(ProductImageEntity::getImage)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+
+        return ProductSearchSuggestionResponse.builder()
+                .id(product.getId())
+                .name(product.getName())
+                .slug(product.getSlug())
+                .price(product.getPrice())
+                .stock(product.getStock())
+                .unit(product.getUnit())
+                .status(product.getStatus())
+                .categoryId(category == null ? null : category.getId())
+                .categoryName(category == null ? null : category.getName())
+                .categorySlug(category == null ? null : category.getSlug())
+                .thumbnail(thumbnail)
+                .build();
+    }
+
     private ProductEntity findProductById(Long id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm với id: " + id));
@@ -334,6 +447,83 @@ public class ProductServiceImpl implements ProductService {
                 .collect(Collectors.groupingBy(image -> image.getProduct().getId(), LinkedHashMap::new, Collectors.toList()));
     }
 
+    private ProductCategoryFacetResponse toCategoryFacetResponse(Object[] row) {
+        return ProductCategoryFacetResponse.builder()
+                .categoryId(row[0] == null ? null : ((Number) row[0]).longValue())
+                .categoryName(row[1] == null ? null : row[1].toString())
+                .categorySlug(row[2] == null ? null : row[2].toString())
+                .productCount(row[3] == null ? 0 : ((Number) row[3]).longValue())
+                .build();
+    }
+
+    private ProductStatusFacetResponse toStatusFacetResponse(Object[] row) {
+        String status = row[0] == null ? null : row[0].toString();
+
+        return ProductStatusFacetResponse.builder()
+                .status(status)
+                .label(toStatusLabel(status))
+                .productCount(row[1] == null ? 0 : ((Number) row[1]).longValue())
+                .build();
+    }
+
+    private List<ProductSortOptionResponse> getPublicSortOptions() {
+        return List.of(
+                ProductSortOptionResponse.builder().value("createdAt,desc").label("Newest").build(),
+                ProductSortOptionResponse.builder().value("price,asc").label("Price: low to high").build(),
+                ProductSortOptionResponse.builder().value("price,desc").label("Price: high to low").build(),
+                ProductSortOptionResponse.builder().value("name,asc").label("Name: A to Z").build(),
+                ProductSortOptionResponse.builder().value("stock,desc").label("Available stock").build()
+        );
+    }
+
+    private int scoreSuggestion(ProductEntity product, String keyword) {
+        String cleanKeyword = cleanBlank(keyword);
+        if (cleanKeyword == null) {
+            return 1;
+        }
+
+        String normalizedKeyword = cleanKeyword.toLowerCase(Locale.ROOT);
+        String productName = product.getName() == null ? "" : product.getName().toLowerCase(Locale.ROOT);
+        String productDescription = product.getDescription() == null ? "" : product.getDescription().toLowerCase(Locale.ROOT);
+        String categoryName = product.getCategory() == null || product.getCategory().getName() == null
+                ? ""
+                : product.getCategory().getName().toLowerCase(Locale.ROOT);
+        int score = 0;
+
+        if (productName.equals(normalizedKeyword)) {
+            score += 30;
+        }
+        if (productName.startsWith(normalizedKeyword)) {
+            score += 20;
+        }
+        if (productName.contains(normalizedKeyword)) {
+            score += 12;
+        }
+        if (categoryName.contains(normalizedKeyword)) {
+            score += 6;
+        }
+        if (productDescription.contains(normalizedKeyword)) {
+            score += 3;
+        }
+        if (product.getStock() != null && product.getStock() > 0) {
+            score += 1;
+        }
+
+        return score;
+    }
+
+    private String toStatusLabel(String status) {
+        if (IN_STOCK_STATUS.equals(status)) {
+            return "In stock";
+        }
+
+        if (OUT_OF_STOCK_STATUS.equals(status)) {
+            return "Out of stock";
+        }
+
+        return status;
+    }
+
     private void replaceProductImages(ProductEntity product, List<String> imagePaths) {
         productImageRepository.deleteByProduct_Id(product.getId());
 
@@ -408,6 +598,20 @@ public class ProductServiceImpl implements ProductService {
         return normalizedStatus;
     }
 
+    private String normalizeOptionalPublicStatus(String status) {
+        String normalizedStatus = cleanBlank(status);
+        if (normalizedStatus == null) {
+            return null;
+        }
+
+        normalizedStatus = normalizedStatus.toLowerCase(Locale.ROOT);
+        if (!PUBLIC_STATUSES.contains(normalizedStatus)) {
+            throw new BadRequestException("Public product status is invalid. Allowed values: in_stock, out_of_stock");
+        }
+
+        return normalizedStatus;
+    }
+
     private String normalizeOptionalAdminStatus(String status) {
         String normalizedStatus = cleanBlank(status);
         if (normalizedStatus == null) {
@@ -474,6 +678,12 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+    private void validateSuggestionLimit(int limit) {
+        if (limit < 1 || limit > MAX_SUGGESTION_LIMIT) {
+            throw new BadRequestException("limit must be between 1 and " + MAX_SUGGESTION_LIMIT);
+        }
+    }
+
     private void validatePriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
         if (minPrice != null && minPrice.compareTo(BigDecimal.ZERO) < 0) {
             throw new BadRequestException("minPrice phải lớn hơn hoặc bằng 0");
@@ -494,5 +704,25 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return value.trim();
+    }
+
+    private Long longValue(Object[] row, int index) {
+        if (row == null || row.length <= index || row[index] == null) {
+            return 0L;
+        }
+
+        return ((Number) row[index]).longValue();
+    }
+
+    private BigDecimal bigDecimalValue(Object[] row, int index) {
+        if (row == null || row.length <= index || row[index] == null) {
+            return null;
+        }
+
+        if (row[index] instanceof BigDecimal bigDecimal) {
+            return bigDecimal;
+        }
+
+        return new BigDecimal(row[index].toString());
     }
 }
