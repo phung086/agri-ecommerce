@@ -136,6 +136,13 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
 
     long countByStockLessThanEqualAndStatusNot(Integer stock, String status);
 
+    @Query("""
+            select coalesce(sum(product.stock), 0)
+            from ProductEntity product
+            where product.status <> :hiddenStatus
+            """)
+    Long sumStockByStatusNot(@Param("hiddenStatus") String hiddenStatus);
+
     @EntityGraph(attributePaths = "category")
     List<ProductEntity> findByStockLessThanEqualAndStatusNotOrderByStockAscCreatedAtDesc(Integer stock, String status, Pageable pageable);
 
