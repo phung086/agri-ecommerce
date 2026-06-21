@@ -4,6 +4,7 @@ import com.agri.ecommerce.dto.request.order.CheckoutRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
+import com.agri.ecommerce.dto.response.order.CheckoutPreviewResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
 import com.agri.ecommerce.security.UserPrincipal;
 import com.agri.ecommerce.service.OrderService;
@@ -59,6 +60,19 @@ public class OrderController {
 
         return ResponseEntity.ok(
                 ApiResponse.success("Lấy chi tiết đơn hàng thành công", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Kiểm tra giỏ hàng trước khi đặt hàng")
+    @PostMapping("/checkout/preview")
+    public ResponseEntity<ApiResponse<CheckoutPreviewResponse>> previewCheckout(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody CheckoutRequest request
+    ) {
+        CheckoutPreviewResponse response = orderService.previewCheckout(principal.getId(), request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Kiểm tra giỏ hàng trước khi đặt thành công", response, HttpStatus.OK.value())
         );
     }
 

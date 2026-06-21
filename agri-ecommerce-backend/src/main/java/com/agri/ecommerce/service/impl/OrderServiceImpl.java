@@ -3,6 +3,8 @@ package com.agri.ecommerce.service.impl;
 import com.agri.ecommerce.dto.request.order.CheckoutRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
+import com.agri.ecommerce.dto.response.order.CheckoutPreviewItemResponse;
+import com.agri.ecommerce.dto.response.order.CheckoutPreviewResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
 import com.agri.ecommerce.entity.*;
 import com.agri.ecommerce.common.exception.BadRequestException;
@@ -93,6 +95,69 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse getOrder(Long userId, Long orderId) {
         OrderEntity order = findOrderByIdAndUserId(orderId, userId);
         return toOrderResponse(order, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CheckoutPreviewResponse previewCheckout(Long userId, CheckoutRequest request) {
+        findUserById(userId);
+        findShippingAddressByIdAndUserId(request.getShippingAddressId(), userId);
+        String paymentMethod = normalizePaymentMethod(request.getPaymentMethod());
+        List<CartItemEntity> cartItems = cartItemRepository.findByUser_IdOrderByCreatedAtDesc(userId);
+
+        if (cartItems.isEmpty()) {
+            return CheckoutPreviewResponse.builder()
+                    .canCheckout(false)
+                    .paymentMethod(paymentMethod)
+                    .couponCode(cleanBlank(request.getCouponCode()))
+                    .couponValid(false)
+                    .couponMessage("Cart is empty")
+                    .totalQuantity(0)
+                    .subtotal(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .discountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .shippingFee(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .totalPrice(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .items(List.of())
+                    .warnings(List.of("Cart is empty"))
+                    .build();
+        }
+
+        Map<Long, Integer> quantityByProductId = aggregateCartQuantities(cartItems);
+        Map<Long, ProductEntity> productsById = cartItems.stream()
+                .map(CartItemEntity::getProduct)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(ProductEntity::getId, Function.identity(), (first, ignored) -> first));
+        List<CheckoutPreviewItemResponse> previewItems = quantityByProductId.entrySet().stream()
+                .map(entry -> toCheckoutPreviewItem(productsById.get(entry.getKey()), entry.getValue()))
+                .toList();
+        boolean allItemsAvailable = previewItems.stream().allMatch(CheckoutPreviewItemResponse::isAvailable);
+        BigDecimal subtotal = previewItems.stream()
+                .map(CheckoutPreviewItemResponse::getLineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal);
+        BigDecimal totalPrice = subtotal
+                .subtract(couponCalculation.discountAmount())
+                .add(DEFAULT_SHIPPING_FEE)
+                .setScale(2, RoundingMode.HALF_UP);
+        List<String> warnings = buildCheckoutPreviewWarnings(previewItems, couponCalculation);
+
+        return CheckoutPreviewResponse.builder()
+                .canCheckout(allItemsAvailable && couponCalculation.checkoutAllowed())
+                .paymentMethod(paymentMethod)
+                .couponCode(couponCalculation.couponCode())
+                .couponValid(couponCalculation.valid())
+                .couponMessage(couponCalculation.message())
+                .totalQuantity(previewItems.stream()
+                        .mapToInt(item -> item.getRequestedQuantity() == null ? 0 : item.getRequestedQuantity())
+                        .sum())
+                .subtotal(subtotal)
+                .discountAmount(couponCalculation.discountAmount())
+                .shippingFee(DEFAULT_SHIPPING_FEE)
+                .totalPrice(totalPrice)
+                .items(previewItems)
+                .warnings(warnings)
+                .build();
     }
 
     @Override
@@ -287,6 +352,61 @@ public class OrderServiceImpl implements OrderService {
         return orderMapper.toOrderResponse(order, orderItems, payment, statusHistory);
     }
 
+    private CheckoutPreviewItemResponse toCheckoutPreviewItem(ProductEntity product, Integer requestedQuantity) {
+        if (product == null) {
+            return CheckoutPreviewItemResponse.builder()
+                    .requestedQuantity(requestedQuantity)
+                    .availableStock(0)
+                    .price(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .lineTotal(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .available(false)
+                    .message("Product was not found")
+                    .build();
+        }
+
+        int safeRequestedQuantity = requestedQuantity == null ? 0 : requestedQuantity;
+        int availableStock = product.getStock() == null ? 0 : product.getStock();
+        BigDecimal price = product.getPrice() == null ? BigDecimal.ZERO : product.getPrice();
+        BigDecimal lineTotal = price
+                .multiply(BigDecimal.valueOf(Math.max(safeRequestedQuantity, 0)))
+                .setScale(2, RoundingMode.HALF_UP);
+        String message = getCheckoutPreviewItemMessage(product, safeRequestedQuantity, availableStock);
+
+        return CheckoutPreviewItemResponse.builder()
+                .productId(product.getId())
+                .productName(product.getName())
+                .productSlug(product.getSlug())
+                .unit(product.getUnit())
+                .requestedQuantity(safeRequestedQuantity)
+                .availableStock(availableStock)
+                .status(product.getStatus())
+                .price(price)
+                .lineTotal(lineTotal)
+                .available(message == null)
+                .message(message == null ? "Available" : message)
+                .build();
+    }
+
+    private String getCheckoutPreviewItemMessage(ProductEntity product, int requestedQuantity, int availableStock) {
+        if (requestedQuantity <= 0) {
+            return "Requested quantity is invalid";
+        }
+
+        if (!IN_STOCK_STATUS.equals(product.getStatus())) {
+            return "Product is not available for sale";
+        }
+
+        if (availableStock <= 0) {
+            return "Product is out of stock";
+        }
+
+        if (requestedQuantity > availableStock) {
+            return "Requested quantity exceeds current stock: " + availableStock;
+        }
+
+        return null;
+    }
+
     private Map<Long, Integer> aggregateCartQuantities(List<CartItemEntity> cartItems) {
         Map<Long, Integer> quantityByProductId = new LinkedHashMap<>();
 
@@ -406,6 +526,57 @@ public class OrderServiceImpl implements OrderService {
         return new CouponCalculation(coupon, coupon.getCode(), discountAmount);
     }
 
+    private CouponPreviewCalculation calculateCouponPreview(String couponCode, BigDecimal subtotal) {
+        String cleanCouponCode = cleanBlank(couponCode);
+
+        if (cleanCouponCode == null) {
+            return new CouponPreviewCalculation(
+                    null,
+                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    false,
+                    true,
+                    "No coupon applied"
+            );
+        }
+
+        Optional<CouponEntity> couponOptional = couponRepository.findByCodeIgnoreCase(cleanCouponCode);
+        if (couponOptional.isEmpty()) {
+            return invalidCouponPreview(cleanCouponCode, "Coupon does not exist");
+        }
+
+        CouponEntity coupon = couponOptional.get();
+        String invalidMessage = getCouponInvalidMessage(coupon);
+        if (invalidMessage != null) {
+            return invalidCouponPreview(coupon.getCode(), invalidMessage);
+        }
+
+        BigDecimal discountAmount = subtotal
+                .multiply(BigDecimal.valueOf(coupon.getDiscountPercentage()))
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+
+        if (discountAmount.compareTo(subtotal) > 0) {
+            discountAmount = subtotal;
+        }
+
+        return new CouponPreviewCalculation(
+                coupon.getCode(),
+                discountAmount,
+                true,
+                true,
+                "Coupon can be applied"
+        );
+    }
+
+    private CouponPreviewCalculation invalidCouponPreview(String couponCode, String message) {
+        return new CouponPreviewCalculation(
+                couponCode,
+                BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                false,
+                false,
+                message
+        );
+    }
+
     private void validateCoupon(CouponEntity coupon) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             throw new BadRequestException("Mã giảm giá đã bị vô hiệu hóa");
@@ -422,6 +593,45 @@ public class OrderServiceImpl implements OrderService {
         if (coupon.getDiscountPercentage() == null || coupon.getDiscountPercentage() < 0 || coupon.getDiscountPercentage() > 100) {
             throw new BadRequestException("Mã giảm giá không hợp lệ");
         }
+    }
+
+    private String getCouponInvalidMessage(CouponEntity coupon) {
+        if (!Boolean.TRUE.equals(coupon.getActive())) {
+            return "Coupon is inactive";
+        }
+
+        if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(LocalDateTime.now())) {
+            return "Coupon has expired";
+        }
+
+        if (coupon.getUsageLimit() != null && coupon.getTimesUsed() != null && coupon.getTimesUsed() >= coupon.getUsageLimit()) {
+            return "Coupon usage limit has been reached";
+        }
+
+        if (coupon.getDiscountPercentage() == null || coupon.getDiscountPercentage() < 0 || coupon.getDiscountPercentage() > 100) {
+            return "Coupon discount is invalid";
+        }
+
+        return null;
+    }
+
+    private List<String> buildCheckoutPreviewWarnings(
+            List<CheckoutPreviewItemResponse> items,
+            CouponPreviewCalculation couponCalculation
+    ) {
+        List<String> warnings = new ArrayList<>();
+        items.stream()
+                .filter(item -> !item.isAvailable())
+                .map(item -> item.getProductName() == null
+                        ? item.getMessage()
+                        : item.getProductName() + ": " + item.getMessage())
+                .forEach(warnings::add);
+
+        if (!couponCalculation.checkoutAllowed()) {
+            warnings.add(couponCalculation.message());
+        }
+
+        return warnings;
     }
 
     private void releaseCouponUsage(OrderEntity order) {
@@ -522,5 +732,14 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private record CouponCalculation(CouponEntity coupon, String couponCode, BigDecimal discountAmount) {
+    }
+
+    private record CouponPreviewCalculation(
+            String couponCode,
+            BigDecimal discountAmount,
+            boolean valid,
+            boolean checkoutAllowed,
+            String message
+    ) {
     }
 }
