@@ -32,6 +32,15 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 app:
+  auth:
+    password-reset:
+      expiration-minutes: ${PASSWORD_RESET_EXPIRATION_MINUTES:30}
+      expose-token: ${PASSWORD_RESET_EXPOSE_TOKEN:true}
   jwt:
     secret: ${JWT_SECRET:AgriEcommerceJwtSecretKeyForLocalDevelopmentMustBeAtLeast32Chars2026}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  security:
+    login:
+      max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
+      lock-minutes: ${LOGIN_LOCK_MINUTES:15}
+      window-minutes: ${LOGIN_WINDOW_MINUTES:15}

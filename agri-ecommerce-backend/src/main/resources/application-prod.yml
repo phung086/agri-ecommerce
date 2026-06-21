@@ -10,3 +10,7 @@ logging:
     root: INFO
     org.hibernate.SQL: WARN
 
+app:
+  auth:
+    password-reset:
+      expose-token: false
