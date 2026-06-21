@@ -51,7 +51,9 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 "/api/health",
-                                "/api/health/database"
+                                "/api/health/database",
+                                "/sitemap.xml",
+                                "/robots.txt"
                         ).permitAll()
 
                         .requestMatchers(

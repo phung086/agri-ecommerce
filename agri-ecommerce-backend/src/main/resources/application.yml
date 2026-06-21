@@ -46,3 +46,6 @@ app:
       max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
       lock-minutes: ${LOGIN_LOCK_MINUTES:15}
       window-minutes: ${LOGIN_WINDOW_MINUTES:15}
+  seo:
+    sitemap:
+      max-products: ${SITEMAP_MAX_PRODUCTS:10000}

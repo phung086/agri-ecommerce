@@ -32,6 +32,8 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
     @EntityGraph(attributePaths = "category")
     List<ProductEntity> findByStatus(String status, Pageable pageable);
 
+    List<ProductEntity> findByStatusNot(String status, Pageable pageable);
+
     long countByStatus(String status);
 
     long countByStatusNot(String status);
