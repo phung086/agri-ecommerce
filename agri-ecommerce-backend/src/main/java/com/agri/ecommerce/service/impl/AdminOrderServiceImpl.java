@@ -38,6 +38,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private static final String PAYMENT_PENDING = "pending";
     private static final String PAYMENT_COMPLETED = "completed";
     private static final String PAYMENT_FAILED = "failed";
+    private static final String PAYMENT_REFUNDED = "refunded";
     private static final String STATUS_PENDING = "pending";
     private static final String STATUS_PROCESSING = "processing";
     private static final String STATUS_READY_FOR_DELIVERY = "ready_for_delivery";
@@ -47,6 +48,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private static final String STATUS_CANCELED = "canceled";
     private static final String NOTIFICATION_TYPE_ORDER = "order";
     private static final String NOTIFICATION_TYPE_DELIVERY = "delivery";
+    private static final String NOTIFICATION_TYPE_PAYMENT = "payment";
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ALLOWED_STATUSES = Set.of(
             STATUS_PENDING,
@@ -58,6 +60,11 @@ public class AdminOrderServiceImpl implements AdminOrderService {
             STATUS_CANCELED
     );
     private static final Set<String> TERMINAL_STATUSES = Set.of(STATUS_COMPLETED, STATUS_CANCELED);
+    private static final Set<String> REFUNDABLE_PAYMENT_ORDER_STATUSES = Set.of(
+            STATUS_CANCELED,
+            STATUS_DELIVERED,
+            STATUS_COMPLETED
+    );
     private static final Map<String, Set<String>> ALLOWED_TRANSITIONS = Map.of(
             STATUS_PENDING, Set.of(STATUS_PROCESSING, STATUS_CANCELED),
             STATUS_PROCESSING, Set.of(STATUS_READY_FOR_DELIVERY, STATUS_CANCELED),
@@ -146,6 +153,15 @@ public class AdminOrderServiceImpl implements AdminOrderService {
 
     @Override
     @Transactional
+    public OrderResponse cancelOrder(Long orderId, OrderStatusNoteRequest request) {
+        OrderEntity order = findOrderByIdForUpdate(orderId);
+
+        applyStatusChange(order, STATUS_CANCELED, cleanBlank(request == null ? null : request.getNote()));
+        return toOrderResponse(orderRepository.save(order), true);
+    }
+
+    @Override
+    @Transactional
     public OrderResponse assignDeliveryStaff(Long orderId, AssignDeliveryStaffRequest request) {
         OrderEntity order = findOrderByIdForUpdate(orderId);
         UserEntity deliveryStaff = findActiveDeliveryStaffById(request.getDeliveryStaffId());
@@ -193,6 +209,22 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     }
 
     @Override
+    @Transactional
+    public OrderResponse refundOrderPayment(Long orderId, OrderStatusNoteRequest request) {
+        OrderEntity order = findOrderByIdForUpdate(orderId);
+        String note = cleanBlank(request == null ? null : request.getNote());
+
+        refundLatestCompletedPayment(order, note);
+        orderStatusHistoryRepository.save(createStatusHistory(
+                order,
+                order.getStatus(),
+                buildPaymentRefundHistoryNote(note)
+        ));
+
+        return toOrderResponse(orderRepository.save(order), true);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<UserResponse> getActiveDeliveryStaff() {
         return userRepository.findByRole_NameAndStatus(ROLE_DELIVERY_STAFF, UserStatus.active, Sort.by("name").ascending())
@@ -233,7 +265,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
 
         if (STATUS_CANCELED.equals(nextStatus)) {
             restoreInventoryAndCoupon(order);
-            markPendingPaymentFailed(order.getId());
+            settlePaymentForCanceledOrder(order, note);
         }
 
         orderStatusHistoryRepository.save(createStatusHistory(order, nextStatus, note));
@@ -290,21 +322,91 @@ public class AdminOrderServiceImpl implements AdminOrderService {
         return "/delivery/orders/" + orderId;
     }
 
-    private void markPendingPaymentFailed(Long orderId) {
-        paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(orderId)
-                .filter(payment -> PAYMENT_PENDING.equals(payment.getStatus()))
+    private Optional<PaymentEntity> findLatestPaymentForUpdate(Long orderId) {
+        return paymentRepository.findByOrderIdForUpdateOrderByCreatedAtDesc(orderId)
+                .stream()
+                .findFirst();
+    }
+
+    private void settlePaymentForCanceledOrder(OrderEntity order, String note) {
+        findLatestPaymentForUpdate(order.getId())
                 .ifPresent(payment -> {
-                    payment.setStatus(PAYMENT_FAILED);
-                    paymentRepository.save(payment);
+                    if (PAYMENT_PENDING.equals(payment.getStatus())) {
+                        payment.setStatus(PAYMENT_FAILED);
+                        payment.setPaidAt(null);
+                        paymentRepository.save(payment);
+                        return;
+                    }
+
+                    if (PAYMENT_COMPLETED.equals(payment.getStatus())) {
+                        refundPayment(payment, buildCancelRefundNote(note));
+                    }
                 });
     }
 
-    private void validatePaymentBeforeProcessing(OrderEntity order) {
-        PaymentEntity payment = paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(order.getId())
+    private void refundLatestCompletedPayment(OrderEntity order, String note) {
+        if (!REFUNDABLE_PAYMENT_ORDER_STATUSES.contains(order.getStatus())) {
+            throw new BadRequestException("Cancel the order before refunding active order payments");
+        }
+
+        PaymentEntity payment = findLatestPaymentForUpdate(order.getId())
                 .orElseThrow(() -> new BadRequestException("Order has no payment information"));
 
-        if (PAYMENT_FAILED.equals(payment.getStatus())) {
-            throw new BadRequestException("Cannot confirm an order with failed payment");
+        if (PAYMENT_REFUNDED.equals(payment.getStatus())) {
+            throw new BadRequestException("Payment has already been refunded");
+        }
+
+        if (!PAYMENT_COMPLETED.equals(payment.getStatus())) {
+            throw new BadRequestException("Only completed payments can be refunded");
+        }
+
+        refundPayment(payment, note);
+    }
+
+    private void refundPayment(PaymentEntity payment, String note) {
+        payment.setStatus(PAYMENT_REFUNDED);
+        PaymentEntity savedPayment = paymentRepository.save(payment);
+
+        notifyUser(
+                savedPayment.getOrder().getUser().getId(),
+                NOTIFICATION_TYPE_PAYMENT,
+                buildRefundNotification(savedPayment.getOrder().getId(), note),
+                buildOrderLink(savedPayment.getOrder().getId())
+        );
+    }
+
+    private String buildCancelRefundNote(String note) {
+        if (note == null) {
+            return "Payment refunded because the order was canceled";
+        }
+
+        return "Payment refunded because the order was canceled. " + note;
+    }
+
+    private String buildPaymentRefundHistoryNote(String note) {
+        if (note == null) {
+            return "Payment refunded by admin";
+        }
+
+        return "Payment refunded by admin. " + note;
+    }
+
+    private String buildRefundNotification(Long orderId, String note) {
+        String message = "Payment for order #" + orderId + " has been refunded";
+
+        if (note == null) {
+            return message;
+        }
+
+        return message + ". " + note;
+    }
+
+    private void validatePaymentBeforeProcessing(OrderEntity order) {
+        PaymentEntity payment = findLatestPaymentForUpdate(order.getId())
+                .orElseThrow(() -> new BadRequestException("Order has no payment information"));
+
+        if (PAYMENT_FAILED.equals(payment.getStatus()) || PAYMENT_REFUNDED.equals(payment.getStatus())) {
+            throw new BadRequestException("Cannot confirm an order with failed or refunded payment");
         }
 
         if (PAYMENT_METHOD_PAYPAL.equals(payment.getPaymentMethod()) && !PAYMENT_COMPLETED.equals(payment.getStatus())) {

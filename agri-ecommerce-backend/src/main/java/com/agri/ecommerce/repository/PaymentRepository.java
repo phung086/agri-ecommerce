@@ -31,6 +31,17 @@ public interface PaymentRepository extends JpaRepository<PaymentEntity, Long>, J
     @EntityGraph(attributePaths = {"order", "order.user"})
     Optional<PaymentEntity> findFirstByOrder_IdOrderByCreatedAtDesc(Long orderId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select payment
+            from PaymentEntity payment
+            join fetch payment.order orderEntity
+            join fetch orderEntity.user
+            where orderEntity.id = :orderId
+            order by payment.createdAt desc
+            """)
+    List<PaymentEntity> findByOrderIdForUpdateOrderByCreatedAtDesc(@Param("orderId") Long orderId);
+
     @EntityGraph(attributePaths = {"order", "order.user"})
     Optional<PaymentEntity> findFirstByOrder_IdAndOrder_User_IdOrderByCreatedAtDesc(Long orderId, Long userId);
 

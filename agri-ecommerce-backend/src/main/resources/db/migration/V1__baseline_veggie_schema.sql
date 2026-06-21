@@ -439,7 +439,7 @@ CREATE TABLE `payments` (
   `payment_method` enum('cash','paypal') NOT NULL,
   `transaction_id` varchar(255) DEFAULT NULL,
   `amount` decimal(10,2) NOT NULL,
-  `status` enum('pending','completed','failed') NOT NULL DEFAULT 'pending',
+  `status` enum('pending','completed','failed','refunded') NOT NULL DEFAULT 'pending',
   `paid_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL

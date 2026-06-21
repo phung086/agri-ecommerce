@@ -1,6 +1,7 @@
 package com.agri.ecommerce.service;
 
 import com.agri.ecommerce.dto.request.payment.AdminPaymentStatusUpdateRequest;
+import com.agri.ecommerce.dto.request.payment.PaymentRefundRequest;
 import com.agri.ecommerce.dto.request.payment.PaypalPaymentConfirmationRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.payment.PaymentDetailResponse;
@@ -39,6 +40,8 @@ public interface PaymentService {
     PaymentDetailResponse getAdminPayment(Long paymentId);
 
     PaymentDetailResponse updatePaymentStatus(Long paymentId, AdminPaymentStatusUpdateRequest request);
+
+    PaymentDetailResponse refundAdminPayment(Long paymentId, PaymentRefundRequest request);
 
     void completeCashPaymentIfPending(Long orderId);
 }

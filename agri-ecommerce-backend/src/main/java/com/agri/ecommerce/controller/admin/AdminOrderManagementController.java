@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Tag(name = "Admin - Order Management", description = "API quản trị đơn hàng")
+@Tag(name = "Admin - Order Management", description = "Admin order operation APIs")
 @RestController
 @RequestMapping("/api/admin/orders")
 @RequiredArgsConstructor
@@ -29,25 +29,25 @@ public class AdminOrderManagementController {
 
     private final AdminOrderService adminOrderService;
 
-    @Operation(summary = "Lấy danh sách đơn hàng cho admin")
+    @Operation(summary = "Get orders for admin")
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> getOrders(
-            @Parameter(description = "Trạng thái đơn hàng", example = "pending")
+            @Parameter(description = "Order status", example = "pending")
             @RequestParam(required = false) String status,
 
-            @Parameter(description = "ID khách hàng", example = "8")
+            @Parameter(description = "Customer ID", example = "8")
             @RequestParam(required = false) Long customerId,
 
-            @Parameter(description = "ID nhân viên giao hàng", example = "6")
+            @Parameter(description = "Delivery staff ID", example = "6")
             @RequestParam(required = false) Long deliveryStaffId,
 
-            @Parameter(description = "Trang bắt đầu từ 0", example = "0")
+            @Parameter(description = "Page index from 0", example = "0")
             @RequestParam(defaultValue = "0") int page,
 
-            @Parameter(description = "Số phần tử mỗi trang", example = "10")
+            @Parameter(description = "Page size", example = "10")
             @RequestParam(defaultValue = "10") int size,
 
-            @Parameter(description = "Sắp xếp theo field,direction", example = "createdAt,desc")
+            @Parameter(description = "Sort by field,direction", example = "createdAt,desc")
             @RequestParam(defaultValue = "createdAt,desc") String sort
     ) {
         PageResponse<OrderResponse> response = adminOrderService.getOrders(
@@ -60,72 +60,100 @@ public class AdminOrderManagementController {
         );
 
         return ResponseEntity.ok(
-                ApiResponse.success("Lấy danh sách đơn hàng thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Get orders successfully", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Lấy danh sách nhân viên giao hàng đang hoạt động")
+    @Operation(summary = "Get active delivery staff")
     @GetMapping("/delivery-staff")
     public ResponseEntity<ApiResponse<List<UserResponse>>> getActiveDeliveryStaff() {
         List<UserResponse> response = adminOrderService.getActiveDeliveryStaff();
 
         return ResponseEntity.ok(
-                ApiResponse.success("Lấy danh sách nhân viên giao hàng thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Get active delivery staff successfully", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Lấy chi tiết đơn hàng cho admin")
+    @Operation(summary = "Get order detail for admin")
     @GetMapping("/{orderId}")
     public ResponseEntity<ApiResponse<OrderResponse>> getOrder(
-            @Parameter(description = "ID đơn hàng", example = "1")
+            @Parameter(description = "Order ID", example = "1")
             @PathVariable Long orderId
     ) {
         OrderResponse response = adminOrderService.getOrder(orderId);
 
         return ResponseEntity.ok(
-                ApiResponse.success("Lấy chi tiết đơn hàng thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Get order detail successfully", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Xác nhận đơn hàng đang chờ xử lý")
+    @Operation(summary = "Confirm a pending order")
     @PatchMapping("/{orderId}/confirm")
     public ResponseEntity<ApiResponse<OrderResponse>> confirmOrder(
-            @Parameter(description = "ID đơn hàng", example = "1")
+            @Parameter(description = "Order ID", example = "1")
             @PathVariable Long orderId,
             @Valid @RequestBody(required = false) OrderStatusNoteRequest request
     ) {
         OrderResponse response = adminOrderService.confirmOrder(orderId, request);
 
         return ResponseEntity.ok(
-                ApiResponse.success("Xác nhận đơn hàng thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Confirm order successfully", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Phân nhân viên giao hàng cho đơn")
+    @Operation(summary = "Cancel an order and sync stock, coupon, and payment")
+    @PatchMapping("/{orderId}/cancel")
+    public ResponseEntity<ApiResponse<OrderResponse>> cancelOrder(
+            @Parameter(description = "Order ID", example = "1")
+            @PathVariable Long orderId,
+            @Valid @RequestBody(required = false) OrderStatusNoteRequest request
+    ) {
+        OrderResponse response = adminOrderService.cancelOrder(orderId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Cancel order successfully", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Assign delivery staff to an order")
     @PatchMapping("/{orderId}/delivery-staff")
     public ResponseEntity<ApiResponse<OrderResponse>> assignDeliveryStaff(
-            @Parameter(description = "ID đơn hàng", example = "1")
+            @Parameter(description = "Order ID", example = "1")
             @PathVariable Long orderId,
             @Valid @RequestBody AssignDeliveryStaffRequest request
     ) {
         OrderResponse response = adminOrderService.assignDeliveryStaff(orderId, request);
 
         return ResponseEntity.ok(
-                ApiResponse.success("Phân nhân viên giao hàng thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Assign delivery staff successfully", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Cập nhật trạng thái đơn hàng theo luồng vận hành")
+    @Operation(summary = "Refund latest completed payment for an order")
+    @PatchMapping("/{orderId}/payment/refund")
+    public ResponseEntity<ApiResponse<OrderResponse>> refundOrderPayment(
+            @Parameter(description = "Order ID", example = "1")
+            @PathVariable Long orderId,
+            @Valid @RequestBody(required = false) OrderStatusNoteRequest request
+    ) {
+        OrderResponse response = adminOrderService.refundOrderPayment(orderId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Refund order payment successfully", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Update order status by operation flow")
     @PatchMapping("/{orderId}/status")
     public ResponseEntity<ApiResponse<OrderResponse>> updateOrderStatus(
-            @Parameter(description = "ID đơn hàng", example = "1")
+            @Parameter(description = "Order ID", example = "1")
             @PathVariable Long orderId,
             @Valid @RequestBody AdminOrderStatusUpdateRequest request
     ) {
         OrderResponse response = adminOrderService.updateOrderStatus(orderId, request);
 
         return ResponseEntity.ok(
-                ApiResponse.success("Cập nhật trạng thái đơn hàng thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Update order status successfully", response, HttpStatus.OK.value())
         );
     }
 }

@@ -1,6 +1,7 @@
 package com.agri.ecommerce.service.impl;
 
 import com.agri.ecommerce.dto.request.payment.AdminPaymentStatusUpdateRequest;
+import com.agri.ecommerce.dto.request.payment.PaymentRefundRequest;
 import com.agri.ecommerce.dto.request.payment.PaypalPaymentConfirmationRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.payment.PaymentDetailResponse;
@@ -32,12 +33,25 @@ public class PaymentServiceImpl implements PaymentService {
     private static final String PAYMENT_PENDING = "pending";
     private static final String PAYMENT_COMPLETED = "completed";
     private static final String PAYMENT_FAILED = "failed";
+    private static final String PAYMENT_REFUNDED = "refunded";
     private static final String ORDER_CANCELED = "canceled";
+    private static final String ORDER_DELIVERED = "delivered";
+    private static final String ORDER_COMPLETED = "completed";
     private static final String NOTIFICATION_TYPE_PAYMENT = "payment";
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ALLOWED_PAYMENT_METHODS = Set.of(PAYMENT_METHOD_CASH, PAYMENT_METHOD_PAYPAL);
-    private static final Set<String> ALLOWED_PAYMENT_STATUSES = Set.of(PAYMENT_PENDING, PAYMENT_COMPLETED, PAYMENT_FAILED);
+    private static final Set<String> ALLOWED_PAYMENT_STATUSES = Set.of(
+            PAYMENT_PENDING,
+            PAYMENT_COMPLETED,
+            PAYMENT_FAILED,
+            PAYMENT_REFUNDED
+    );
     private static final Set<String> ADMIN_MUTABLE_PAYMENT_STATUSES = Set.of(PAYMENT_COMPLETED, PAYMENT_FAILED);
+    private static final Set<String> REFUNDABLE_ORDER_STATUSES = Set.of(
+            ORDER_CANCELED,
+            ORDER_DELIVERED,
+            ORDER_COMPLETED
+    );
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "id", "amount", "paymentMethod", "status", "paidAt", "createdAt", "updatedAt"
     );
@@ -169,6 +183,25 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
+    public PaymentDetailResponse refundAdminPayment(Long paymentId, PaymentRefundRequest request) {
+        PaymentEntity payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        String note = cleanBlank(request == null ? null : request.getNote());
+
+        validateAdminRefund(payment);
+        payment.setStatus(PAYMENT_REFUNDED);
+        PaymentEntity savedPayment = paymentRepository.save(payment);
+
+        notifyCustomerPaymentChange(
+                savedPayment,
+                buildRefundNotification(savedPayment, note)
+        );
+
+        return paymentMapper.toPaymentDetailResponse(savedPayment);
+    }
+
+    @Override
+    @Transactional
     public void completeCashPaymentIfPending(Long orderId) {
         paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(orderId)
                 .filter(payment -> PAYMENT_PENDING.equals(payment.getStatus()))
@@ -206,7 +239,9 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void validateAdminStatusUpdate(PaymentEntity payment, String nextStatus, String transactionId) {
-        if (PAYMENT_COMPLETED.equals(payment.getStatus()) || PAYMENT_FAILED.equals(payment.getStatus())) {
+        if (PAYMENT_COMPLETED.equals(payment.getStatus())
+                || PAYMENT_FAILED.equals(payment.getStatus())
+                || PAYMENT_REFUNDED.equals(payment.getStatus())) {
             throw new BadRequestException("Thanh toán đã ở trạng thái kết thúc, không thể cập nhật");
         }
 
@@ -219,6 +254,21 @@ public class PaymentServiceImpl implements PaymentService {
 
         if (cleanBlank(transactionId) != null) {
             validateUniqueTransactionId(transactionId, payment.getId());
+        }
+    }
+
+    private void validateAdminRefund(PaymentEntity payment) {
+        if (PAYMENT_REFUNDED.equals(payment.getStatus())) {
+            throw new BadRequestException("Payment has already been refunded");
+        }
+
+        if (!PAYMENT_COMPLETED.equals(payment.getStatus())) {
+            throw new BadRequestException("Only completed payments can be refunded");
+        }
+
+        OrderEntity order = payment.getOrder();
+        if (order == null || !REFUNDABLE_ORDER_STATUSES.contains(order.getStatus())) {
+            throw new BadRequestException("Cancel the order before refunding active order payments");
         }
     }
 
@@ -255,6 +305,16 @@ public class PaymentServiceImpl implements PaymentService {
     private String buildAdminPaymentNotification(PaymentEntity payment, String note) {
         String message = "Thanh toán cho đơn hàng #" + payment.getOrder().getId()
                 + " đã được cập nhật sang " + payment.getStatus();
+
+        if (note == null) {
+            return message;
+        }
+
+        return message + ". " + note;
+    }
+
+    private String buildRefundNotification(PaymentEntity payment, String note) {
+        String message = "Payment for order #" + payment.getOrder().getId() + " has been refunded";
 
         if (note == null) {
             return message;
@@ -322,7 +382,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         normalizedStatus = normalizedStatus.toLowerCase(Locale.ROOT);
         if (!ALLOWED_PAYMENT_STATUSES.contains(normalizedStatus)) {
-            throw new BadRequestException("Trạng thái thanh toán không hợp lệ. Giá trị hợp lệ: pending, completed, failed");
+            throw new BadRequestException("Payment status is invalid. Valid values: pending, completed, failed, refunded");
         }
 
         return normalizedStatus;
@@ -345,7 +405,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         normalizedStatus = normalizedStatus.toLowerCase(Locale.ROOT);
         if (!ALLOWED_PAYMENT_STATUSES.contains(normalizedStatus)) {
-            throw new BadRequestException("Trạng thái thanh toán không hợp lệ. Giá trị hợp lệ: pending, completed, failed");
+            throw new BadRequestException("Payment status is invalid. Valid values: pending, completed, failed, refunded");
         }
 
         return normalizedStatus;

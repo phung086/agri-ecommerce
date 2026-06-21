@@ -24,9 +24,13 @@ public interface AdminOrderService {
 
     OrderResponse confirmOrder(Long orderId, OrderStatusNoteRequest request);
 
+    OrderResponse cancelOrder(Long orderId, OrderStatusNoteRequest request);
+
     OrderResponse assignDeliveryStaff(Long orderId, AssignDeliveryStaffRequest request);
 
     OrderResponse updateOrderStatus(Long orderId, AdminOrderStatusUpdateRequest request);
+
+    OrderResponse refundOrderPayment(Long orderId, OrderStatusNoteRequest request);
 
     List<UserResponse> getActiveDeliveryStaff();
 }
