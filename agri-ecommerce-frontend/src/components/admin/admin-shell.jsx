@@ -26,7 +26,11 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { clearAuthSession, getAdminAuthState } from "@/lib/auth-storage";
+import {
+  AUTH_SCOPES,
+  clearAuthSession,
+  getAdminAuthState,
+} from "@/lib/auth-storage";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -208,11 +212,17 @@ export function AdminShell({ children }) {
       return undefined;
     }
 
-    const timeoutId = window.setTimeout(() => {
+    function syncAuthState() {
       setAuthState(getAdminAuthState());
-    }, 0);
+    }
 
-    return () => window.clearTimeout(timeoutId);
+    const timeoutId = window.setTimeout(syncAuthState, 0);
+    window.addEventListener("admin-auth-session-updated", syncAuthState);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("admin-auth-session-updated", syncAuthState);
+    };
   }, [isAuthPage, pathname]);
 
   useEffect(() => {
@@ -224,12 +234,12 @@ export function AdminShell({ children }) {
       return;
     }
 
-    clearAuthSession();
+    clearAuthSession(AUTH_SCOPES.admin);
     router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
   }, [authState.status, isAuthPage, pathname, router]);
 
   function handleLogout() {
-    clearAuthSession();
+    clearAuthSession(AUTH_SCOPES.admin);
     setMobileOpen(false);
     router.replace("/admin/login");
   }
@@ -339,7 +349,11 @@ export function AdminShell({ children }) {
               <Bell className="size-4" />
             </Button>
 
-            <div className="flex items-center gap-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 shadow-sm">
+            <Link
+              href="/admin/profile"
+              className="flex items-center gap-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+              title="Chỉnh sửa hồ sơ admin"
+            >
               <div className="flex size-9 items-center justify-center rounded-[8px] bg-emerald-600 text-sm font-bold text-white">
                 {adminInitial}
               </div>
@@ -352,7 +366,7 @@ export function AdminShell({ children }) {
                   {adminRole}
                 </p>
               </div>
-            </div>
+            </Link>
 
             <Button
               type="button"
