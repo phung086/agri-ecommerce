@@ -55,7 +55,7 @@ public class AiAssistantServiceImpl implements AiAssistantService {
     private static final Pattern PRICE_PATTERN = Pattern.compile("(\\d[\\d.,]*)\\s*(k|nghin|ngan|vnd|dong)?");
     private static final Set<String> STOP_WORDS = Set.of(
             "toi", "minh", "ban", "can", "muon", "mua", "tim", "cho", "voi", "duoi", "tren", "tam", "khoang",
-            "gia", "san", "pham", "hang", "loai", "nao", "gi", "la", "co", "khong", "duoc", "nhu", "the",
+            "gia", "san", "pham", "hang", "loai", "gi", "la", "co", "khong", "duoc", "nhu", "the",
             "nao", "please", "help", "need", "want", "buy", "product", "price", "under", "about"
     );
     private static final Set<String> HEALTH_TERMS = Set.of(
