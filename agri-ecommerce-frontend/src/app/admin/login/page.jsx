@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  AUTH_SCOPES,
   clearAuthSession,
   getAdminAuthState,
   isAdminUser,
@@ -83,15 +84,14 @@ export default function AdminLoginPage() {
       }
 
       if (!isAdminUser(payload?.user)) {
-        clearAuthSession();
+        clearAuthSession(AUTH_SCOPES.admin);
         setError("Tài khoản này không có quyền quản trị hệ thống.");
         return;
       }
 
-      saveAuthSession(payload, { remember });
+      saveAuthSession(payload, { remember, scope: AUTH_SCOPES.admin });
 
-      router.push(getNextPath());
-      router.refresh();
+      router.replace(getNextPath());
     } catch (err) {
       setError(
         err?.message ||

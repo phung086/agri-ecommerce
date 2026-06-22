@@ -1,8 +1,13 @@
-const AUTH_KEYS = {
+const BASE_AUTH_KEYS = {
   accessToken: "accessToken",
   tokenType: "tokenType",
   currentUser: "currentUser",
   tokenExpiresAt: "tokenExpiresAt",
+};
+
+const AUTH_SCOPES = {
+  admin: "admin",
+  customer: "customer",
 };
 
 function getBrowserStorage(type) {
@@ -25,21 +30,66 @@ function safeParseJson(value) {
   }
 }
 
+function normalizeScope(scope = AUTH_SCOPES.customer) {
+  return scope === AUTH_SCOPES.admin ? AUTH_SCOPES.admin : AUTH_SCOPES.customer;
+}
+
+function getScopedAuthKeys(scope = AUTH_SCOPES.customer) {
+  const normalizedScope = normalizeScope(scope);
+
+  return Object.fromEntries(
+    Object.entries(BASE_AUTH_KEYS).map(([name, key]) => [
+      name,
+      `${normalizedScope}:${key}`,
+    ])
+  );
+}
+
+function getScopeFromPathname(pathname = "") {
+  return pathname.startsWith("/admin") ? AUTH_SCOPES.admin : AUTH_SCOPES.customer;
+}
+
+function getCurrentAuthScope() {
+  if (typeof window === "undefined") {
+    return AUTH_SCOPES.customer;
+  }
+
+  return getScopeFromPathname(window.location.pathname);
+}
+
+function removeKeys(storage, keys) {
+  if (!storage) {
+    return;
+  }
+
+  Object.values(keys).forEach((key) => storage.removeItem(key));
+}
+
+function clearLegacyAuthKeys() {
+  const localStorage = getBrowserStorage("local");
+  const sessionStorage = getBrowserStorage("session");
+
+  [localStorage, sessionStorage].forEach((storage) => {
+    removeKeys(storage, BASE_AUTH_KEYS);
+  });
+}
+
 export function isAdminUser(user) {
   return String(user?.roleName || "").toLowerCase() === "admin";
 }
 
-export function getAuthSession() {
+export function getAuthSession(scope = AUTH_SCOPES.customer) {
   const localStorage = getBrowserStorage("local");
   const sessionStorage = getBrowserStorage("session");
+  const authKeys = getScopedAuthKeys(scope);
 
   if (!localStorage || !sessionStorage) {
     return null;
   }
 
-  const storage = localStorage.getItem(AUTH_KEYS.accessToken)
+  const storage = localStorage.getItem(authKeys.accessToken)
     ? localStorage
-    : sessionStorage.getItem(AUTH_KEYS.accessToken)
+    : sessionStorage.getItem(authKeys.accessToken)
       ? sessionStorage
       : null;
 
@@ -48,15 +98,16 @@ export function getAuthSession() {
   }
 
   return {
-    accessToken: storage.getItem(AUTH_KEYS.accessToken),
-    tokenType: storage.getItem(AUTH_KEYS.tokenType) || "Bearer",
-    currentUser: safeParseJson(storage.getItem(AUTH_KEYS.currentUser)),
-    tokenExpiresAt: Number(storage.getItem(AUTH_KEYS.tokenExpiresAt) || 0),
+    accessToken: storage.getItem(authKeys.accessToken),
+    tokenType: storage.getItem(authKeys.tokenType) || "Bearer",
+    currentUser: safeParseJson(storage.getItem(authKeys.currentUser)),
+    tokenExpiresAt: Number(storage.getItem(authKeys.tokenExpiresAt) || 0),
+    scope: normalizeScope(scope),
   };
 }
 
-export function getAuthToken() {
-  return getAuthSession()?.accessToken || "";
+export function getAuthToken(scope = getCurrentAuthScope()) {
+  return getAuthSession(scope)?.accessToken || "";
 }
 
 export function isAuthSessionExpired(session = getAuthSession()) {
@@ -72,7 +123,7 @@ export function getAdminAuthState() {
     return { status: "checking", session: null };
   }
 
-  const session = getAuthSession();
+  const session = getAuthSession(AUTH_SCOPES.admin);
 
   if (!session?.accessToken) {
     return { status: "unauthenticated", session: null };
@@ -89,7 +140,18 @@ export function getAdminAuthState() {
   return { status: "authenticated", session };
 }
 
-export function saveAuthSession(payload, { remember = true } = {}) {
+export function isAuthSessionRemembered(scope = AUTH_SCOPES.customer) {
+  const localStorage = getBrowserStorage("local");
+  const authKeys = getScopedAuthKeys(scope);
+
+  return Boolean(localStorage?.getItem(authKeys.accessToken));
+}
+
+export function saveAuthSession(
+  payload,
+  { remember = true, scope = AUTH_SCOPES.customer } = {}
+) {
+  const authKeys = getScopedAuthKeys(scope);
   const storage = getBrowserStorage(remember ? "local" : "session");
   const staleStorage = getBrowserStorage(remember ? "session" : "local");
 
@@ -97,33 +159,40 @@ export function saveAuthSession(payload, { remember = true } = {}) {
     return;
   }
 
-  storage.setItem(AUTH_KEYS.accessToken, payload.accessToken);
-  storage.setItem(AUTH_KEYS.tokenType, payload.tokenType || "Bearer");
-  storage.setItem(AUTH_KEYS.currentUser, JSON.stringify(payload.user || null));
+  clearLegacyAuthKeys();
+
+  storage.setItem(authKeys.accessToken, payload.accessToken);
+  storage.setItem(authKeys.tokenType, payload.tokenType || "Bearer");
+  storage.setItem(authKeys.currentUser, JSON.stringify(payload.user || null));
 
   if (payload.expiresIn) {
     storage.setItem(
-      AUTH_KEYS.tokenExpiresAt,
+      authKeys.tokenExpiresAt,
       String(Date.now() + Number(payload.expiresIn))
     );
   } else {
-    storage.removeItem(AUTH_KEYS.tokenExpiresAt);
+    storage.removeItem(authKeys.tokenExpiresAt);
   }
 
-  if (staleStorage) {
-    Object.values(AUTH_KEYS).forEach((key) => staleStorage.removeItem(key));
-  }
+  removeKeys(staleStorage, authKeys);
 }
 
-export function clearAuthSession() {
+export function clearAuthSession(scope) {
   const localStorage = getBrowserStorage("local");
   const sessionStorage = getBrowserStorage("session");
+  const scopes = scope
+    ? [normalizeScope(typeof scope === "string" ? scope : scope.scope)]
+    : Object.values(AUTH_SCOPES);
 
   [localStorage, sessionStorage].forEach((storage) => {
-    if (!storage) {
-      return;
-    }
-
-    Object.values(AUTH_KEYS).forEach((key) => storage.removeItem(key));
+    scopes.forEach((currentScope) => {
+      removeKeys(storage, getScopedAuthKeys(currentScope));
+    });
   });
+
+  if (!scope) {
+    clearLegacyAuthKeys();
+  }
 }
+
+export { AUTH_SCOPES };

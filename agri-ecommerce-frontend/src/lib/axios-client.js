@@ -1,5 +1,5 @@
 import axios from "axios";
-import { clearAuthSession, getAuthToken } from "@/lib/auth-storage";
+import { AUTH_SCOPES, clearAuthSession, getAuthToken } from "@/lib/auth-storage";
 
 const axiosClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
@@ -24,7 +24,11 @@ axiosClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error?.response?.status === 401) {
-      clearAuthSession();
+      const isAdminRoute =
+        typeof window !== "undefined" &&
+        window.location.pathname.startsWith("/admin");
+
+      clearAuthSession(isAdminRoute ? AUTH_SCOPES.admin : AUTH_SCOPES.customer);
 
       if (
         typeof window !== "undefined" &&
