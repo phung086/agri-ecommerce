@@ -2,7 +2,7 @@ package com.agri.ecommerce.service.impl;
 
 import com.agri.ecommerce.dto.response.permission.PermissionResponse;
 import com.agri.ecommerce.entity.PermissionEntity;
-import com.agri.ecommerce.exception.ResourceNotFoundException;
+import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.PermissionMapper;
 import com.agri.ecommerce.repository.PermissionRepository;
 import com.agri.ecommerce.service.PermissionService;
