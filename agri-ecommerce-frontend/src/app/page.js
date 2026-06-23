@@ -320,9 +320,7 @@ function mapCartResponseToItems(cartResponse) {
   return (cartResponse?.items || []).map((item, index) => {
     const price = Number(item.productPrice || 0);
     const stock = Number(item.stock ?? 0);
-    const imageUrl = item.thumbnail
-      ? getAssetUrl(item.thumbnail)
-      : "/market-assets/fresh-market-hero.png";
+    const imageBackground = getImageBackground(item.thumbnail);
 
     return {
       id: String(item.productId),
@@ -333,7 +331,7 @@ function mapCartResponseToItems(cartResponse) {
       unit: item.unit || "sản phẩm",
       stock,
       quantity: Number(item.quantity || 0),
-      imageUrl,
+      imageBackground,
       imagePosition:
         ["76% 32%", "51% 82%", "82% 74%", "94% 74%", "64% 82%"][index % 5],
       status: item.status,
@@ -983,7 +981,7 @@ export default function Home() {
 
       if (!Number.isFinite(productId)) {
         setCartError("Sản phẩm mẫu chưa thể thêm vào giỏ tài khoản.");
-        setCartOpen(true);
+        window.alert("Sản phẩm mẫu chưa thể thêm vào giỏ tài khoản.");
         return;
       }
 
@@ -996,10 +994,10 @@ export default function Home() {
         });
         setCart(mapCartResponseToItems(response));
         setCartNotice("Đã thêm sản phẩm vào giỏ hàng của bạn.");
-        setCartOpen(true);
+        router.push("/cart");
       } catch (error) {
         setCartError(error?.message || "Không thể thêm sản phẩm vào giỏ.");
-        setCartOpen(true);
+        window.alert(error?.message || "Không thể thêm sản phẩm vào giỏ.");
       } finally {
         setCartUpdating(false);
       }
@@ -1021,7 +1019,7 @@ export default function Home() {
       return [...current, { ...product, quantity: 1 }];
     });
     setCartNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Đăng nhập để đặt hàng.");
-    setCartOpen(true);
+    router.push("/cart");
   }
 
   async function increaseCartItem(id) {
@@ -1206,10 +1204,11 @@ export default function Home() {
             </a>
           </nav>
 
-          <button
-            type="button"
-            onClick={() => setCartOpen(true)}
+          <Link
+            href="/cart"
             className="relative inline-flex size-10 shrink-0 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+            aria-label="Xem giỏ hàng"
+            title="Xem giỏ hàng"
           >
             <ShoppingBasket className="size-5" />
             {cartCount > 0 && (
@@ -1217,7 +1216,7 @@ export default function Home() {
                 {cartCount}
               </span>
             )}
-          </button>
+          </Link>
 
           <Link
             href="/profile"
