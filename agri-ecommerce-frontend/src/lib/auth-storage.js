@@ -8,6 +8,7 @@ const BASE_AUTH_KEYS = {
 const AUTH_SCOPES = {
   admin: "admin",
   customer: "customer",
+  delivery: "delivery",
 };
 
 function getBrowserStorage(type) {
@@ -31,7 +32,9 @@ function safeParseJson(value) {
 }
 
 function normalizeScope(scope = AUTH_SCOPES.customer) {
-  return scope === AUTH_SCOPES.admin ? AUTH_SCOPES.admin : AUTH_SCOPES.customer;
+  return Object.values(AUTH_SCOPES).includes(scope)
+    ? scope
+    : AUTH_SCOPES.customer;
 }
 
 function getScopedAuthKeys(scope = AUTH_SCOPES.customer) {
@@ -46,7 +49,15 @@ function getScopedAuthKeys(scope = AUTH_SCOPES.customer) {
 }
 
 function getScopeFromPathname(pathname = "") {
-  return pathname.startsWith("/admin") ? AUTH_SCOPES.admin : AUTH_SCOPES.customer;
+  if (pathname.startsWith("/admin")) {
+    return AUTH_SCOPES.admin;
+  }
+
+  if (pathname.startsWith("/delivery")) {
+    return AUTH_SCOPES.delivery;
+  }
+
+  return AUTH_SCOPES.customer;
 }
 
 function getCurrentAuthScope() {
@@ -76,6 +87,10 @@ function clearLegacyAuthKeys() {
 
 export function isAdminUser(user) {
   return String(user?.roleName || "").toLowerCase() === "admin";
+}
+
+export function isDeliveryStaffUser(user) {
+  return String(user?.roleName || "").toLowerCase() === "delivery_staff";
 }
 
 export function getAuthSession(scope = AUTH_SCOPES.customer) {

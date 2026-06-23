@@ -24,19 +24,33 @@ axiosClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error?.response?.status === 401) {
-      const isAdminRoute =
-        typeof window !== "undefined" &&
-        window.location.pathname.startsWith("/admin");
+      const pathname =
+        typeof window !== "undefined" ? window.location.pathname : "";
+      const isAdminRoute = pathname.startsWith("/admin");
+      const isDeliveryRoute = pathname.startsWith("/delivery");
+      const scope = isAdminRoute
+        ? AUTH_SCOPES.admin
+        : isDeliveryRoute
+          ? AUTH_SCOPES.delivery
+          : AUTH_SCOPES.customer;
 
-      clearAuthSession(isAdminRoute ? AUTH_SCOPES.admin : AUTH_SCOPES.customer);
+      clearAuthSession(scope);
 
       if (
         typeof window !== "undefined" &&
-        window.location.pathname.startsWith("/admin") &&
-        window.location.pathname !== "/admin/login"
+        isAdminRoute &&
+        pathname !== "/admin/login"
       ) {
-        const next = encodeURIComponent(window.location.pathname);
+        const next = encodeURIComponent(pathname);
         window.location.assign(`/admin/login?next=${next}`);
+      }
+
+      if (
+        typeof window !== "undefined" &&
+        isDeliveryRoute &&
+        pathname !== "/delivery"
+      ) {
+        window.location.assign("/delivery");
       }
     }
 

@@ -6,8 +6,10 @@ import {
   ImageIcon,
   ImagePlus,
   Layers,
+  Loader2,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
 } from "lucide-react";
@@ -28,8 +30,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  getApiErrorMessage,
+  getImageBackground,
+  slugify,
+} from "@/lib/admin-utils";
 import { adminService } from "@/services/admin.service";
-import { getApiErrorMessage, getImageBackground, slugify } from "@/lib/admin-utils";
 
 const blankCategoryForm = {
   name: "",
@@ -38,16 +44,26 @@ const blankCategoryForm = {
   image: "",
 };
 
+function buildCategoryPayload(form) {
+  return {
+    name: form.name.trim(),
+    slug: (form.slug || slugify(form.name)).trim(),
+    description: form.description.trim() || null,
+    image: form.image.trim() || null,
+  };
+}
+
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [form, setForm] = useState(blankCategoryForm);
-  const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
@@ -59,6 +75,7 @@ export default function AdminCategoriesPage() {
 
       try {
         const response = await adminService.getCategories();
+
         if (mounted) {
           setCategories(Array.isArray(response) ? response : []);
         }
@@ -96,8 +113,9 @@ export default function AdminCategoriesPage() {
 
   const categoryStats = useMemo(() => {
     const withImage = categories.filter((category) => category.image).length;
+    const withoutImage = categories.length - withImage;
 
-    return { withImage };
+    return { withImage, withoutImage };
   }, [categories]);
 
   function updateForm(field, value) {
@@ -130,9 +148,25 @@ export default function AdminCategoriesPage() {
     }
   }
 
+  async function refreshCategories() {
+    setLoading(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await adminService.getCategories();
+      setCategories(Array.isArray(response) ? response : []);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function openCreateDialog() {
     setEditingCategory(null);
     setForm(blankCategoryForm);
+    setError("");
     setDialogOpen(true);
   }
 
@@ -144,46 +178,37 @@ export default function AdminCategoriesPage() {
       description: category.description || "",
       image: category.image || "",
     });
+    setError("");
     setDialogOpen(true);
   }
 
-  function buildCategoryPayload() {
-    return {
-      name: form.name.trim(),
-      slug: form.slug || slugify(form.name),
-      description: form.description,
-      image: form.image.trim(),
-    };
-  }
-
-  async function handleSaveToApi(event) {
+  async function handleSave(event) {
     event.preventDefault();
     setSaving(true);
     setError("");
     setNotice("");
 
     try {
-      const payload = buildCategoryPayload();
+      const payload = buildCategoryPayload(form);
+      const savedCategory = editingCategory
+        ? await adminService.updateCategory(editingCategory.id, payload)
+        : await adminService.createCategory(payload);
 
-      if (editingCategory) {
-        const savedCategory = await adminService.updateCategory(
-          editingCategory.id,
-          payload
-        );
+      setCategories((current) => {
+        if (editingCategory) {
+          return current.map((category) =>
+            category.id === savedCategory.id ? savedCategory : category
+          );
+        }
 
-        setCategories((current) =>
-          current.map((category) =>
-            category.id === editingCategory.id ? savedCategory : category
-          )
-        );
-        setNotice("Đã cập nhật danh mục vào database.");
-      } else {
-        const savedCategory = await adminService.createCategory(payload);
-        setCategories((current) => [savedCategory, ...current]);
-        setNotice("Đã thêm danh mục vào database.");
-      }
-
+        return [savedCategory, ...current];
+      });
       setDialogOpen(false);
+      setNotice(
+        editingCategory
+          ? `Đã cập nhật danh mục "${savedCategory.name}".`
+          : `Đã tạo danh mục "${savedCategory.name}".`
+      );
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -191,27 +216,29 @@ export default function AdminCategoriesPage() {
     }
   }
 
-  async function handleRemoveFromApi(categoryId) {
-    const confirmed = window.confirm("Xóa danh mục khỏi database?");
+  async function handleRemove(category) {
+    const confirmed = window.confirm(
+      `Xóa danh mục "${category.name}" khỏi database?`
+    );
 
     if (!confirmed) {
       return;
     }
 
-    setSaving(true);
+    setDeletingId(String(category.id));
     setError("");
     setNotice("");
 
     try {
-      await adminService.deleteCategory(categoryId);
+      await adminService.deleteCategory(category.id);
       setCategories((current) =>
-        current.filter((category) => category.id !== categoryId)
+        current.filter((item) => item.id !== category.id)
       );
-      setNotice("Đã xóa danh mục khỏi database.");
+      setNotice(`Đã xóa danh mục "${category.name}".`);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
-      setSaving(false);
+      setDeletingId("");
     }
   }
 
@@ -219,9 +246,9 @@ export default function AdminCategoriesPage() {
     <div className="space-y-5">
       <AdminPageHeader
         title="Quản lí danh mục"
-        description="Tổ chức sản phẩm theo nhóm, cập nhật mô tả, slug và ảnh đại diện để khách hàng duyệt cửa hàng nhanh hơn."
+        description="Tạo, cập nhật và xóa danh mục bằng API quản trị thật. Dữ liệu lưu trực tiếp vào database."
         image="/admin-assets/categories.svg"
-        badges={["Database API", "CRUD thật"]}
+        badges={["Admin API", "CRUD thật", "Upload ảnh"]}
       >
         <Button type="button" onClick={openCreateDialog}>
           <Plus className="size-4" />
@@ -233,21 +260,21 @@ export default function AdminCategoriesPage() {
         <StatCard
           title="Tổng danh mục"
           value={categories.length}
-          description="Đọc từ database API"
+          description="Đọc từ admin API"
           icon={FolderTree}
           tone="green"
         />
         <StatCard
           title="Có ảnh đại diện"
           value={categoryStats.withImage}
-          description="Hiển thị trong bảng và form"
+          description="Có đường dẫn ảnh"
           icon={ImagePlus}
           tone="blue"
         />
         <StatCard
-          title="Dữ liệu database"
-          value={categories.length}
-          description="Lưu bền sau khi tải lại"
+          title="Chưa có ảnh"
+          value={categoryStats.withoutImage}
+          description="Có thể bổ sung trong form"
           icon={Layers}
           tone="amber"
         />
@@ -263,11 +290,27 @@ export default function AdminCategoriesPage() {
             className="pl-9"
           />
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={refreshCategories}
+          disabled={loading}
+          className="font-bold"
+        >
+          <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
+          Làm mới
+        </Button>
       </div>
 
-      {notice && (
-        <div className="rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground">
-          {notice}
+      {(notice || error) && (
+        <div
+          className={`rounded-[8px] border px-4 py-3 text-sm font-semibold ${
+            error
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {error || notice}
         </div>
       )}
 
@@ -275,7 +318,7 @@ export default function AdminCategoriesPage() {
         columns={["Danh mục", "Slug", "Mô tả", "Nguồn", "Thao tác"]}
         data={filteredCategories}
         loading={loading}
-        error={error}
+        error={loading || categories.length === 0 ? error : ""}
         emptyText="Không tìm thấy danh mục"
         renderRow={(category) => (
           <TableRow key={category.id}>
@@ -308,7 +351,7 @@ export default function AdminCategoriesPage() {
               {category.description || "Chưa có mô tả"}
             </TableCell>
             <TableCell className="px-4">
-              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
                 API
               </span>
             </TableCell>
@@ -330,10 +373,14 @@ export default function AdminCategoriesPage() {
                   size="icon-sm"
                   title="Xóa danh mục"
                   aria-label="Xóa danh mục"
-                  onClick={() => handleRemoveFromApi(category.id)}
-                  disabled={saving}
+                  disabled={deletingId === String(category.id)}
+                  onClick={() => handleRemove(category)}
                 >
-                  <Trash2 className="size-4" />
+                  {deletingId === String(category.id) ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )}
                 </Button>
               </div>
             </TableCell>
@@ -343,13 +390,13 @@ export default function AdminCategoriesPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-xl">
-          <form onSubmit={handleSaveToApi} className="space-y-4">
+          <form onSubmit={handleSave} className="space-y-4">
             <DialogHeader>
               <DialogTitle>
                 {editingCategory ? "Sửa danh mục" : "Thêm danh mục"}
               </DialogTitle>
               <DialogDescription>
-                Dữ liệu sẽ lưu vào database và xuất hiện trên trang khách hàng.
+                Thao tác này gọi API admin, lưu trực tiếp vào database và hỗ trợ tải ảnh lên server.
               </DialogDescription>
             </DialogHeader>
 
@@ -433,11 +480,14 @@ export default function AdminCategoriesPage() {
                 Hủy
               </Button>
               <Button type="submit" disabled={saving || uploadingImage}>
+                {saving && <Loader2 className="size-4 animate-spin" />}
                 {saving
                   ? "Đang lưu..."
                   : uploadingImage
                     ? "Đang tải ảnh..."
-                    : "Lưu vào database"}
+                    : editingCategory
+                      ? "Lưu thay đổi"
+                      : "Tạo danh mục"}
               </Button>
             </DialogFooter>
           </form>

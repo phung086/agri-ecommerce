@@ -6,9 +6,11 @@ import {
   Boxes,
   ImageIcon,
   ImagePlus,
+  Loader2,
   PackageCheck,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
 } from "lucide-react";
@@ -30,7 +32,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { adminService } from "@/services/admin.service";
 import {
   formatCurrency,
   formatNumber,
@@ -38,7 +39,20 @@ import {
   getImageBackground,
   slugify,
 } from "@/lib/admin-utils";
-import { productStatusOptions } from "@/lib/admin-mock-data";
+import { adminService } from "@/services/admin.service";
+
+const PRODUCT_FETCH_PARAMS = {
+  page: 0,
+  size: 100,
+  sort: "createdAt,desc",
+};
+
+const PRODUCT_STATUS_OPTIONS = [
+  { value: "all", label: "Tất cả trạng thái" },
+  { value: "in_stock", label: "Còn hàng" },
+  { value: "out_of_stock", label: "Hết hàng" },
+  { value: "hidden", label: "Đang ẩn" },
+];
 
 const blankProductForm = {
   name: "",
@@ -50,12 +64,53 @@ const blankProductForm = {
   status: "in_stock",
   unit: "",
   thumbnail: "",
+  images: "",
 };
+
+function readPageContent(response) {
+  if (Array.isArray(response?.content)) {
+    return response.content;
+  }
+
+  return Array.isArray(response) ? response : [];
+}
+
+function buildImages(value, thumbnail) {
+  const images = value
+    .split("\n")
+    .map((image) => image.trim())
+    .filter(Boolean);
+
+  if (thumbnail && !images.includes(thumbnail)) {
+    return [thumbnail, ...images];
+  }
+
+  return images;
+}
+
+function buildProductPayload(form) {
+  const thumbnail = form.thumbnail.trim() || null;
+
+  return {
+    name: form.name.trim(),
+    slug: (form.slug || slugify(form.name)).trim(),
+    categoryId: form.categoryId ? Number(form.categoryId) : null,
+    description: form.description.trim() || null,
+    price: Number(form.price || 0),
+    stock: Number(form.stock || 0),
+    status: form.status || "in_stock",
+    unit: form.unit.trim() || null,
+    thumbnail,
+    images: buildImages(form.images, thumbnail),
+  };
+}
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -64,7 +119,6 @@ export default function AdminProductsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState(blankProductForm);
-  const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
@@ -75,7 +129,7 @@ export default function AdminProductsPage() {
       setError("");
 
       const [productsResult, categoriesResult] = await Promise.allSettled([
-        adminService.getProducts({ page: 0, size: 100, sort: "createdAt,desc" }),
+        adminService.getProducts(PRODUCT_FETCH_PARAMS),
         adminService.getCategories(),
       ]);
 
@@ -84,7 +138,7 @@ export default function AdminProductsPage() {
       }
 
       if (productsResult.status === "fulfilled") {
-        setProducts(productsResult.value?.content || []);
+        setProducts(readPageContent(productsResult.value));
       } else {
         setProducts([]);
         setError(getApiErrorMessage(productsResult.reason));
@@ -128,15 +182,19 @@ export default function AdminProductsPage() {
   }, [products, searchTerm, categoryFilter, statusFilter]);
 
   const productStats = useMemo(() => {
-    const lowStock = products.filter((product) => Number(product.stock || 0) <= 20)
-      .length;
+    const visibleProducts = products.filter(
+      (product) => product.status !== "hidden"
+    );
+    const lowStock = products.filter(
+      (product) => Number(product.stock || 0) <= 20
+    ).length;
     const withImage = products.filter((product) => product.thumbnail).length;
     const totalStock = products.reduce(
       (total, product) => total + Number(product.stock || 0),
       0
     );
 
-    return { lowStock, withImage, totalStock };
+    return { visibleProducts, lowStock, withImage, totalStock };
   }, [products]);
 
   function updateForm(field, value) {
@@ -167,12 +225,33 @@ export default function AdminProductsPage() {
     }
   }
 
+  async function refreshProducts() {
+    setLoading(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const [productsResponse, categoriesResponse] = await Promise.all([
+        adminService.getProducts(PRODUCT_FETCH_PARAMS),
+        adminService.getCategories(),
+      ]);
+
+      setProducts(readPageContent(productsResponse));
+      setCategories(Array.isArray(categoriesResponse) ? categoriesResponse : []);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function openCreateDialog() {
     setEditingProduct(null);
     setForm({
       ...blankProductForm,
       categoryId: categories[0]?.id ? String(categories[0].id) : "",
     });
+    setError("");
     setDialogOpen(true);
   }
 
@@ -188,55 +267,39 @@ export default function AdminProductsPage() {
       status: product.status || "in_stock",
       unit: product.unit || "",
       thumbnail: product.thumbnail || "",
+      images: (product.images || []).join("\n"),
     });
+    setError("");
     setDialogOpen(true);
   }
 
-  function buildProductPayload() {
-    const thumbnail = form.thumbnail.trim();
-
-    return {
-      name: form.name.trim(),
-      slug: form.slug || slugify(form.name),
-      categoryId: Number(form.categoryId),
-      description: form.description,
-      price: Number(form.price || 0),
-      stock: Number(form.stock || 0),
-      status: form.status,
-      unit: form.unit,
-      thumbnail,
-      images: thumbnail ? [thumbnail] : [],
-    };
-  }
-
-  async function handleSaveToApi(event) {
+  async function handleSave(event) {
     event.preventDefault();
     setSaving(true);
     setError("");
     setNotice("");
 
     try {
-      const payload = buildProductPayload();
+      const payload = buildProductPayload(form);
+      const savedProduct = editingProduct
+        ? await adminService.updateProduct(editingProduct.id, payload)
+        : await adminService.createProduct(payload);
 
-      if (editingProduct) {
-        const savedProduct = await adminService.updateProduct(
-          editingProduct.id,
-          payload
-        );
+      setProducts((current) => {
+        if (editingProduct) {
+          return current.map((product) =>
+            product.id === savedProduct.id ? savedProduct : product
+          );
+        }
 
-        setProducts((current) =>
-          current.map((product) =>
-            product.id === editingProduct.id ? savedProduct : product
-          )
-        );
-        setNotice("Đã cập nhật sản phẩm vào database.");
-      } else {
-        const savedProduct = await adminService.createProduct(payload);
-        setProducts((current) => [savedProduct, ...current]);
-        setNotice("Đã thêm sản phẩm vào database.");
-      }
-
+        return [savedProduct, ...current];
+      });
       setDialogOpen(false);
+      setNotice(
+        editingProduct
+          ? `Đã cập nhật sản phẩm "${savedProduct.name}".`
+          : `Đã tạo sản phẩm "${savedProduct.name}".`
+      );
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -244,27 +307,31 @@ export default function AdminProductsPage() {
     }
   }
 
-  async function handleRemoveFromApi(productId) {
-    const confirmed = window.confirm("Xóa sản phẩm khỏi database?");
+  async function handleRemove(product) {
+    const confirmed = window.confirm(
+      `Ẩn sản phẩm "${product.name}" khỏi public API?`
+    );
 
     if (!confirmed) {
       return;
     }
 
-    setSaving(true);
+    setDeletingId(String(product.id));
     setError("");
     setNotice("");
 
     try {
-      await adminService.deleteProduct(productId);
+      const updatedProduct = await adminService.deleteProduct(product.id);
       setProducts((current) =>
-        current.filter((product) => product.id !== productId)
+        current.map((item) =>
+          item.id === updatedProduct.id ? updatedProduct : item
+        )
       );
-      setNotice("Đã xóa sản phẩm khỏi database.");
+      setNotice(`Đã ẩn sản phẩm "${updatedProduct.name}".`);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
-      setSaving(false);
+      setDeletingId("");
     }
   }
 
@@ -272,9 +339,9 @@ export default function AdminProductsPage() {
     <div className="space-y-5">
       <AdminPageHeader
         title="Quản lí sản phẩm"
-        description="Theo dõi danh sách sản phẩm, giá bán, tồn kho, trạng thái bán và hình ảnh đại diện cho từng mặt hàng."
+        description="Tạo, cập nhật và ẩn sản phẩm bằng API quản trị thật. Các thay đổi được lưu trực tiếp vào database."
         image="/admin-assets/products.svg"
-        badges={["Database API", "CRUD thật", "Đường dẫn ảnh"]}
+        badges={["Admin API", "CRUD thật", "Upload ảnh"]}
       >
         <Button type="button" onClick={openCreateDialog}>
           <Plus className="size-4" />
@@ -284,16 +351,16 @@ export default function AdminProductsPage() {
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title="Tổng sản phẩm"
-          value={formatNumber(products.length)}
-          description="Đang hiển thị trong admin"
+          title="Sản phẩm đang bán"
+          value={formatNumber(productStats.visibleProducts.length)}
+          description="Không tính sản phẩm đã ẩn"
           icon={PackageCheck}
           tone="green"
         />
         <StatCard
           title="Tổng tồn kho"
           value={formatNumber(productStats.totalStock)}
-          description="Cộng tồn kho từ danh sách"
+          description="Cộng tồn kho từ admin API"
           icon={Boxes}
           tone="blue"
         />
@@ -307,7 +374,7 @@ export default function AdminProductsPage() {
         <StatCard
           title="Có ảnh"
           value={formatNumber(productStats.withImage)}
-          description="Ảnh API hoặc ảnh chọn từ máy"
+          description="Có thumbnail lưu trong DB"
           icon={ImagePlus}
           tone="rose"
         />
@@ -342,25 +409,49 @@ export default function AdminProductsPage() {
           onChange={(event) => setStatusFilter(event.target.value)}
           className="h-8 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
         >
-          {productStatusOptions.map((option) => (
+          {PRODUCT_STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={refreshProducts}
+          disabled={loading}
+          className="font-bold"
+        >
+          <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
+          Làm mới
+        </Button>
       </div>
 
-      {notice && (
-        <div className="rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground">
-          {notice}
+      {(notice || error) && (
+        <div
+          className={`rounded-[8px] border px-4 py-3 text-sm font-semibold ${
+            error
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {error || notice}
         </div>
       )}
 
       <DataTable
-        columns={["Sản phẩm", "Danh mục", "Giá", "Kho", "Trạng thái", "Thao tác"]}
+        columns={[
+          "Sản phẩm",
+          "Danh mục",
+          "Giá",
+          "Kho",
+          "Trạng thái",
+          "Thao tác",
+        ]}
         data={filteredProducts}
         loading={loading}
-        error={error}
+        error={loading || products.length === 0 ? error : ""}
         emptyText="Không tìm thấy sản phẩm"
         renderRow={(product) => (
           <TableRow key={product.id}>
@@ -388,7 +479,9 @@ export default function AdminProductsPage() {
                 </div>
               </div>
             </TableCell>
-            <TableCell className="px-4">{product.categoryName || "N/A"}</TableCell>
+            <TableCell className="px-4">
+              {product.categoryName || "N/A"}
+            </TableCell>
             <TableCell className="px-4 font-medium">
               {formatCurrency(product.price)}
             </TableCell>
@@ -396,9 +489,7 @@ export default function AdminProductsPage() {
               {formatNumber(product.stock)} {product.unit || ""}
             </TableCell>
             <TableCell className="px-4">
-              <div className="flex items-center gap-2">
-                <StatusBadge status={product.status} />
-              </div>
+              <StatusBadge status={product.status} />
             </TableCell>
             <TableCell className="px-4">
               <div className="flex items-center gap-2">
@@ -416,12 +507,16 @@ export default function AdminProductsPage() {
                   type="button"
                   variant="destructive"
                   size="icon-sm"
-                  title="Xóa sản phẩm"
-                  aria-label="Xóa sản phẩm"
-                  onClick={() => handleRemoveFromApi(product.id)}
-                  disabled={saving}
+                  title="Ẩn sản phẩm"
+                  aria-label="Ẩn sản phẩm"
+                  disabled={deletingId === String(product.id)}
+                  onClick={() => handleRemove(product)}
                 >
-                  <Trash2 className="size-4" />
+                  {deletingId === String(product.id) ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )}
                 </Button>
               </div>
             </TableCell>
@@ -431,13 +526,13 @@ export default function AdminProductsPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
-          <form onSubmit={handleSaveToApi} className="space-y-4">
+          <form onSubmit={handleSave} className="space-y-4">
             <DialogHeader>
               <DialogTitle>
                 {editingProduct ? "Sửa sản phẩm" : "Thêm sản phẩm"}
               </DialogTitle>
               <DialogDescription>
-                Dữ liệu sẽ lưu vào database và xuất hiện trên trang khách hàng khi sản phẩm còn hàng.
+                Thao tác này gọi API admin, lưu trực tiếp vào database và hỗ trợ tải ảnh lên server.
               </DialogDescription>
             </DialogHeader>
 
@@ -490,13 +585,13 @@ export default function AdminProductsPage() {
                   onChange={(event) => updateForm("status", event.target.value)}
                   className="h-8 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
                 >
-                  {productStatusOptions
-                    .filter((option) => option.value !== "all")
-                    .map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
+                  {PRODUCT_STATUS_OPTIONS.filter(
+                    (option) => option.value !== "all"
+                  ).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -505,7 +600,7 @@ export default function AdminProductsPage() {
                 <Input
                   id="product-price"
                   type="number"
-                  min="0"
+                  min="1"
                   value={form.price}
                   onChange={(event) => updateForm("price", event.target.value)}
                   required
@@ -544,14 +639,6 @@ export default function AdminProductsPage() {
                   }
                   placeholder="uploads/products/example.jpg"
                 />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
-              <div className="space-y-2">
-                <Label htmlFor="product-thumbnail-file">
-                  Chọn ảnh từ máy tính
-                </Label>
                 <Input
                   id="product-thumbnail-file"
                   type="file"
@@ -569,6 +656,21 @@ export default function AdminProductsPage() {
                     Đang tải ảnh lên server...
                   </p>
                 )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
+              <div className="space-y-2">
+                <Label htmlFor="product-images">
+                  Ảnh bổ sung, mỗi dòng một đường dẫn
+                </Label>
+                <Textarea
+                  id="product-images"
+                  value={form.images}
+                  onChange={(event) => updateForm("images", event.target.value)}
+                  rows={4}
+                  placeholder="uploads/products/example-1.jpg"
+                />
               </div>
               <div
                 className="h-32 rounded-lg border bg-muted bg-cover bg-center"
@@ -604,11 +706,14 @@ export default function AdminProductsPage() {
                 Hủy
               </Button>
               <Button type="submit" disabled={saving || uploadingImage}>
+                {saving && <Loader2 className="size-4 animate-spin" />}
                 {saving
                   ? "Đang lưu..."
                   : uploadingImage
                     ? "Đang tải ảnh..."
-                    : "Lưu vào database"}
+                    : editingProduct
+                      ? "Lưu thay đổi"
+                      : "Tạo sản phẩm"}
               </Button>
             </DialogFooter>
           </form>

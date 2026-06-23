@@ -30,13 +30,16 @@ export const adminService = {
     return unwrapApiData(response);
   },
 
-  updateCategory: async (id, payload) => {
-    const response = await axiosClient.put(`/admin/categories/${id}`, payload);
+  updateCategory: async (categoryId, payload) => {
+    const response = await axiosClient.put(
+      `/admin/categories/${categoryId}`,
+      payload
+    );
     return unwrapApiData(response);
   },
 
-  deleteCategory: async (id) => {
-    const response = await axiosClient.delete(`/admin/categories/${id}`);
+  deleteCategory: async (categoryId) => {
+    const response = await axiosClient.delete(`/admin/categories/${categoryId}`);
     return unwrapApiData(response);
   },
 
@@ -64,13 +67,133 @@ export const adminService = {
     return unwrapApiData(response);
   },
 
-  updateProduct: async (id, payload) => {
-    const response = await axiosClient.put(`/admin/products/${id}`, payload);
+  updateProduct: async (productId, payload) => {
+    const response = await axiosClient.put(
+      `/admin/products/${productId}`,
+      payload
+    );
     return unwrapApiData(response);
   },
 
-  deleteProduct: async (id) => {
-    const response = await axiosClient.delete(`/admin/products/${id}`);
+  updateProductStatus: async (productId, payload) => {
+    const response = await axiosClient.patch(
+      `/admin/products/${productId}/status`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  updateProductStock: async (productId, payload) => {
+    const response = await axiosClient.patch(
+      `/admin/products/${productId}/stock`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  deleteProduct: async (productId) => {
+    const response = await axiosClient.delete(`/admin/products/${productId}`);
+    return unwrapApiData(response);
+  },
+
+  getOrders: async (params = {}) => {
+    const response = await axiosClient.get("/admin/orders", { params });
+    return unwrapApiData(response);
+  },
+
+  getOrder: async (orderId) => {
+    const response = await axiosClient.get(`/admin/orders/${orderId}`);
+    return unwrapApiData(response);
+  },
+
+  confirmOrder: async (orderId, payload = {}) => {
+    const response = await axiosClient.patch(
+      `/admin/orders/${orderId}/confirm`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  cancelOrder: async (orderId, payload = {}) => {
+    const response = await axiosClient.patch(
+      `/admin/orders/${orderId}/cancel`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  updateOrderStatus: async (orderId, payload) => {
+    const response = await axiosClient.patch(
+      `/admin/orders/${orderId}/status`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  getActiveDeliveryStaff: async () => {
+    const response = await axiosClient.get("/admin/orders/delivery-staff");
+    return unwrapApiData(response);
+  },
+
+  assignDeliveryStaff: async (orderId, payload) => {
+    const response = await axiosClient.patch(
+      `/admin/orders/${orderId}/delivery-staff`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  getCoupons: async (params = {}) => {
+    const response = await axiosClient.get("/admin/coupons", { params });
+    return unwrapApiData(response);
+  },
+
+  createCoupon: async (payload) => {
+    const response = await axiosClient.post("/admin/coupons", payload);
+    return unwrapApiData(response);
+  },
+
+  updateCoupon: async (couponId, payload) => {
+    const response = await axiosClient.put(
+      `/admin/coupons/${couponId}`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  updateCouponStatus: async (couponId, payload) => {
+    const response = await axiosClient.patch(
+      `/admin/coupons/${couponId}/status`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  deleteCoupon: async (couponId) => {
+    const response = await axiosClient.delete(`/admin/coupons/${couponId}`);
+    return unwrapApiData(response);
+  },
+
+  getContacts: async (params = {}) => {
+    const response = await axiosClient.get("/admin/contacts", { params });
+    return unwrapApiData(response);
+  },
+
+  getContact: async (contactId) => {
+    const response = await axiosClient.get(`/admin/contacts/${contactId}`);
+    return unwrapApiData(response);
+  },
+
+  updateContactReplied: async (contactId, payload) => {
+    const response = await axiosClient.patch(
+      `/admin/contacts/${contactId}/replied`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  deleteContact: async (contactId) => {
+    const response = await axiosClient.delete(`/admin/contacts/${contactId}`);
     return unwrapApiData(response);
   },
 };
