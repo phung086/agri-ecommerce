@@ -22,4 +22,10 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
 
     @EntityGraph(attributePaths = "category")
     List<ProductEntity> findByStatus(String status, Pageable pageable);
+
+    boolean existsBySlug(String slug);
+
+    boolean existsBySlugAndIdNot(String slug, Long id);
+
+    boolean existsByCategoryId(Long categoryId);
 }

@@ -11,4 +11,12 @@ public interface CategoryRepository extends JpaRepository<CategoryEntity, Long> 
     List<CategoryEntity> findAllByOrderByIdAsc();
 
     Optional<CategoryEntity> findBySlug(String slug);
+
+    boolean existsByName(String name);
+
+    boolean existsBySlug(String slug);
+
+    boolean existsByNameAndIdNot(String name, Long id);
+
+    boolean existsBySlugAndIdNot(String slug, Long id);
 }

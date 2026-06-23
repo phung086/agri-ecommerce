@@ -51,7 +51,8 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 "/api/health",
-                                "/api/health/database"
+                                "/api/health/database",
+                                "/uploads/**"
                         ).permitAll()
 
                         .requestMatchers(

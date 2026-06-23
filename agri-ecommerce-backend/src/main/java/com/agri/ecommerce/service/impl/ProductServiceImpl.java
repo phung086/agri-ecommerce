@@ -1,17 +1,21 @@
 package com.agri.ecommerce.service.impl;
 
+import com.agri.ecommerce.dto.request.product.UpsertProductRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.product.ProductResponse;
+import com.agri.ecommerce.entity.CategoryEntity;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.entity.ProductImageEntity;
 import com.agri.ecommerce.exception.BadRequestException;
 import com.agri.ecommerce.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.ProductMapper;
+import com.agri.ecommerce.repository.CategoryRepository;
 import com.agri.ecommerce.repository.ProductImageRepository;
 import com.agri.ecommerce.repository.ProductRepository;
 import com.agri.ecommerce.service.ProductService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -28,11 +32,14 @@ public class ProductServiceImpl implements ProductService {
     private static final String DEFAULT_STATUS = "in_stock";
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_FEATURED_LIMIT = 50;
+    private static final Set<String> ALLOWED_STATUSES = Set.of("in_stock", "out_of_stock", "hidden");
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "id", "name", "slug", "price", "stock", "status", "unit", "createdAt", "updatedAt"
     );
 
     private final ProductRepository productRepository;
+
+    private final CategoryRepository categoryRepository;
 
     private final ProductImageRepository productImageRepository;
 
@@ -59,7 +66,7 @@ public class ProductServiceImpl implements ProductService {
                 cleanBlank(categorySlug),
                 minPrice,
                 maxPrice,
-                cleanBlank(status) == null ? DEFAULT_STATUS : cleanBlank(status)
+                normalizeStatusFilter(status)
         );
 
         Page<ProductEntity> productPage = productRepository.findAll(specification, pageable);
@@ -102,12 +109,81 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    public ProductResponse getProductById(Long id) {
+        ProductEntity product = findProductById(id);
+        List<ProductImageEntity> images = productImageRepository.findAllByProductId(product.getId());
+
+        return productMapper.toProductResponse(product, images);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ProductResponse getProductBySlug(String slug) {
         ProductEntity product = productRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm với slug: " + slug));
         List<ProductImageEntity> images = productImageRepository.findAllByProductId(product.getId());
 
         return productMapper.toProductResponse(product, images);
+    }
+
+    @Override
+    @Transactional
+    public ProductResponse createProduct(UpsertProductRequest request) {
+        String slug = cleanRequired(request.getSlug());
+        validateUniqueSlug(slug, null);
+
+        CategoryEntity category = findCategoryById(request.getCategoryId());
+        ProductEntity product = ProductEntity.builder()
+                .name(cleanRequired(request.getName()))
+                .slug(slug)
+                .category(category)
+                .description(cleanBlank(request.getDescription()))
+                .price(request.getPrice())
+                .stock(request.getStock())
+                .status(validateProductStatus(request.getStatus()))
+                .unit(cleanBlank(request.getUnit()))
+                .build();
+
+        ProductEntity savedProduct = productRepository.save(product);
+        List<ProductImageEntity> savedImages = syncProductImages(savedProduct, collectImagePaths(request));
+
+        return productMapper.toProductResponse(savedProduct, savedImages);
+    }
+
+    @Override
+    @Transactional
+    public ProductResponse updateProduct(Long id, UpsertProductRequest request) {
+        ProductEntity product = findProductById(id);
+        String slug = cleanRequired(request.getSlug());
+        validateUniqueSlug(slug, id);
+
+        product.setName(cleanRequired(request.getName()));
+        product.setSlug(slug);
+        product.setCategory(findCategoryById(request.getCategoryId()));
+        product.setDescription(cleanBlank(request.getDescription()));
+        product.setPrice(request.getPrice());
+        product.setStock(request.getStock());
+        product.setStatus(validateProductStatus(request.getStatus()));
+        product.setUnit(cleanBlank(request.getUnit()));
+
+        ProductEntity savedProduct = productRepository.save(product);
+        List<ProductImageEntity> savedImages = syncProductImages(savedProduct, collectImagePaths(request));
+
+        return productMapper.toProductResponse(savedProduct, savedImages);
+    }
+
+    @Override
+    @Transactional
+    public void deleteProduct(Long id) {
+        ProductEntity product = findProductById(id);
+
+        try {
+            productImageRepository.deleteByProductId(id);
+            productRepository.delete(product);
+            productRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw new BadRequestException("Khong the xoa san pham dang duoc su dung trong don hang hoac du lieu lien quan");
+        }
     }
 
     private Specification<ProductEntity> buildSpecification(
@@ -159,7 +235,8 @@ public class ProductServiceImpl implements ProductService {
     }
 
     private Specification<ProductEntity> hasStatus(String status) {
-        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(root.get("status"), status);
+        return (root, query, criteriaBuilder) ->
+                status == null ? criteriaBuilder.conjunction() : criteriaBuilder.equal(root.get("status"), status);
     }
 
     private Map<Long, List<ProductImageEntity>> getImagesByProductId(List<ProductEntity> products) {
@@ -228,6 +305,88 @@ public class ProductServiceImpl implements ProductService {
         if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
             throw new BadRequestException("minPrice không được lớn hơn maxPrice");
         }
+    }
+
+    private ProductEntity findProductById(Long id) {
+        return productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay san pham voi id: " + id));
+    }
+
+    private CategoryEntity findCategoryById(Long id) {
+        return categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay danh muc voi id: " + id));
+    }
+
+    private void validateUniqueSlug(String slug, Long currentId) {
+        boolean exists = currentId == null
+                ? productRepository.existsBySlug(slug)
+                : productRepository.existsBySlugAndIdNot(slug, currentId);
+
+        if (exists) {
+            throw new BadRequestException("Slug san pham da duoc su dung");
+        }
+    }
+
+    private String normalizeStatusFilter(String status) {
+        String cleanStatus = cleanBlank(status);
+        if (cleanStatus == null || "all".equalsIgnoreCase(cleanStatus)) {
+            return null;
+        }
+
+        return validateProductStatus(cleanStatus);
+    }
+
+    private String validateProductStatus(String status) {
+        String cleanStatus = cleanRequired(status).toLowerCase(Locale.ROOT);
+        if (!ALLOWED_STATUSES.contains(cleanStatus)) {
+            throw new BadRequestException("Trang thai san pham khong hop le. Gia tri hop le: in_stock, out_of_stock, hidden");
+        }
+
+        return cleanStatus;
+    }
+
+    private List<ProductImageEntity> syncProductImages(ProductEntity product, List<String> imagePaths) {
+        productImageRepository.deleteByProductId(product.getId());
+
+        if (imagePaths.isEmpty()) {
+            return List.of();
+        }
+
+        List<ProductImageEntity> images = imagePaths.stream()
+                .map(path -> ProductImageEntity.builder()
+                        .product(product)
+                        .image(path)
+                        .build())
+                .toList();
+
+        return productImageRepository.saveAll(images);
+    }
+
+    private List<String> collectImagePaths(UpsertProductRequest request) {
+        Set<String> imagePaths = new LinkedHashSet<>();
+        addImagePath(imagePaths, request.getThumbnail());
+
+        if (request.getImages() != null) {
+            request.getImages().forEach(path -> addImagePath(imagePaths, path));
+        }
+
+        return new ArrayList<>(imagePaths);
+    }
+
+    private void addImagePath(Set<String> imagePaths, String imagePath) {
+        String cleanPath = cleanBlank(imagePath);
+        if (cleanPath != null) {
+            imagePaths.add(cleanPath);
+        }
+    }
+
+    private String cleanRequired(String value) {
+        String cleanValue = cleanBlank(value);
+        if (cleanValue == null) {
+            throw new BadRequestException("Du lieu bat buoc khong duoc de trong");
+        }
+
+        return cleanValue;
     }
 
     private String cleanBlank(String value) {
