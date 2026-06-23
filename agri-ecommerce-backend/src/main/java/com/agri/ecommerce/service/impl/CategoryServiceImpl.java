@@ -1,10 +1,11 @@
 package com.agri.ecommerce.service.impl;
 
-import com.agri.ecommerce.dto.request.category.UpsertCategoryRequest;
+import com.agri.ecommerce.dto.request.category.CategoryCreateRequest;
+import com.agri.ecommerce.dto.request.category.CategoryUpdateRequest;
 import com.agri.ecommerce.dto.response.category.CategoryResponse;
 import com.agri.ecommerce.entity.CategoryEntity;
-import com.agri.ecommerce.exception.BadRequestException;
-import com.agri.ecommerce.exception.ResourceNotFoundException;
+import com.agri.ecommerce.common.exception.BadRequestException;
+import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.CategoryMapper;
 import com.agri.ecommerce.repository.CategoryRepository;
 import com.agri.ecommerce.repository.ProductRepository;
@@ -21,9 +22,9 @@ public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryRepository categoryRepository;
 
-    private final ProductRepository productRepository;
-
     private final CategoryMapper categoryMapper;
+
+    private final ProductRepository productRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -36,13 +37,6 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     @Transactional(readOnly = true)
-    public CategoryResponse getCategoryById(Long id) {
-        CategoryEntity category = findCategoryById(id);
-        return categoryMapper.toCategoryResponse(category);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public CategoryResponse getCategoryBySlug(String slug) {
         CategoryEntity category = categoryRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy danh mục với slug: " + slug));
@@ -51,13 +45,20 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    @Transactional
-    public CategoryResponse createCategory(UpsertCategoryRequest request) {
-        String name = cleanRequired(request.getName());
-        String slug = cleanRequired(request.getSlug());
+    @Transactional(readOnly = true)
+    public CategoryResponse getCategoryById(Long id) {
+        CategoryEntity category = findCategoryById(id);
+        return categoryMapper.toCategoryResponse(category);
+    }
 
-        validateUniqueName(name, null);
-        validateUniqueSlug(slug, null);
+    @Override
+    @Transactional
+    public CategoryResponse createCategory(CategoryCreateRequest request) {
+        String name = cleanBlank(request.getName());
+        String slug = cleanBlank(request.getSlug());
+
+        validateCategoryNameUnique(name, null);
+        validateCategorySlugUnique(slug, null);
 
         CategoryEntity category = CategoryEntity.builder()
                 .name(name)
@@ -67,19 +68,18 @@ public class CategoryServiceImpl implements CategoryService {
                 .build();
 
         CategoryEntity savedCategory = categoryRepository.save(category);
-
         return categoryMapper.toCategoryResponse(savedCategory);
     }
 
     @Override
     @Transactional
-    public CategoryResponse updateCategory(Long id, UpsertCategoryRequest request) {
+    public CategoryResponse updateCategory(Long id, CategoryUpdateRequest request) {
         CategoryEntity category = findCategoryById(id);
-        String name = cleanRequired(request.getName());
-        String slug = cleanRequired(request.getSlug());
+        String name = cleanBlank(request.getName());
+        String slug = cleanBlank(request.getSlug());
 
-        validateUniqueName(name, id);
-        validateUniqueSlug(slug, id);
+        validateCategoryNameUnique(name, id);
+        validateCategorySlugUnique(slug, id);
 
         category.setName(name);
         category.setSlug(slug);
@@ -87,7 +87,6 @@ public class CategoryServiceImpl implements CategoryService {
         category.setImage(cleanBlank(request.getImage()));
 
         CategoryEntity savedCategory = categoryRepository.save(category);
-
         return categoryMapper.toCategoryResponse(savedCategory);
     }
 
@@ -96,8 +95,8 @@ public class CategoryServiceImpl implements CategoryService {
     public void deleteCategory(Long id) {
         CategoryEntity category = findCategoryById(id);
 
-        if (productRepository.existsByCategoryId(id)) {
-            throw new BadRequestException("Khong the xoa danh muc dang co san pham");
+        if (productRepository.existsByCategory_Id(id)) {
+            throw new BadRequestException("Không thể xóa danh mục đang có sản phẩm");
         }
 
         categoryRepository.delete(category);
@@ -105,36 +104,27 @@ public class CategoryServiceImpl implements CategoryService {
 
     private CategoryEntity findCategoryById(Long id) {
         return categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay danh muc voi id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy danh mục với id: " + id));
     }
 
-    private void validateUniqueName(String name, Long currentId) {
-        boolean exists = currentId == null
+    private void validateCategoryNameUnique(String name, Long currentId) {
+        boolean duplicated = currentId == null
                 ? categoryRepository.existsByName(name)
                 : categoryRepository.existsByNameAndIdNot(name, currentId);
 
-        if (exists) {
-            throw new BadRequestException("Ten danh muc da duoc su dung");
+        if (duplicated) {
+            throw new BadRequestException("Tên danh mục đã được sử dụng");
         }
     }
 
-    private void validateUniqueSlug(String slug, Long currentId) {
-        boolean exists = currentId == null
+    private void validateCategorySlugUnique(String slug, Long currentId) {
+        boolean duplicated = currentId == null
                 ? categoryRepository.existsBySlug(slug)
                 : categoryRepository.existsBySlugAndIdNot(slug, currentId);
 
-        if (exists) {
-            throw new BadRequestException("Slug danh muc da duoc su dung");
+        if (duplicated) {
+            throw new BadRequestException("Slug danh mục đã được sử dụng");
         }
-    }
-
-    private String cleanRequired(String value) {
-        String cleanValue = cleanBlank(value);
-        if (cleanValue == null) {
-            throw new BadRequestException("Du lieu bat buoc khong duoc de trong");
-        }
-
-        return cleanValue;
     }
 
     private String cleanBlank(String value) {

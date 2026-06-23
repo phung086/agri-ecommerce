@@ -2,7 +2,7 @@ package com.agri.ecommerce.service.impl;
 
 import com.agri.ecommerce.dto.response.role.RoleResponse;
 import com.agri.ecommerce.entity.RoleEntity;
-import com.agri.ecommerce.exception.ResourceNotFoundException;
+import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.RoleMapper;
 import com.agri.ecommerce.repository.RoleRepository;
 import com.agri.ecommerce.service.RoleService;

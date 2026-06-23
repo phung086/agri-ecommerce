@@ -6,9 +6,9 @@ spring:
     name: agri-ecommerce-backend
 
   datasource:
-    url: jdbc:mysql://localhost:3306/veggie_main?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: root
-    password: 080604
+    url: ${DB_URL:jdbc:mysql://localhost:3306/veggie_main?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -23,10 +23,33 @@ spring:
       max-file-size: 5MB
       max-request-size: 6MB
 
+  messages:
+    basename: messages/messages
+    encoding: UTF-8
+
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
 app:
+  auth:
+    password-reset:
+      expiration-minutes: ${PASSWORD_RESET_EXPIRATION_MINUTES:30}
+      expose-token: ${PASSWORD_RESET_EXPOSE_TOKEN:true}
   jwt:
     secret: ${JWT_SECRET:AgriEcommerceJwtSecretKeyForLocalDevelopmentMustBeAtLeast32Chars2026}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  public:
+    base-url: ${APP_PUBLIC_BASE_URL:http://localhost:3000}
+  security:
+    login:
+      max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
+      lock-minutes: ${LOGIN_LOCK_MINUTES:15}
+      window-minutes: ${LOGIN_WINDOW_MINUTES:15}
+  seo:
+    sitemap:
+      max-products: ${SITEMAP_MAX_PRODUCTS:10000}

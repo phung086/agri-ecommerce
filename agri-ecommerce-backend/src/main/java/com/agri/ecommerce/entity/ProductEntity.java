@@ -51,14 +51,14 @@ public class ProductEntity {
     private LocalDateTime updatedAt;
 
     @PrePersist
-    void onCreate() {
+    void prePersist() {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
     }
 
     @PreUpdate
-    void onUpdate() {
+    void preUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
 }

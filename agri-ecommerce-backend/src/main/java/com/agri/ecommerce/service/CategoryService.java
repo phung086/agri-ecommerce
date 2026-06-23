@@ -1,6 +1,7 @@
 package com.agri.ecommerce.service;
 
-import com.agri.ecommerce.dto.request.category.UpsertCategoryRequest;
+import com.agri.ecommerce.dto.request.category.CategoryCreateRequest;
+import com.agri.ecommerce.dto.request.category.CategoryUpdateRequest;
 import com.agri.ecommerce.dto.response.category.CategoryResponse;
 
 import java.util.List;
@@ -9,13 +10,13 @@ public interface CategoryService {
 
     List<CategoryResponse> getAllCategories();
 
-    CategoryResponse getCategoryById(Long id);
-
     CategoryResponse getCategoryBySlug(String slug);
 
-    CategoryResponse createCategory(UpsertCategoryRequest request);
+    CategoryResponse getCategoryById(Long id);
 
-    CategoryResponse updateCategory(Long id, UpsertCategoryRequest request);
+    CategoryResponse createCategory(CategoryCreateRequest request);
+
+    CategoryResponse updateCategory(Long id, CategoryUpdateRequest request);
 
     void deleteCategory(Long id);
 }

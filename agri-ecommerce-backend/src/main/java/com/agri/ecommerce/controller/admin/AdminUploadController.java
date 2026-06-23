@@ -1,8 +1,8 @@
 package com.agri.ecommerce.controller.admin;
 
+import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.upload.UploadedImageResponse;
-import com.agri.ecommerce.exception.BadRequestException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
