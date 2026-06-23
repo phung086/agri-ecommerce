@@ -30,7 +30,7 @@ import {
   formatCurrency,
   formatNumber,
   getApiErrorMessage,
-  getAssetUrl,
+  getImageBackground,
 } from "@/lib/admin-utils";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { StatCard } from "@/components/admin/stat-card";
@@ -262,9 +262,7 @@ function applyFallbackFilters(products, filters) {
 function normalizeProduct(product, index = 0) {
   const price = Number(product.price || 0);
   const stock = Number(product.stock ?? 0);
-  const imageUrl = product.thumbnail
-    ? getAssetUrl(product.thumbnail)
-    : "/market-assets/fresh-market-hero.png";
+  const imageBackground = getImageBackground(product.thumbnail);
 
   return {
     id: String(product.id || product.slug || product.name),
@@ -288,7 +286,7 @@ function normalizeProduct(product, index = 0) {
     badge:
       product.badge ||
       (stock > 0 && stock <= 15 ? "Sắp hết" : index % 2 ? "Tươi mới" : "Đáng mua"),
-    imageUrl,
+    imageBackground,
     imagePosition:
       product.imagePosition ||
       ["76% 32%", "51% 82%", "82% 74%", "94% 74%", "64% 82%"][index % 5],
@@ -312,7 +310,7 @@ function ProductCard({ product, onAddToCart, onViewProduct }) {
         <span
           className="absolute inset-0 bg-cover bg-center transition duration-500 group-hover:scale-105"
           style={{
-            backgroundImage: `url("${product.imageUrl}")`,
+            backgroundImage: product.imageBackground,
             backgroundPosition: product.imagePosition,
           }}
         />
@@ -467,7 +465,7 @@ function CartDrawer({
                   <div
                     className="h-20 rounded-[8px] bg-cover bg-center"
                     style={{
-                      backgroundImage: `url("${item.imageUrl}")`,
+                      backgroundImage: item.imageBackground,
                       backgroundPosition: item.imagePosition,
                     }}
                   />
@@ -592,7 +590,7 @@ function QuickView({ product, onClose, onAddToCart }) {
           <div
             className="min-h-[320px] bg-cover bg-center"
             style={{
-              backgroundImage: `url("${product.imageUrl}")`,
+              backgroundImage: product.imageBackground,
               backgroundPosition: product.imagePosition,
             }}
           />
@@ -778,12 +776,14 @@ export default function Home() {
         id: ALL_CATEGORY,
         name: "Tất cả",
         slug: ALL_CATEGORY,
+        image: "",
         description: "Tất cả sản phẩm đang mở bán.",
       },
       ...categories.map((category) => ({
         id: category.id || category.slug,
         name: category.name,
         slug: category.slug,
+        image: category.image || "",
         description: category.description || "Nông sản được cập nhật theo mùa.",
       })),
     ],
@@ -1040,7 +1040,7 @@ export default function Home() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div
-                    className={`flex size-10 items-center justify-center rounded-[8px] ${
+                    className={`flex size-12 items-center justify-center overflow-hidden rounded-[8px] bg-cover bg-center ${
                       active
                         ? "bg-white/15 text-white"
                         : index % 3 === 0
@@ -1049,8 +1049,13 @@ export default function Home() {
                             ? "bg-sky-50 text-sky-700"
                             : "bg-rose-50 text-rose-700"
                     }`}
+                    style={
+                      category.image
+                        ? { backgroundImage: getImageBackground(category.image) }
+                        : undefined
+                    }
                   >
-                    <Leaf className="size-5" />
+                    {!category.image && <Leaf className="size-5" />}
                   </div>
                   <ArrowRight className="size-4 opacity-70" />
                 </div>
@@ -1094,7 +1099,7 @@ export default function Home() {
                   <span
                     className="h-24 rounded-[8px] bg-cover bg-center"
                     style={{
-                      backgroundImage: `url("${product.imageUrl}")`,
+                      backgroundImage: product.imageBackground,
                       backgroundPosition: product.imagePosition,
                     }}
                   />

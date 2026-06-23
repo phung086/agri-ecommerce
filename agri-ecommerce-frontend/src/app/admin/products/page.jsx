@@ -35,7 +35,7 @@ import {
   formatCurrency,
   formatNumber,
   getApiErrorMessage,
-  getAssetUrl,
+  getImageBackground,
   slugify,
 } from "@/lib/admin-utils";
 import { productStatusOptions } from "@/lib/admin-mock-data";
@@ -64,6 +64,8 @@ export default function AdminProductsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState(blankProductForm);
+  const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -145,16 +147,24 @@ export default function AdminProductsPage() {
     }));
   }
 
-  function handleThumbnailFile(file) {
+  async function handleThumbnailFile(file) {
     if (!file) {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateForm("thumbnail", reader.result || "");
-    };
-    reader.readAsDataURL(file);
+    setUploadingImage(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const uploadedImage = await adminService.uploadImage(file, "product");
+      updateForm("thumbnail", uploadedImage.path);
+      setNotice("Đã tải ảnh sản phẩm lên server.");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   function openCreateDialog() {
@@ -183,59 +193,79 @@ export default function AdminProductsPage() {
   }
 
   function buildProductPayload() {
-    const category = categories.find(
-      (item) => String(item.id) === String(form.categoryId)
-    );
+    const thumbnail = form.thumbnail.trim();
 
     return {
-      ...form,
+      name: form.name.trim(),
       slug: form.slug || slugify(form.name),
-      categoryId: category?.id || form.categoryId,
-      categoryName: category?.name || "Chưa phân loại",
-      categorySlug: category?.slug || "",
+      categoryId: Number(form.categoryId),
+      description: form.description,
       price: Number(form.price || 0),
       stock: Number(form.stock || 0),
-      thumbnail: form.thumbnail,
+      status: form.status,
+      unit: form.unit,
+      thumbnail,
+      images: thumbnail ? [thumbnail] : [],
     };
   }
 
-  function handleSave(event) {
+  async function handleSaveToApi(event) {
     event.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
 
-    const payload = buildProductPayload();
+    try {
+      const payload = buildProductPayload();
 
-    if (editingProduct) {
-      setProducts((current) =>
-        current.map((product) =>
-          product.id === editingProduct.id ? { ...product, ...payload } : product
-        )
-      );
-      setNotice("Đã cập nhật sản phẩm trong phiên demo.");
-    } else {
-      setProducts((current) => [
-        {
-          ...payload,
-          id: Date.now(),
-          demo: true,
-          images: payload.thumbnail ? [payload.thumbnail] : [],
-        },
-        ...current,
-      ]);
-      setNotice("Đã thêm sản phẩm trong phiên demo.");
+      if (editingProduct) {
+        const savedProduct = await adminService.updateProduct(
+          editingProduct.id,
+          payload
+        );
+
+        setProducts((current) =>
+          current.map((product) =>
+            product.id === editingProduct.id ? savedProduct : product
+          )
+        );
+        setNotice("Đã cập nhật sản phẩm vào database.");
+      } else {
+        const savedProduct = await adminService.createProduct(payload);
+        setProducts((current) => [savedProduct, ...current]);
+        setNotice("Đã thêm sản phẩm vào database.");
+      }
+
+      setDialogOpen(false);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
     }
-
-    setDialogOpen(false);
   }
 
-  function handleRemove(productId) {
-    const confirmed = window.confirm("Xóa sản phẩm khỏi phiên demo?");
+  async function handleRemoveFromApi(productId) {
+    const confirmed = window.confirm("Xóa sản phẩm khỏi database?");
 
     if (!confirmed) {
       return;
     }
 
-    setProducts((current) => current.filter((product) => product.id !== productId));
-    setNotice("Đã xóa sản phẩm trong phiên demo.");
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await adminService.deleteProduct(productId);
+      setProducts((current) =>
+        current.filter((product) => product.id !== productId)
+      );
+      setNotice("Đã xóa sản phẩm khỏi database.");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -244,7 +274,7 @@ export default function AdminProductsPage() {
         title="Quản lí sản phẩm"
         description="Theo dõi danh sách sản phẩm, giá bán, tồn kho, trạng thái bán và hình ảnh đại diện cho từng mặt hàng."
         image="/admin-assets/products.svg"
-        badges={["Public API", "Form demo", "Ảnh local"]}
+        badges={["Database API", "CRUD thật", "Đường dẫn ảnh"]}
       >
         <Button type="button" onClick={openCreateDialog}>
           <Plus className="size-4" />
@@ -342,7 +372,7 @@ export default function AdminProductsPage() {
                     role="img"
                     aria-label={product.name}
                     style={{
-                      backgroundImage: `url("${getAssetUrl(product.thumbnail)}")`,
+                      backgroundImage: getImageBackground(product.thumbnail),
                     }}
                   />
                 ) : (
@@ -368,11 +398,6 @@ export default function AdminProductsPage() {
             <TableCell className="px-4">
               <div className="flex items-center gap-2">
                 <StatusBadge status={product.status} />
-                {product.demo && (
-                  <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                    Demo
-                  </span>
-                )}
               </div>
             </TableCell>
             <TableCell className="px-4">
@@ -391,9 +416,10 @@ export default function AdminProductsPage() {
                   type="button"
                   variant="destructive"
                   size="icon-sm"
-                  title="Xóa sản phẩm demo"
-                  aria-label="Xóa sản phẩm demo"
-                  onClick={() => handleRemove(product.id)}
+                  title="Xóa sản phẩm"
+                  aria-label="Xóa sản phẩm"
+                  onClick={() => handleRemoveFromApi(product.id)}
+                  disabled={saving}
                 >
                   <Trash2 className="size-4" />
                 </Button>
@@ -405,13 +431,13 @@ export default function AdminProductsPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={handleSaveToApi} className="space-y-4">
             <DialogHeader>
               <DialogTitle>
                 {editingProduct ? "Sửa sản phẩm" : "Thêm sản phẩm"}
               </DialogTitle>
               <DialogDescription>
-                Thao tác này chỉ lưu trong giao diện demo.
+                Dữ liệu sẽ lưu vào database và xuất hiện trên trang khách hàng khi sản phẩm còn hàng.
               </DialogDescription>
             </DialogHeader>
 
@@ -530,13 +556,19 @@ export default function AdminProductsPage() {
                   id="product-thumbnail-file"
                   type="file"
                   accept="image/*"
+                  disabled={uploadingImage}
                   onChange={(event) =>
                     handleThumbnailFile(event.target.files?.[0] || null)
                   }
                 />
                 <p className="text-xs text-muted-foreground">
-                  Ảnh được dùng để xem trước trong phiên demo, chưa upload lên backend.
+                  Chọn ảnh từ máy để tải lên server và tự điền đường dẫn.
                 </p>
+                {uploadingImage && (
+                  <p className="text-xs font-medium text-emerald-700">
+                    Đang tải ảnh lên server...
+                  </p>
+                )}
               </div>
               <div
                 className="h-32 rounded-lg border bg-muted bg-cover bg-center"
@@ -544,7 +576,7 @@ export default function AdminProductsPage() {
                 aria-label="Ảnh sản phẩm đang chọn"
                 style={{
                   backgroundImage: form.thumbnail
-                    ? `url("${getAssetUrl(form.thumbnail)}")`
+                    ? getImageBackground(form.thumbnail)
                     : "none",
                 }}
               />
@@ -567,10 +599,17 @@ export default function AdminProductsPage() {
                 type="button"
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
+                disabled={saving || uploadingImage}
               >
                 Hủy
               </Button>
-              <Button type="submit">Lưu demo</Button>
+              <Button type="submit" disabled={saving || uploadingImage}>
+                {saving
+                  ? "Đang lưu..."
+                  : uploadingImage
+                    ? "Đang tải ảnh..."
+                    : "Lưu vào database"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

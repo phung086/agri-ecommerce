@@ -37,6 +37,10 @@ export function getAssetUrl(path) {
     return path;
   }
 
+  if (/^\/?(admin-assets|market-assets)\//i.test(path)) {
+    return `/${path.replace(/^\/+/, "")}`;
+  }
+
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
   const backendRoot = apiBaseUrl.replace(/\/api\/?$/, "");
 
@@ -45,6 +49,20 @@ export function getAssetUrl(path) {
   }
 
   return `${backendRoot}/${path.replace(/^\/+/, "")}`;
+}
+
+export function getImageBackground(
+  path,
+  fallback = "/market-assets/fresh-market-hero.png"
+) {
+  const fallbackUrl = getAssetUrl(fallback);
+  const imageUrl = getAssetUrl(path);
+
+  if (!imageUrl || imageUrl === fallbackUrl) {
+    return `url("${fallbackUrl}")`;
+  }
+
+  return `url("${imageUrl}"), url("${fallbackUrl}")`;
 }
 
 export function getApiErrorMessage(error) {

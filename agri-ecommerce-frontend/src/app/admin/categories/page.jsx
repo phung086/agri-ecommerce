@@ -29,7 +29,7 @@ import { Label } from "@/components/ui/label";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { adminService } from "@/services/admin.service";
-import { getApiErrorMessage, getAssetUrl, slugify } from "@/lib/admin-utils";
+import { getApiErrorMessage, getImageBackground, slugify } from "@/lib/admin-utils";
 
 const blankCategoryForm = {
   name: "",
@@ -47,6 +47,8 @@ export default function AdminCategoriesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [form, setForm] = useState(blankCategoryForm);
+  const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -94,9 +96,8 @@ export default function AdminCategoriesPage() {
 
   const categoryStats = useMemo(() => {
     const withImage = categories.filter((category) => category.image).length;
-    const demoCount = categories.filter((category) => category.demo).length;
 
-    return { withImage, demoCount };
+    return { withImage };
   }, [categories]);
 
   function updateForm(field, value) {
@@ -109,16 +110,24 @@ export default function AdminCategoriesPage() {
     }));
   }
 
-  function handleImageFile(file) {
+  async function handleImageFile(file) {
     if (!file) {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateForm("image", reader.result || "");
-    };
-    reader.readAsDataURL(file);
+    setUploadingImage(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const uploadedImage = await adminService.uploadImage(file, "category");
+      updateForm("image", uploadedImage.path);
+      setNotice("Đã tải ảnh danh mục lên server.");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   function openCreateDialog() {
@@ -138,47 +147,72 @@ export default function AdminCategoriesPage() {
     setDialogOpen(true);
   }
 
-  function handleSave(event) {
-    event.preventDefault();
-
-    const payload = {
-      ...form,
+  function buildCategoryPayload() {
+    return {
+      name: form.name.trim(),
       slug: form.slug || slugify(form.name),
+      description: form.description,
+      image: form.image.trim(),
     };
-
-    if (editingCategory) {
-      setCategories((current) =>
-        current.map((category) =>
-          category.id === editingCategory.id ? { ...category, ...payload } : category
-        )
-      );
-      setNotice("Đã cập nhật danh mục trong phiên demo.");
-    } else {
-      setCategories((current) => [
-        {
-          ...payload,
-          id: Date.now(),
-          demo: true,
-        },
-        ...current,
-      ]);
-      setNotice("Đã thêm danh mục trong phiên demo.");
-    }
-
-    setDialogOpen(false);
   }
 
-  function handleRemove(categoryId) {
-    const confirmed = window.confirm("Xóa danh mục khỏi phiên demo?");
+  async function handleSaveToApi(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const payload = buildCategoryPayload();
+
+      if (editingCategory) {
+        const savedCategory = await adminService.updateCategory(
+          editingCategory.id,
+          payload
+        );
+
+        setCategories((current) =>
+          current.map((category) =>
+            category.id === editingCategory.id ? savedCategory : category
+          )
+        );
+        setNotice("Đã cập nhật danh mục vào database.");
+      } else {
+        const savedCategory = await adminService.createCategory(payload);
+        setCategories((current) => [savedCategory, ...current]);
+        setNotice("Đã thêm danh mục vào database.");
+      }
+
+      setDialogOpen(false);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemoveFromApi(categoryId) {
+    const confirmed = window.confirm("Xóa danh mục khỏi database?");
 
     if (!confirmed) {
       return;
     }
 
-    setCategories((current) =>
-      current.filter((category) => category.id !== categoryId)
-    );
-    setNotice("Đã xóa danh mục trong phiên demo.");
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await adminService.deleteCategory(categoryId);
+      setCategories((current) =>
+        current.filter((category) => category.id !== categoryId)
+      );
+      setNotice("Đã xóa danh mục khỏi database.");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -187,7 +221,7 @@ export default function AdminCategoriesPage() {
         title="Quản lí danh mục"
         description="Tổ chức sản phẩm theo nhóm, cập nhật mô tả, slug và ảnh đại diện để khách hàng duyệt cửa hàng nhanh hơn."
         image="/admin-assets/categories.svg"
-        badges={["Public API", "Form demo"]}
+        badges={["Database API", "CRUD thật"]}
       >
         <Button type="button" onClick={openCreateDialog}>
           <Plus className="size-4" />
@@ -199,7 +233,7 @@ export default function AdminCategoriesPage() {
         <StatCard
           title="Tổng danh mục"
           value={categories.length}
-          description="Đọc từ public API"
+          description="Đọc từ database API"
           icon={FolderTree}
           tone="green"
         />
@@ -211,9 +245,9 @@ export default function AdminCategoriesPage() {
           tone="blue"
         />
         <StatCard
-          title="Dữ liệu demo"
-          value={categoryStats.demoCount}
-          description="Chỉ lưu trên giao diện"
+          title="Dữ liệu database"
+          value={categories.length}
+          description="Lưu bền sau khi tải lại"
           icon={Layers}
           tone="amber"
         />
@@ -253,7 +287,7 @@ export default function AdminCategoriesPage() {
                     role="img"
                     aria-label={category.name}
                     style={{
-                      backgroundImage: `url("${getAssetUrl(category.image)}")`,
+                      backgroundImage: getImageBackground(category.image),
                     }}
                   />
                 ) : (
@@ -275,7 +309,7 @@ export default function AdminCategoriesPage() {
             </TableCell>
             <TableCell className="px-4">
               <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                {category.demo ? "Demo" : "API"}
+                API
               </span>
             </TableCell>
             <TableCell className="px-4">
@@ -294,9 +328,10 @@ export default function AdminCategoriesPage() {
                   type="button"
                   variant="destructive"
                   size="icon-sm"
-                  title="Xóa danh mục demo"
-                  aria-label="Xóa danh mục demo"
-                  onClick={() => handleRemove(category.id)}
+                  title="Xóa danh mục"
+                  aria-label="Xóa danh mục"
+                  onClick={() => handleRemoveFromApi(category.id)}
+                  disabled={saving}
                 >
                   <Trash2 className="size-4" />
                 </Button>
@@ -308,13 +343,13 @@ export default function AdminCategoriesPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-xl">
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={handleSaveToApi} className="space-y-4">
             <DialogHeader>
               <DialogTitle>
                 {editingCategory ? "Sửa danh mục" : "Thêm danh mục"}
               </DialogTitle>
               <DialogDescription>
-                Thao tác này chỉ lưu trong giao diện demo.
+                Dữ liệu sẽ lưu vào database và xuất hiện trên trang khách hàng.
               </DialogDescription>
             </DialogHeader>
 
@@ -356,16 +391,22 @@ export default function AdminCategoriesPage() {
                 id="category-image-file"
                 type="file"
                 accept="image/*"
+                disabled={uploadingImage}
                 onChange={(event) =>
                   handleImageFile(event.target.files?.[0] || null)
                 }
               />
+              {uploadingImage && (
+                <p className="text-xs font-medium text-emerald-700">
+                  Đang tải ảnh lên server...
+                </p>
+              )}
               {form.image && (
                 <div
                   className="h-28 rounded-lg border bg-cover bg-center"
                   role="img"
                   aria-label="Ảnh danh mục đang chọn"
-                  style={{ backgroundImage: `url("${getAssetUrl(form.image)}")` }}
+                  style={{ backgroundImage: getImageBackground(form.image) }}
                 />
               )}
             </div>
@@ -387,10 +428,17 @@ export default function AdminCategoriesPage() {
                 type="button"
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
+                disabled={saving || uploadingImage}
               >
                 Hủy
               </Button>
-              <Button type="submit">Lưu demo</Button>
+              <Button type="submit" disabled={saving || uploadingImage}>
+                {saving
+                  ? "Đang lưu..."
+                  : uploadingImage
+                    ? "Đang tải ảnh..."
+                    : "Lưu vào database"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -53,7 +53,8 @@ public class SecurityConfig {
                                 "/api/health",
                                 "/api/health/database",
                                 "/sitemap.xml",
-                                "/robots.txt"
+                                "/robots.txt",
+                                "/uploads/**"
                         ).permitAll()
 
                         .requestMatchers(
