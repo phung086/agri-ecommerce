@@ -31,3 +31,4 @@ build/
 
 ### VS Code ###
 .vscode/
+agri-ecommerce-backend/src/main/resources/application-local.yml

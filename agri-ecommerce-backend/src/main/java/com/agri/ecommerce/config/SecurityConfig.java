@@ -51,16 +51,20 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 "/api/health",
-                                "/api/health/database"
+                                "/api/health/database",
+                                "/sitemap.xml",
+                                "/robots.txt",
+                                "/uploads/**"
                         ).permitAll()
 
                         .requestMatchers(
                                 "/api/auth/register",
-                                "/api/auth/login"
+                                "/api/auth/login",
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password"
                         ).permitAll()
 
                         .requestMatchers("/api/public/**").permitAll()
-                        .requestMatchers("/uploads/**").permitAll()
 
                         .requestMatchers(
                                 "/v3/api-docs/**",

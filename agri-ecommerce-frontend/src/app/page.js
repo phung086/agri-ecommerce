@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
@@ -30,10 +31,17 @@ import {
   formatCurrency,
   formatNumber,
   getApiErrorMessage,
-  getAssetUrl,
+  getImageBackground,
 } from "@/lib/admin-utils";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { StatCard } from "@/components/admin/stat-card";
+import {
+  AUTH_SCOPES,
+  clearAuthSession,
+  getAuthSession,
+  isAuthSessionExpired,
+} from "@/lib/auth-storage";
+import { cartService } from "@/services/cart.service";
 import { marketplaceService } from "@/services/marketplace.service";
 
 const ALL_CATEGORY = "all";
@@ -262,9 +270,7 @@ function applyFallbackFilters(products, filters) {
 function normalizeProduct(product, index = 0) {
   const price = Number(product.price || 0);
   const stock = Number(product.stock ?? 0);
-  const imageUrl = product.thumbnail
-    ? getAssetUrl(product.thumbnail)
-    : "/market-assets/fresh-market-hero.png";
+  const imageBackground = getImageBackground(product.thumbnail);
 
   return {
     id: String(product.id || product.slug || product.name),
@@ -288,12 +294,49 @@ function normalizeProduct(product, index = 0) {
     badge:
       product.badge ||
       (stock > 0 && stock <= 15 ? "Sắp hết" : index % 2 ? "Tươi mới" : "Đáng mua"),
-    imageUrl,
+    imageBackground,
     imagePosition:
       product.imagePosition ||
       ["76% 32%", "51% 82%", "82% 74%", "94% 74%", "64% 82%"][index % 5],
     disabled: product.stock !== undefined && product.stock !== null && stock <= 0,
   };
+}
+
+function getActiveCustomerSession() {
+  const session = getAuthSession(AUTH_SCOPES.customer);
+
+  if (!session?.accessToken || isAuthSessionExpired(session)) {
+    if (session?.accessToken) {
+      clearAuthSession(AUTH_SCOPES.customer);
+    }
+
+    return null;
+  }
+
+  return session;
+}
+
+function mapCartResponseToItems(cartResponse) {
+  return (cartResponse?.items || []).map((item, index) => {
+    const price = Number(item.productPrice || 0);
+    const stock = Number(item.stock ?? 0);
+    const imageBackground = getImageBackground(item.thumbnail);
+
+    return {
+      id: String(item.productId),
+      cartItemId: item.id,
+      slug: item.productSlug || String(item.productId),
+      name: item.productName || "Sản phẩm trong giỏ",
+      price,
+      unit: item.unit || "sản phẩm",
+      stock,
+      quantity: Number(item.quantity || 0),
+      imageBackground,
+      imagePosition:
+        ["76% 32%", "51% 82%", "82% 74%", "94% 74%", "64% 82%"][index % 5],
+      status: item.status,
+    };
+  });
 }
 
 function ProductCard({ product, onAddToCart, onViewProduct }) {
@@ -312,7 +355,7 @@ function ProductCard({ product, onAddToCart, onViewProduct }) {
         <span
           className="absolute inset-0 bg-cover bg-center transition duration-500 group-hover:scale-105"
           style={{
-            backgroundImage: `url("${product.imageUrl}")`,
+            backgroundImage: product.imageBackground,
             backgroundPosition: product.imagePosition,
           }}
         />
@@ -412,11 +455,15 @@ function CartDrawer({
   subtotal,
   shippingFee,
   grandTotal,
+  cartNotice,
+  cartError,
+  cartUpdating,
   onClose,
   onIncrease,
   onDecrease,
   onRemove,
   onClear,
+  onCheckout,
 }) {
   return (
     <div
@@ -446,6 +493,11 @@ function CartDrawer({
             <h2 className="text-xl font-black text-slate-950">
               {cart.length} sản phẩm
             </h2>
+            {cartUpdating && (
+              <p className="mt-1 text-xs font-bold text-emerald-700">
+                Đang đồng bộ giỏ hàng...
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -467,7 +519,7 @@ function CartDrawer({
                   <div
                     className="h-20 rounded-[8px] bg-cover bg-center"
                     style={{
-                      backgroundImage: `url("${item.imageUrl}")`,
+                      backgroundImage: item.imageBackground,
                       backgroundPosition: item.imagePosition,
                     }}
                   />
@@ -484,7 +536,8 @@ function CartDrawer({
                       <button
                         type="button"
                         onClick={() => onRemove(item.id)}
-                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                        disabled={cartUpdating}
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                       >
                         <Trash2 className="size-4" />
                       </button>
@@ -494,7 +547,8 @@ function CartDrawer({
                         <button
                           type="button"
                           onClick={() => onDecrease(item.id)}
-                          className="inline-flex size-9 items-center justify-center text-slate-600 hover:text-emerald-700"
+                          disabled={cartUpdating}
+                          className="inline-flex size-9 items-center justify-center text-slate-600 hover:text-emerald-700 disabled:opacity-50"
                         >
                           <Minus className="size-4" />
                         </button>
@@ -504,7 +558,8 @@ function CartDrawer({
                         <button
                           type="button"
                           onClick={() => onIncrease(item.id)}
-                          className="inline-flex size-9 items-center justify-center text-slate-600 hover:text-emerald-700"
+                          disabled={cartUpdating}
+                          className="inline-flex size-9 items-center justify-center text-slate-600 hover:text-emerald-700 disabled:opacity-50"
                         >
                           <Plus className="size-4" />
                         </button>
@@ -519,6 +574,17 @@ function CartDrawer({
             </div>
 
             <div className="border-t border-emerald-100 bg-[#f6faef] px-5 py-4">
+              {(cartNotice || cartError) && (
+                <div
+                  className={`mb-3 rounded-[8px] border px-3 py-2 text-sm font-semibold ${
+                    cartError
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  }`}
+                >
+                  {cartError || cartNotice}
+                </div>
+              )}
               <div className="space-y-2 text-sm font-semibold text-slate-600">
                 <div className="flex justify-between">
                   <span>Tạm tính</span>
@@ -535,6 +601,8 @@ function CartDrawer({
               </div>
               <button
                 type="button"
+                onClick={onCheckout}
+                disabled={cartUpdating}
                 className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
               >
                 <CreditCard className="size-4" />
@@ -543,7 +611,8 @@ function CartDrawer({
               <button
                 type="button"
                 onClick={onClear}
-                className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-[8px] text-sm font-bold text-slate-500 transition hover:bg-white hover:text-rose-600"
+                disabled={cartUpdating}
+                className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-[8px] text-sm font-bold text-slate-500 transition hover:bg-white hover:text-rose-600 disabled:opacity-50"
               >
                 Xóa giỏ hàng
               </button>
@@ -592,7 +661,7 @@ function QuickView({ product, onClose, onAddToCart }) {
           <div
             className="min-h-[320px] bg-cover bg-center"
             style={{
-              backgroundImage: `url("${product.imageUrl}")`,
+              backgroundImage: product.imageBackground,
               backgroundPosition: product.imagePosition,
             }}
           />
@@ -668,6 +737,7 @@ function QuickView({ product, onClose, onAddToCart }) {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [filters, setFilters] = useState({
     keyword: "",
     categorySlug: ALL_CATEGORY,
@@ -684,6 +754,9 @@ export default function Home() {
   const [apiError, setApiError] = useState("");
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
+  const [cartUpdating, setCartUpdating] = useState(false);
+  const [cartNotice, setCartNotice] = useState("");
+  const [cartError, setCartError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   useEffect(() => {
@@ -715,6 +788,43 @@ export default function Home() {
 
     return () => {
       ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const timeoutId = window.setTimeout(async () => {
+      const session = getActiveCustomerSession();
+
+      if (!session) {
+        return;
+      }
+
+      setCartUpdating(true);
+      setCartError("");
+
+      try {
+        const response = await cartService.getCart();
+
+        if (!ignore) {
+          setCart(mapCartResponseToItems(response));
+        }
+      } catch (error) {
+        if (!ignore) {
+          setCartError(
+            error?.message || "Không thể tải giỏ hàng từ tài khoản của bạn."
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setCartUpdating(false);
+        }
+      }
+    }, 0);
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timeoutId);
     };
   }, []);
 
@@ -778,12 +888,14 @@ export default function Home() {
         id: ALL_CATEGORY,
         name: "Tất cả",
         slug: ALL_CATEGORY,
+        image: "",
         description: "Tất cả sản phẩm đang mở bán.",
       },
       ...categories.map((category) => ({
         id: category.id || category.slug,
         name: category.name,
         slug: category.slug,
+        image: category.image || "",
         description: category.description || "Nông sản được cập nhật theo mùa.",
       })),
     ],
@@ -810,7 +922,7 @@ export default function Home() {
     [cart]
   );
 
-  const shippingFee = subtotal === 0 || subtotal >= 299000 ? 0 : 25000;
+  const shippingFee = subtotal === 0 ? 0 : 25000;
   const grandTotal = subtotal + shippingFee;
 
   const activeCategoryName =
@@ -858,7 +970,41 @@ export default function Home() {
     });
   }
 
-  function addToCart(product) {
+  async function addToCart(product) {
+    setCartNotice("");
+    setCartError("");
+
+    const session = getActiveCustomerSession();
+
+    if (session) {
+      const productId = Number(product.id);
+
+      if (!Number.isFinite(productId)) {
+        setCartError("Sản phẩm mẫu chưa thể thêm vào giỏ tài khoản.");
+        window.alert("Sản phẩm mẫu chưa thể thêm vào giỏ tài khoản.");
+        return;
+      }
+
+      setCartUpdating(true);
+
+      try {
+        const response = await cartService.addItem({
+          productId,
+          quantity: 1,
+        });
+        setCart(mapCartResponseToItems(response));
+        setCartNotice("Đã thêm sản phẩm vào giỏ hàng của bạn.");
+        router.push("/cart");
+      } catch (error) {
+        setCartError(error?.message || "Không thể thêm sản phẩm vào giỏ.");
+        window.alert(error?.message || "Không thể thêm sản phẩm vào giỏ.");
+      } finally {
+        setCartUpdating(false);
+      }
+
+      return;
+    }
+
     setCart((current) => {
       const existing = current.find((item) => item.id === product.id);
 
@@ -872,10 +1018,39 @@ export default function Home() {
 
       return [...current, { ...product, quantity: 1 }];
     });
-    setCartOpen(true);
+    setCartNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Đăng nhập để đặt hàng.");
+    router.push("/cart");
   }
 
-  function increaseCartItem(id) {
+  async function increaseCartItem(id) {
+    setCartNotice("");
+    setCartError("");
+    const item = cart.find((currentItem) => currentItem.id === id);
+
+    if (item?.cartItemId) {
+      const nextQuantity = Math.min(item.quantity + 1, item.stock || 99);
+
+      if (nextQuantity === item.quantity) {
+        setCartError("Số lượng đã đạt tồn kho hiện tại.");
+        return;
+      }
+
+      setCartUpdating(true);
+
+      try {
+        const response = await cartService.updateItem(item.cartItemId, {
+          quantity: nextQuantity,
+        });
+        setCart(mapCartResponseToItems(response));
+      } catch (error) {
+        setCartError(error?.message || "Không thể cập nhật số lượng.");
+      } finally {
+        setCartUpdating(false);
+      }
+
+      return;
+    }
+
     setCart((current) =>
       current.map((item) =>
         item.id === id
@@ -885,7 +1060,33 @@ export default function Home() {
     );
   }
 
-  function decreaseCartItem(id) {
+  async function decreaseCartItem(id) {
+    setCartNotice("");
+    setCartError("");
+    const item = cart.find((currentItem) => currentItem.id === id);
+
+    if (item?.cartItemId) {
+      if (item.quantity <= 1) {
+        await removeCartItem(id);
+        return;
+      }
+
+      setCartUpdating(true);
+
+      try {
+        const response = await cartService.updateItem(item.cartItemId, {
+          quantity: item.quantity - 1,
+        });
+        setCart(mapCartResponseToItems(response));
+      } catch (error) {
+        setCartError(error?.message || "Không thể cập nhật số lượng.");
+      } finally {
+        setCartUpdating(false);
+      }
+
+      return;
+    }
+
     setCart((current) =>
       current
         .map((item) =>
@@ -895,8 +1096,72 @@ export default function Home() {
     );
   }
 
-  function removeCartItem(id) {
+  async function removeCartItem(id) {
+    setCartNotice("");
+    setCartError("");
+    const item = cart.find((currentItem) => currentItem.id === id);
+
+    if (item?.cartItemId) {
+      setCartUpdating(true);
+
+      try {
+        const response = await cartService.removeItem(item.cartItemId);
+        setCart(mapCartResponseToItems(response));
+      } catch (error) {
+        setCartError(error?.message || "Không thể xóa sản phẩm khỏi giỏ.");
+      } finally {
+        setCartUpdating(false);
+      }
+
+      return;
+    }
+
     setCart((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function clearCart() {
+    setCartNotice("");
+    setCartError("");
+
+    const hasServerCartItems = cart.some((item) => item.cartItemId);
+
+    if (hasServerCartItems) {
+      setCartUpdating(true);
+
+      try {
+        const response = await cartService.clearCart();
+        setCart(mapCartResponseToItems(response));
+        setCartNotice("Đã xóa toàn bộ giỏ hàng.");
+      } catch (error) {
+        setCartError(error?.message || "Không thể xóa giỏ hàng.");
+      } finally {
+        setCartUpdating(false);
+      }
+
+      return;
+    }
+
+    setCart([]);
+  }
+
+  function handleCheckout() {
+    setCartNotice("");
+    setCartError("");
+
+    if (cart.length === 0) {
+      setCartError("Giỏ hàng đang trống.");
+      return;
+    }
+
+    const session = getActiveCustomerSession();
+
+    if (!session) {
+      setCartError("Vui lòng đăng nhập tài khoản khách hàng trước khi thanh toán.");
+      router.push("/profile");
+      return;
+    }
+
+    router.push("/checkout");
   }
 
   return (
@@ -939,10 +1204,11 @@ export default function Home() {
             </a>
           </nav>
 
-          <button
-            type="button"
-            onClick={() => setCartOpen(true)}
+          <Link
+            href="/cart"
             className="relative inline-flex size-10 shrink-0 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+            aria-label="Xem giỏ hàng"
+            title="Xem giỏ hàng"
           >
             <ShoppingBasket className="size-5" />
             {cartCount > 0 && (
@@ -950,7 +1216,7 @@ export default function Home() {
                 {cartCount}
               </span>
             )}
-          </button>
+          </Link>
 
           <Link
             href="/profile"
@@ -1040,7 +1306,7 @@ export default function Home() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div
-                    className={`flex size-10 items-center justify-center rounded-[8px] ${
+                    className={`flex size-12 items-center justify-center overflow-hidden rounded-[8px] bg-cover bg-center ${
                       active
                         ? "bg-white/15 text-white"
                         : index % 3 === 0
@@ -1049,8 +1315,13 @@ export default function Home() {
                             ? "bg-sky-50 text-sky-700"
                             : "bg-rose-50 text-rose-700"
                     }`}
+                    style={
+                      category.image
+                        ? { backgroundImage: getImageBackground(category.image) }
+                        : undefined
+                    }
                   >
-                    <Leaf className="size-5" />
+                    {!category.image && <Leaf className="size-5" />}
                   </div>
                   <ArrowRight className="size-4 opacity-70" />
                 </div>
@@ -1094,7 +1365,7 @@ export default function Home() {
                   <span
                     className="h-24 rounded-[8px] bg-cover bg-center"
                     style={{
-                      backgroundImage: `url("${product.imageUrl}")`,
+                      backgroundImage: product.imageBackground,
                       backgroundPosition: product.imagePosition,
                     }}
                   />
@@ -1265,7 +1536,7 @@ export default function Home() {
         </div>
         <div className="rounded-[8px] bg-amber-400 p-5 text-amber-950">
           <CircleDollarSign className="size-7" />
-          <h3 className="mt-5 text-xl font-black">Miễn phí giao từ 299.000đ</h3>
+          <h3 className="mt-5 text-xl font-black">Phí giao tiêu chuẩn 25.000đ</h3>
           <p className="mt-2 text-sm leading-6 text-amber-950/75">
             Giỏ hàng tự tính phí dự kiến để người mua chủ động trước khi thanh toán.
           </p>
@@ -1295,11 +1566,15 @@ export default function Home() {
         subtotal={subtotal}
         shippingFee={shippingFee}
         grandTotal={grandTotal}
+        cartNotice={cartNotice}
+        cartError={cartError}
+        cartUpdating={cartUpdating}
         onClose={() => setCartOpen(false)}
         onIncrease={increaseCartItem}
         onDecrease={decreaseCartItem}
         onRemove={removeCartItem}
-        onClear={() => setCart([])}
+        onClear={clearCart}
+        onCheckout={handleCheckout}
       />
 
       <QuickView

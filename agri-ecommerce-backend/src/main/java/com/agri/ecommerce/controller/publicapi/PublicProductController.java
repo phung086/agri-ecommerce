@@ -3,6 +3,8 @@ package com.agri.ecommerce.controller.publicapi;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.product.ProductResponse;
+import com.agri.ecommerce.dto.response.product.ProductSearchFacetsResponse;
+import com.agri.ecommerce.dto.response.product.ProductSearchSuggestionResponse;
 import com.agri.ecommerce.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -22,6 +24,64 @@ import java.util.List;
 public class PublicProductController {
 
     private final ProductService productService;
+
+    @Operation(summary = "Get product search suggestions")
+    @GetMapping("/search/suggestions")
+    public ResponseEntity<ApiResponse<List<ProductSearchSuggestionResponse>>> getSearchSuggestions(
+            @Parameter(description = "Search keyword", example = "rau")
+            @RequestParam(required = false) String keyword,
+
+            @Parameter(description = "Category slug", example = "rau-cu")
+            @RequestParam(required = false) String categorySlug,
+
+            @Parameter(description = "Maximum price", example = "50000")
+            @RequestParam(required = false) BigDecimal maxPrice,
+
+            @Parameter(description = "Maximum suggestions to return", example = "8")
+            @RequestParam(defaultValue = "8") Integer limit
+    ) {
+        List<ProductSearchSuggestionResponse> response = productService.getSearchSuggestions(
+                keyword,
+                categorySlug,
+                maxPrice,
+                limit
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Product search suggestions loaded successfully", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Get product search facets")
+    @GetMapping("/search/facets")
+    public ResponseEntity<ApiResponse<ProductSearchFacetsResponse>> getSearchFacets(
+            @Parameter(description = "Search keyword", example = "rau")
+            @RequestParam(required = false) String keyword,
+
+            @Parameter(description = "Category slug", example = "rau-cu")
+            @RequestParam(required = false) String categorySlug,
+
+            @Parameter(description = "Minimum price", example = "5000")
+            @RequestParam(required = false) BigDecimal minPrice,
+
+            @Parameter(description = "Maximum price", example = "50000")
+            @RequestParam(required = false) BigDecimal maxPrice,
+
+            @Parameter(description = "Product status", example = "in_stock")
+            @RequestParam(required = false) String status
+    ) {
+        ProductSearchFacetsResponse response = productService.getSearchFacets(
+                keyword,
+                categorySlug,
+                minPrice,
+                maxPrice,
+                status
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Product search facets loaded successfully", response, HttpStatus.OK.value())
+        );
+    }
 
     @Operation(summary = "Lấy danh sách sản phẩm public có phân trang, tìm kiếm và lọc")
     @GetMapping

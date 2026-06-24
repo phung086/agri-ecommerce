@@ -21,6 +21,7 @@ target/
 # Environment files
 .env
 .env.*
+*.env
 !.env.example
 
 # IDE
@@ -45,3 +46,8 @@ database/backup/
 
 # Local config
 application-local.yml
+application-local.properties
+
+# Backend local config
+agri-ecommerce-backend/src/main/resources/application-local.yml
+agri-ecommerce-backend/src/main/resources/application-local.properties

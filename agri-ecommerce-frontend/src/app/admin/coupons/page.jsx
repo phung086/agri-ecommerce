@@ -1,7 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Clock3, Percent, Pencil, Plus, Search, TicketPercent, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Clock3,
+  Loader2,
+  Percent,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  TicketPercent,
+  Trash2,
+} from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { DataTable } from "@/components/admin/data-table";
@@ -19,46 +29,120 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { couponStatusOptions, mockCoupons } from "@/lib/admin-mock-data";
-import { formatDate, formatNumber } from "@/lib/admin-utils";
+import { formatDate, formatNumber, getApiErrorMessage } from "@/lib/admin-utils";
+import { adminService } from "@/services/admin.service";
+
+const COUPON_FETCH_PARAMS = {
+  page: 0,
+  size: 100,
+  sort: "createdAt,desc",
+};
+
+const COUPON_STATUS_OPTIONS = [
+  { value: "all", label: "Tất cả mã" },
+  { value: "active", label: "Đang bật" },
+  { value: "inactive", label: "Đã tắt" },
+  { value: "expired", label: "Hết hạn" },
+  { value: "exhausted", label: "Hết lượt" },
+];
 
 const blankCouponForm = {
   code: "",
   discountPercentage: "",
   expiresAt: "",
   usageLimit: "",
-  timesUsed: "0",
-  isActive: true,
+  active: true,
 };
+
+function readPageContent(response) {
+  if (Array.isArray(response?.content)) {
+    return response.content;
+  }
+
+  return Array.isArray(response) ? response : [];
+}
 
 function toDateInput(value) {
   if (!value) {
     return "";
   }
 
-  return value.replace(" ", "T").slice(0, 16);
+  return String(value).replace(" ", "T").slice(0, 16);
+}
+
+function toApiDateTime(value) {
+  if (!value) {
+    return null;
+  }
+
+  return value.length === 16 ? `${value}:00` : value;
 }
 
 function getCouponStatus(coupon) {
-  const expiresAt = coupon.expiresAt
-    ? new Date(coupon.expiresAt.replace(" ", "T"))
-    : null;
-
-  if (expiresAt && expiresAt.getTime() < Date.now()) {
+  if (coupon.expired) {
     return "expired";
   }
 
-  return coupon.isActive ? "active" : "inactive";
+  if (coupon.usageExhausted) {
+    return "exhausted";
+  }
+
+  return coupon.active ? "active" : "inactive";
+}
+
+function buildCouponPayload(form) {
+  return {
+    code: form.code.trim().toUpperCase(),
+    discountPercentage: Number(form.discountPercentage || 0),
+    expiresAt: toApiDateTime(form.expiresAt),
+    usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
+    active: Boolean(form.active),
+  };
 }
 
 export default function AdminCouponsPage() {
-  const [coupons, setCoupons] = useState(mockCoupons);
+  const [coupons, setCoupons] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [actionLoading, setActionLoading] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState(null);
   const [form, setForm] = useState(blankCouponForm);
-  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadCoupons() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const response = await adminService.getCoupons(COUPON_FETCH_PARAMS);
+
+        if (mounted) {
+          setCoupons(readPageContent(response));
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(getApiErrorMessage(err));
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadCoupons();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const filteredCoupons = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
@@ -93,9 +177,33 @@ export default function AdminCouponsPage() {
     }));
   }
 
+  function updateCouponInState(updatedCoupon) {
+    setCoupons((current) =>
+      current.map((coupon) =>
+        coupon.id === updatedCoupon.id ? updatedCoupon : coupon
+      )
+    );
+  }
+
+  async function refreshCoupons() {
+    setLoading(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await adminService.getCoupons(COUPON_FETCH_PARAMS);
+      setCoupons(readPageContent(response));
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function openCreateDialog() {
     setEditingCoupon(null);
     setForm(blankCouponForm);
+    setError("");
     setDialogOpen(true);
   }
 
@@ -106,79 +214,92 @@ export default function AdminCouponsPage() {
       discountPercentage: String(coupon.discountPercentage ?? ""),
       expiresAt: toDateInput(coupon.expiresAt),
       usageLimit: String(coupon.usageLimit ?? ""),
-      timesUsed: String(coupon.timesUsed ?? 0),
-      isActive: Boolean(coupon.isActive),
+      active: Boolean(coupon.active),
     });
+    setError("");
     setDialogOpen(true);
   }
 
-  function buildPayload() {
-    return {
-      code: form.code.trim().toUpperCase(),
-      discountPercentage: Number(form.discountPercentage || 0),
-      expiresAt: form.expiresAt ? form.expiresAt.replace("T", " ") : null,
-      usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
-      timesUsed: Number(form.timesUsed || 0),
-      isActive: Boolean(form.isActive),
-    };
-  }
-
-  function handleSave(event) {
+  async function handleSave(event) {
     event.preventDefault();
-    const payload = buildPayload();
+    setSaving(true);
+    setError("");
+    setNotice("");
 
-    if (editingCoupon) {
-      setCoupons((current) =>
-        current.map((coupon) =>
-          coupon.id === editingCoupon.id ? { ...coupon, ...payload } : coupon
-        )
+    try {
+      const payload = buildCouponPayload(form);
+      const savedCoupon = editingCoupon
+        ? await adminService.updateCoupon(editingCoupon.id, payload)
+        : await adminService.createCoupon(payload);
+
+      if (editingCoupon) {
+        updateCouponInState(savedCoupon);
+      } else {
+        setCoupons((current) => [savedCoupon, ...current]);
+      }
+
+      setDialogOpen(false);
+      setNotice(
+        editingCoupon
+          ? `Đã cập nhật mã ${savedCoupon.code}.`
+          : `Đã tạo mã ${savedCoupon.code}.`
       );
-      setNotice("Đã cập nhật mã giảm giá trong phiên demo.");
-    } else {
-      setCoupons((current) => [
-        {
-          ...payload,
-          id: Date.now(),
-          createdAt: new Date().toISOString(),
-          demo: true,
-        },
-        ...current,
-      ]);
-      setNotice("Đã thêm mã giảm giá trong phiên demo.");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
     }
-
-    setDialogOpen(false);
   }
 
-  function toggleCoupon(couponId) {
-    setCoupons((current) =>
-      current.map((coupon) =>
-        coupon.id === couponId
-          ? { ...coupon, isActive: !coupon.isActive }
-          : coupon
-      )
-    );
-    setNotice("Đã đổi trạng thái mã giảm giá trong phiên demo.");
+  async function toggleCoupon(coupon) {
+    setActionLoading(`toggle:${coupon.id}`);
+    setError("");
+    setNotice("");
+
+    try {
+      const updatedCoupon = await adminService.updateCouponStatus(coupon.id, {
+        active: !coupon.active,
+      });
+      updateCouponInState(updatedCoupon);
+      setNotice(
+        `Đã ${updatedCoupon.active ? "bật" : "tắt"} mã ${updatedCoupon.code}.`
+      );
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setActionLoading("");
+    }
   }
 
-  function removeCoupon(couponId) {
-    const confirmed = window.confirm("Xóa mã giảm giá khỏi phiên demo?");
+  async function deactivateCoupon(coupon) {
+    const confirmed = window.confirm(`Vô hiệu hóa mã ${coupon.code}?`);
 
     if (!confirmed) {
       return;
     }
 
-    setCoupons((current) => current.filter((coupon) => coupon.id !== couponId));
-    setNotice("Đã xóa mã giảm giá trong phiên demo.");
+    setActionLoading(`delete:${coupon.id}`);
+    setError("");
+    setNotice("");
+
+    try {
+      const updatedCoupon = await adminService.deleteCoupon(coupon.id);
+      updateCouponInState(updatedCoupon);
+      setNotice(`Đã vô hiệu hóa mã ${updatedCoupon.code}.`);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setActionLoading("");
+    }
   }
 
   return (
     <div className="space-y-5">
       <AdminPageHeader
         title="Quản lí mã giảm giá"
-        description="Tạo và theo dõi mã giảm giá, phần trăm giảm, hạn dùng, giới hạn sử dụng và trạng thái bật tắt."
+        description="Tạo, cập nhật, bật tắt và vô hiệu hóa mã giảm giá bằng API quản trị thật."
         image="/admin-assets/coupons.svg"
-        badges={["Dữ liệu mẫu", "Form demo"]}
+        badges={["Admin API", "CRUD thật", "Coupon checkout"]}
       >
         <Button type="button" onClick={openCreateDialog}>
           <Plus className="size-4" />
@@ -190,7 +311,7 @@ export default function AdminCouponsPage() {
         <StatCard
           title="Tổng mã"
           value={coupons.length}
-          description="Đang quản lí trong demo"
+          description="Đọc từ admin API"
           icon={TicketPercent}
           tone="green"
         />
@@ -211,7 +332,7 @@ export default function AdminCouponsPage() {
         <StatCard
           title="Lượt đã dùng"
           value={formatNumber(couponStats.used)}
-          description="Tổng lượt từ dữ liệu mẫu"
+          description="Tổng lượt sử dụng"
           icon={TicketPercent}
           tone="rose"
         />
@@ -233,17 +354,34 @@ export default function AdminCouponsPage() {
           onChange={(event) => setStatusFilter(event.target.value)}
           className="h-8 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
         >
-          {couponStatusOptions.map((option) => (
+          {COUPON_STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={refreshCoupons}
+          disabled={loading}
+          className="font-bold"
+        >
+          <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
+          Làm mới
+        </Button>
       </div>
 
-      {notice && (
-        <div className="rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground">
-          {notice}
+      {(notice || error) && (
+        <div
+          className={`rounded-[8px] border px-4 py-3 text-sm font-semibold ${
+            error
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {error || notice}
         </div>
       )}
 
@@ -257,6 +395,8 @@ export default function AdminCouponsPage() {
           "Thao tác",
         ]}
         data={filteredCoupons}
+        loading={loading}
+        error={loading || coupons.length === 0 ? error : ""}
         emptyText="Không tìm thấy mã giảm giá"
         renderRow={(coupon) => {
           const status = getCouponStatus(coupon);
@@ -267,9 +407,7 @@ export default function AdminCouponsPage() {
               <TableCell className="px-4">
                 <div>
                   <p className="font-semibold tracking-normal">{coupon.code}</p>
-                  <p className="text-xs text-muted-foreground">
-                    ID #{coupon.id} {coupon.demo ? "· Demo" : ""}
-                  </p>
+                  <p className="text-xs text-muted-foreground">ID #{coupon.id}</p>
                 </div>
               </TableCell>
               <TableCell className="px-4 font-medium">
@@ -291,9 +429,13 @@ export default function AdminCouponsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => toggleCoupon(coupon.id)}
+                    disabled={Boolean(actionLoading)}
+                    onClick={() => toggleCoupon(coupon)}
                   >
-                    {coupon.isActive ? "Tắt" : "Bật"}
+                    {actionLoading === `toggle:${coupon.id}` && (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    )}
+                    {coupon.active ? "Tắt" : "Bật"}
                   </Button>
                   <Button
                     type="button"
@@ -309,11 +451,16 @@ export default function AdminCouponsPage() {
                     type="button"
                     variant="destructive"
                     size="icon-sm"
-                    title="Xóa mã"
-                    aria-label="Xóa mã"
-                    onClick={() => removeCoupon(coupon.id)}
+                    title="Vô hiệu hóa mã"
+                    aria-label="Vô hiệu hóa mã"
+                    disabled={Boolean(actionLoading)}
+                    onClick={() => deactivateCoupon(coupon)}
                   >
-                    <Trash2 className="size-4" />
+                    {actionLoading === `delete:${coupon.id}` ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
                   </Button>
                 </div>
               </TableCell>
@@ -330,7 +477,7 @@ export default function AdminCouponsPage() {
                 {editingCoupon ? "Sửa mã giảm giá" : "Thêm mã giảm giá"}
               </DialogTitle>
               <DialogDescription>
-                Thao tác này chỉ lưu trong giao diện demo.
+                Thao tác này gọi API admin và lưu trực tiếp vào database.
               </DialogDescription>
             </DialogHeader>
 
@@ -377,7 +524,7 @@ export default function AdminCouponsPage() {
                 <Input
                   id="coupon-limit"
                   type="number"
-                  min="0"
+                  min="1"
                   value={form.usageLimit}
                   onChange={(event) =>
                     updateForm("usageLimit", event.target.value)
@@ -386,25 +533,12 @@ export default function AdminCouponsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="coupon-used">Đã dùng</Label>
-                <Input
-                  id="coupon-used"
-                  type="number"
-                  min="0"
-                  value={form.timesUsed}
-                  onChange={(event) =>
-                    updateForm("timesUsed", event.target.value)
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="coupon-active">Trạng thái</Label>
                 <select
                   id="coupon-active"
-                  value={form.isActive ? "active" : "inactive"}
+                  value={form.active ? "active" : "inactive"}
                   onChange={(event) =>
-                    updateForm("isActive", event.target.value === "active")
+                    updateForm("active", event.target.value === "active")
                   }
                   className="h-8 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
                 >
@@ -418,11 +552,15 @@ export default function AdminCouponsPage() {
               <Button
                 type="button"
                 variant="outline"
+                disabled={saving}
                 onClick={() => setDialogOpen(false)}
               >
                 Hủy
               </Button>
-              <Button type="submit">Lưu demo</Button>
+              <Button type="submit" disabled={saving}>
+                {saving && <Loader2 className="size-4 animate-spin" />}
+                {editingCoupon ? "Lưu thay đổi" : "Tạo mã"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
