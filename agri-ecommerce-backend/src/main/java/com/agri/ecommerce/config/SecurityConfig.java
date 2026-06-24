@@ -60,6 +60,7 @@ public class SecurityConfig {
                         ).permitAll()
 
                         .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/uploads/**").permitAll()
 
                         .requestMatchers(
                                 "/v3/api-docs/**",
