@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
+  CheckCircle2,
   CircleDollarSign,
   Clock3,
   CreditCard,
@@ -12,7 +13,6 @@ import {
   Leaf,
   MapPin,
   Minus,
-  PackageCheck,
   Plus,
   Search,
   ShieldCheck,
@@ -33,8 +33,6 @@ import {
   getApiErrorMessage,
   getImageBackground,
 } from "@/lib/admin-utils";
-import { AdminPageHeader } from "@/components/admin/admin-page-header";
-import { StatCard } from "@/components/admin/stat-card";
 import {
   AUTH_SCOPES,
   clearAuthSession,
@@ -339,7 +337,7 @@ function mapCartResponseToItems(cartResponse) {
   });
 }
 
-function ProductCard({ product, onAddToCart, onViewProduct }) {
+function ProductCard({ product, onAddToCart, onViewProduct, recentlyAdded }) {
   const salePercent = Math.max(
     0,
     Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
@@ -421,10 +419,18 @@ function ProductCard({ product, onAddToCart, onViewProduct }) {
             type="button"
             disabled={product.disabled}
             onClick={() => onAddToCart(product)}
-            className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500"
+            className={`inline-flex h-10 items-center gap-2 rounded-[8px] px-3 text-sm font-bold text-white transition disabled:bg-slate-200 disabled:text-slate-500 ${
+              recentlyAdded
+                ? "scale-[1.03] bg-emerald-600 shadow-[0_0_0_4px_rgba(16,185,129,0.18)]"
+                : "bg-slate-950 hover:bg-emerald-700"
+            }`}
           >
-            <ShoppingBasket className="size-4" />
-            Thêm
+            {recentlyAdded ? (
+              <CheckCircle2 className="size-4" />
+            ) : (
+              <ShoppingBasket className="size-4" />
+            )}
+            {recentlyAdded ? "Đã thêm" : "Thêm"}
           </button>
         </div>
       </div>
@@ -636,7 +642,7 @@ function CartDrawer({
   );
 }
 
-function QuickView({ product, onClose, onAddToCart }) {
+function QuickView({ product, onClose, onAddToCart, recentlyAdded }) {
   if (!product) {
     return null;
   }
@@ -724,10 +730,18 @@ function QuickView({ product, onClose, onAddToCart }) {
               type="button"
               disabled={product.disabled}
               onClick={() => onAddToCart(product)}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500"
+              className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] px-4 text-sm font-black text-white transition disabled:bg-slate-200 disabled:text-slate-500 ${
+                recentlyAdded
+                  ? "scale-[1.01] bg-emerald-600 shadow-[0_0_0_4px_rgba(16,185,129,0.18)]"
+                  : "bg-slate-950 hover:bg-emerald-700"
+              }`}
             >
-              <ShoppingBasket className="size-5" />
-              Thêm vào giỏ
+              {recentlyAdded ? (
+                <CheckCircle2 className="size-5" />
+              ) : (
+                <ShoppingBasket className="size-5" />
+              )}
+              {recentlyAdded ? "Đã thêm vào giỏ" : "Thêm vào giỏ"}
             </button>
           </div>
         </div>
@@ -758,6 +772,11 @@ export default function Home() {
   const [cartNotice, setCartNotice] = useState("");
   const [cartError, setCartError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [hoveredCategorySlug, setHoveredCategorySlug] = useState("");
+  const [recentlyAddedProductId, setRecentlyAddedProductId] = useState("");
+  const [cartPulse, setCartPulse] = useState(false);
+  const [catalogPreviewProducts, setCatalogPreviewProducts] =
+    useState(fallbackProducts);
 
   useEffect(() => {
     let ignore = false;
@@ -882,6 +901,51 @@ export default function Home() {
     };
   }, [filters]);
 
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadPreviewProducts() {
+      try {
+        const response = await marketplaceService.getProducts({
+          page: 0,
+          size: 24,
+          status: "in_stock",
+          sort: "createdAt,desc",
+        });
+
+        if (ignore) {
+          return;
+        }
+
+        const content = Array.isArray(response?.content) ? response.content : [];
+        setCatalogPreviewProducts(content.length > 0 ? content : fallbackProducts);
+      } catch {
+        if (!ignore) {
+          setCatalogPreviewProducts(fallbackProducts);
+        }
+      }
+    }
+
+    loadPreviewProducts();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!recentlyAddedProductId && !cartPulse) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setRecentlyAddedProductId("");
+      setCartPulse(false);
+    }, 1100);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [cartPulse, recentlyAddedProductId]);
+
   const categoryOptions = useMemo(
     () => [
       {
@@ -912,6 +976,14 @@ export default function Home() {
     [productCards]
   );
 
+  const previewProductCards = useMemo(
+    () =>
+      catalogPreviewProducts.map((product, index) =>
+        normalizeProduct(product, index)
+      ),
+    [catalogPreviewProducts]
+  );
+
   const cartCount = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
     [cart]
@@ -928,6 +1000,18 @@ export default function Home() {
   const activeCategoryName =
     categoryOptions.find((category) => category.slug === filters.categorySlug)
       ?.name || "Tất cả";
+
+  const previewCategorySlug = hoveredCategorySlug || filters.categorySlug;
+  const previewCategoryName =
+    categoryOptions.find((category) => category.slug === previewCategorySlug)
+      ?.name || activeCategoryName;
+  const categoryPreviewProducts = previewProductCards
+    .filter(
+      (product) =>
+        previewCategorySlug === ALL_CATEGORY ||
+        product.categorySlug === previewCategorySlug
+    )
+    .slice(0, 4);
 
   const marketStats = [
     {
@@ -970,6 +1054,11 @@ export default function Home() {
     });
   }
 
+  function showAddToCartFeedback(product) {
+    setRecentlyAddedProductId(String(product.id));
+    setCartPulse(true);
+  }
+
   async function addToCart(product) {
     setCartNotice("");
     setCartError("");
@@ -994,7 +1083,7 @@ export default function Home() {
         });
         setCart(mapCartResponseToItems(response));
         setCartNotice("Đã thêm sản phẩm vào giỏ hàng của bạn.");
-        router.push("/cart");
+        showAddToCartFeedback(product);
       } catch (error) {
         setCartError(error?.message || "Không thể thêm sản phẩm vào giỏ.");
         window.alert(error?.message || "Không thể thêm sản phẩm vào giỏ.");
@@ -1019,7 +1108,7 @@ export default function Home() {
       return [...current, { ...product, quantity: 1 }];
     });
     setCartNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Đăng nhập để đặt hàng.");
-    router.push("/cart");
+    showAddToCartFeedback(product);
   }
 
   async function increaseCartItem(id) {
@@ -1167,7 +1256,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f6faef] text-slate-950">
       <header className="sticky top-0 z-40 border-b border-emerald-900/10 bg-white/88 backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 w-full max-w-[1480px] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-16 w-full max-w-[1480px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:flex-nowrap lg:gap-4 lg:px-8">
           <Link href="/" className="flex min-w-0 items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-[8px] bg-emerald-600 text-white shadow-sm">
               <Leaf className="size-5" />
@@ -1182,14 +1271,23 @@ export default function Home() {
             </div>
           </Link>
 
-          <div className="relative hidden flex-1 lg:block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={filters.keyword}
-              onChange={(event) => updateFilter("keyword", event.target.value)}
-              className="h-10 w-full rounded-[8px] border border-emerald-100 bg-emerald-50/70 pl-9 pr-4 text-sm font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-              placeholder="Tìm rau củ, trái cây, gạo sạch..."
-            />
+          <div className="order-last grid w-full gap-2 sm:grid-cols-[1fr_auto] lg:order-none lg:flex-1">
+            <div className="relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={filters.keyword}
+                onChange={(event) => updateFilter("keyword", event.target.value)}
+                className="h-10 w-full rounded-[8px] border border-emerald-100 bg-emerald-50/70 pl-9 pr-4 text-sm font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                placeholder="Tìm rau củ, trái cây, gạo sạch..."
+              />
+            </div>
+            <a
+              href="#products"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700"
+            >
+              <Search className="size-4" />
+              Tìm
+            </a>
           </div>
 
           <nav className="ml-auto hidden items-center gap-6 text-sm font-bold text-slate-600 md:flex">
@@ -1206,13 +1304,21 @@ export default function Home() {
 
           <Link
             href="/cart"
-            className="relative inline-flex size-10 shrink-0 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+            className={`relative inline-flex size-10 shrink-0 items-center justify-center rounded-[8px] border bg-white text-emerald-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 ${
+              cartPulse
+                ? "scale-110 border-emerald-400 ring-4 ring-emerald-100"
+                : "border-emerald-100"
+            }`}
             aria-label="Xem giỏ hàng"
             title="Xem giỏ hàng"
           >
-            <ShoppingBasket className="size-5" />
+            <ShoppingBasket className={`size-5 ${cartPulse ? "animate-bounce" : ""}`} />
             {cartCount > 0 && (
-              <span className="absolute -right-2 -top-2 min-w-5 rounded-full bg-rose-500 px-1 text-center text-xs font-black leading-5 text-white">
+              <span
+                className={`absolute -right-2 -top-2 min-w-5 rounded-full bg-rose-500 px-1 text-center text-xs font-black leading-5 text-white ${
+                  cartPulse ? "animate-pulse" : ""
+                }`}
+              >
                 {cartCount}
               </span>
             )}
@@ -1229,45 +1335,65 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mx-auto w-full max-w-[1480px] space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-        <AdminPageHeader
-          title="AgriMarket"
-          description="Trang mua nông sản cho khách hàng với danh mục rõ ràng, giá minh bạch, tồn kho cập nhật và giỏ hàng sẵn sàng cho đơn giao trong ngày."
-          image="/market-assets/fresh-market-hero.png"
-          badges={["Marketplace", "Public API", "Giỏ hàng client"]}
-        >
-          <div className="grid w-full max-w-3xl gap-2 rounded-[8px] border border-emerald-100 bg-white p-2 shadow-[0_12px_30px_rgba(15,61,38,0.05)] sm:grid-cols-[1fr_auto]">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={filters.keyword}
-                onChange={(event) => updateFilter("keyword", event.target.value)}
-                className="h-11 w-full rounded-[8px] border border-emerald-100 bg-emerald-50/70 pl-10 pr-4 text-sm font-semibold outline-none transition placeholder:text-muted-foreground focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                placeholder="Bạn muốn mua gì hôm nay?"
-              />
+      <section className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-6 lg:px-8">
+        <div className="relative min-h-[360px] overflow-hidden rounded-[8px] border border-emerald-100 bg-emerald-950 shadow-[0_18px_55px_rgba(15,61,38,0.08)]">
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: 'url("/market-assets/fresh-market-hero.png")' }}
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,47,46,0.92)_0%,rgba(6,78,59,0.74)_46%,rgba(255,255,255,0.2)_100%)]" />
+          <div className="relative grid min-h-[360px] gap-6 p-5 text-white sm:p-7 lg:grid-cols-[1fr_520px] lg:items-end lg:p-8">
+            <div className="max-w-3xl self-center">
+              <div className="flex flex-wrap gap-2">
+                {["Marketplace", "Public API", "Giỏ hàng client"].map((badge) => (
+                  <span
+                    key={badge}
+                    className="rounded-[8px] border border-white/30 bg-white/16 px-3 py-1 text-xs font-bold text-white backdrop-blur"
+                  >
+                    {badge}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-8 text-sm font-black uppercase text-emerald-100">
+                Vận hành nhanh trong ngày
+              </p>
+              <h1 className="mt-3 max-w-2xl text-4xl font-black tracking-normal text-white sm:text-5xl">
+                AgriMarket
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-white/86">
+                Trang mua nông sản cho khách hàng với danh mục rõ ràng, giá minh bạch, tồn kho cập nhật và giỏ hàng sẵn sàng cho đơn giao trong ngày.
+              </p>
             </div>
-            <a
-              href="#products"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-[8px] bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
-            >
-              <Search className="size-4" />
-              Tìm nông sản
-            </a>
-          </div>
-        </AdminPageHeader>
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {marketStats.map((item) => (
-            <StatCard
-              key={item.label}
-              title={item.label}
-              value={item.value}
-              description={item.description}
-              icon={item.icon}
-              tone={item.tone}
-            />
-          ))}
-        </section>
+            <div className="grid gap-2 sm:grid-cols-3 lg:self-end">
+              {marketStats.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <div
+                    key={item.label}
+                    className="rounded-[8px] border border-white/28 bg-white/90 p-3 text-slate-950 shadow-sm backdrop-blur"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700">
+                        <Icon className="size-4" />
+                      </span>
+                      <span className="text-xl font-black text-emerald-700">
+                        {item.value}
+                      </span>
+                    </div>
+                    <p className="mt-2 line-clamp-1 text-xs font-black text-slate-800">
+                      {item.label}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                      {item.description}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section
@@ -1289,24 +1415,32 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6"
+          onMouseLeave={() => setHoveredCategorySlug("")}
+        >
           {categoryOptions.map((category, index) => {
             const active = filters.categorySlug === category.slug;
+            const previewing = previewCategorySlug === category.slug;
 
             return (
               <button
                 key={category.id}
                 type="button"
+                onFocus={() => setHoveredCategorySlug(category.slug)}
+                onMouseEnter={() => setHoveredCategorySlug(category.slug)}
                 onClick={() => updateFilter("categorySlug", category.slug)}
-                className={`min-h-32 rounded-[8px] border p-4 text-left transition ${
+                className={`min-h-24 rounded-[8px] border p-3 text-left transition ${
                   active
                     ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_18px_45px_rgba(5,150,105,0.24)]"
-                    : "border-emerald-100 bg-white text-slate-700 shadow-[0_16px_42px_rgba(15,61,38,0.07)] hover:border-emerald-200 hover:text-emerald-800"
+                    : previewing
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-900 shadow-[0_12px_32px_rgba(15,61,38,0.08)]"
+                      : "border-emerald-100 bg-white text-slate-700 shadow-[0_10px_28px_rgba(15,61,38,0.05)] hover:border-emerald-200 hover:text-emerald-800"
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-2">
                   <div
-                    className={`flex size-12 items-center justify-center overflow-hidden rounded-[8px] bg-cover bg-center ${
+                    className={`flex size-10 items-center justify-center overflow-hidden rounded-[8px] bg-cover bg-center ${
                       active
                         ? "bg-white/15 text-white"
                         : index % 3 === 0
@@ -1321,13 +1455,15 @@ export default function Home() {
                         : undefined
                     }
                   >
-                    {!category.image && <Leaf className="size-5" />}
+                    {!category.image && <Leaf className="size-4" />}
                   </div>
-                  <ArrowRight className="size-4 opacity-70" />
+                  <ArrowRight className="size-3.5 opacity-70" />
                 </div>
-                <h3 className="mt-4 text-lg font-black">{category.name}</h3>
+                <h3 className="mt-3 line-clamp-1 text-base font-black">
+                  {category.name}
+                </h3>
                 <p
-                  className={`mt-2 line-clamp-2 text-sm leading-5 ${
+                  className={`mt-1 line-clamp-1 text-xs leading-5 ${
                     active ? "text-white/80" : "text-slate-500"
                   }`}
                 >
@@ -1336,6 +1472,58 @@ export default function Home() {
               </button>
             );
           })}
+        </div>
+
+        <div className="rounded-[8px] border border-emerald-100 bg-white p-3 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase text-emerald-700">
+                Sản phẩm trong danh mục
+              </p>
+              <h3 className="text-lg font-black text-slate-950">
+                {previewCategoryName}
+              </h3>
+            </div>
+            <span className="text-xs font-bold text-slate-500">
+              {categoryPreviewProducts.length} món
+            </span>
+          </div>
+
+          {categoryPreviewProducts.length > 0 ? (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {categoryPreviewProducts.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => setSelectedProduct(product)}
+                  className="grid grid-cols-[64px_1fr] gap-3 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-2 text-left transition hover:border-emerald-200 hover:bg-emerald-50"
+                >
+                  <span
+                    className="h-16 rounded-[8px] bg-cover bg-center"
+                    style={{
+                      backgroundImage: product.imageBackground,
+                      backgroundPosition: product.imagePosition,
+                    }}
+                  />
+                  <span className="min-w-0 self-center">
+                    <span className="block line-clamp-1 text-sm font-black text-slate-950">
+                      {product.name}
+                    </span>
+                    <span className="mt-1 block line-clamp-1 text-xs font-semibold text-slate-500">
+                      {product.categoryName}
+                    </span>
+                    <span className="mt-1 block text-sm font-black text-emerald-700">
+                      {formatCurrency(product.price)}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[8px] border border-dashed border-emerald-200 bg-emerald-50/60 px-4 py-5 text-sm font-semibold text-emerald-800">
+              Chưa có sản phẩm hiển thị cho danh mục này.
+            </div>
+          )}
         </div>
       </section>
 
@@ -1466,6 +1654,7 @@ export default function Home() {
                 product={product}
                 onAddToCart={addToCart}
                 onViewProduct={setSelectedProduct}
+                recentlyAdded={recentlyAddedProductId === String(product.id)}
               />
             ))}
           </div>
@@ -1581,6 +1770,11 @@ export default function Home() {
         product={selectedProduct}
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
+        recentlyAdded={
+          selectedProduct
+            ? recentlyAddedProductId === String(selectedProduct.id)
+            : false
+        }
       />
     </main>
   );

@@ -8,6 +8,11 @@ export const orderService = {
     return unwrapApiData(response);
   },
 
+  getOrder: async (orderId) => {
+    const response = await axiosClient.get(`/customer/orders/${orderId}`);
+    return unwrapApiData(response);
+  },
+
   previewCheckout: async (payload) => {
     const response = await axiosClient.post(
       "/customer/orders/checkout/preview",
