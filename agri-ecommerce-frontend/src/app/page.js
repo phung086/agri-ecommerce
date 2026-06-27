@@ -1753,13 +1753,20 @@ export default function Home() {
       </section>
 
       <section className="mx-auto grid w-full max-w-[1480px] gap-4 px-4 py-5 sm:px-6 lg:grid-cols-3 lg:px-8">
-        <div className="rounded-[8px] bg-emerald-600 p-5 text-white">
-          <Sparkles className="size-7" />
+        <Link
+          href="/promotions"
+          id="promo-card-seasonal"
+          className="group rounded-[8px] bg-emerald-600 p-5 text-white transition duration-200 hover:bg-emerald-700 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer block"
+        >
+          <Sparkles className="size-7 transition group-hover:scale-110" />
           <h3 className="mt-5 text-xl font-black">Ưu đãi theo mùa</h3>
           <p className="mt-2 text-sm leading-6 text-white/85">
             Combo rau củ được cập nhật theo ngày để giảm lãng phí và giữ giá tốt.
           </p>
-        </div>
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-white/70 transition group-hover:text-white">
+            Xem tất cả ưu đãi →
+          </span>
+        </Link>
         <div className="rounded-[8px] bg-amber-400 p-5 text-amber-950">
           <CircleDollarSign className="size-7" />
           <h3 className="mt-5 text-xl font-black">Phí giao tiêu chuẩn 25.000đ</h3>
