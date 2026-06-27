@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,4 +44,32 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
 
     @Query("select orderEntity.status, count(orderEntity.id) from OrderEntity orderEntity group by orderEntity.status")
     List<Object[]> countOrdersByStatus();
+
+    @Query("""
+            select orderEntity.user.id, count(orderEntity.id)
+            from OrderEntity orderEntity
+            where orderEntity.user.id in :customerIds
+            group by orderEntity.user.id
+            """)
+    List<Object[]> countOrdersByCustomerIds(@Param("customerIds") Collection<Long> customerIds);
+
+    @Query("""
+            select orderEntity.user.id, count(orderEntity.id)
+            from OrderEntity orderEntity
+            where orderEntity.user.id in :customerIds
+              and orderEntity.status in :statuses
+            group by orderEntity.user.id
+            """)
+    List<Object[]> countOrdersByCustomerIdsAndStatuses(
+            @Param("customerIds") Collection<Long> customerIds,
+            @Param("statuses") Collection<String> statuses
+    );
+
+    @Query("""
+            select orderEntity.user.id, max(orderEntity.createdAt)
+            from OrderEntity orderEntity
+            where orderEntity.user.id in :customerIds
+            group by orderEntity.user.id
+            """)
+    List<Object[]> findLatestOrderCreatedAtByCustomerIds(@Param("customerIds") Collection<Long> customerIds);
 }

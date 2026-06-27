@@ -107,4 +107,17 @@ public interface PaymentRepository extends JpaRepository<PaymentEntity, Long>, J
             @Param("fromDate") LocalDateTime fromDate,
             @Param("toDate") LocalDateTime toDate
     );
+
+    @Query("""
+            select orderEntity.user.id, coalesce(sum(payment.amount), 0)
+            from PaymentEntity payment
+            join payment.order orderEntity
+            where payment.status = :status
+              and orderEntity.user.id in :customerIds
+            group by orderEntity.user.id
+            """)
+    List<Object[]> sumAmountByStatusGroupByCustomerIds(
+            @Param("status") String status,
+            @Param("customerIds") Collection<Long> customerIds
+    );
 }

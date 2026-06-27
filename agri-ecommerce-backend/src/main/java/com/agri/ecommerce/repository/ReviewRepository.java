@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface ReviewRepository extends JpaRepository<ReviewEntity, Long>, JpaSpecificationExecutor<ReviewEntity> {
@@ -41,4 +43,14 @@ public interface ReviewRepository extends JpaRepository<ReviewEntity, Long>, Jpa
     Double getAverageRating();
 
     long countByProduct_Id(Long productId);
+
+    long countByUser_Id(Long userId);
+
+    @Query("""
+            select review.user.id, count(review.id)
+            from ReviewEntity review
+            where review.user.id in :userIds
+            group by review.user.id
+            """)
+    List<Object[]> countReviewsByUserIds(@Param("userIds") Collection<Long> userIds);
 }
