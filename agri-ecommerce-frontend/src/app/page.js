@@ -7,7 +7,6 @@ import {
   ArrowRight,
   CheckCircle2,
   CircleDollarSign,
-  Clock3,
   CreditCard,
   Heart,
   Leaf,
@@ -15,7 +14,6 @@ import {
   Minus,
   Plus,
   Search,
-  ShieldCheck,
   ShoppingBasket,
   SlidersHorizontal,
   Sparkles,
@@ -41,8 +39,10 @@ import {
 } from "@/lib/auth-storage";
 import { cartService } from "@/services/cart.service";
 import { marketplaceService } from "@/services/marketplace.service";
+import { reviewService } from "@/services/review.service";
 
 const ALL_CATEGORY = "all";
+const PRODUCTS_PAGE_SIZE = 12;
 
 const fallbackCategories = [
   {
@@ -287,8 +287,8 @@ function normalizeProduct(product, index = 0) {
         : Math.round(price * (1.12 + (index % 3) * 0.03)),
     unit: product.unit || "sản phẩm",
     stock,
-    rating: (4.7 + (index % 3) * 0.1).toFixed(1),
-    sold: 180 + index * 73,
+    averageRating: 0,
+    totalReviews: 0,
     badge:
       product.badge ||
       (stock > 0 && stock <= 15 ? "Sắp hết" : index % 2 ? "Tươi mới" : "Đáng mua"),
@@ -382,10 +382,12 @@ function ProductCard({ product, onAddToCart, onViewProduct, recentlyAdded }) {
               {product.name}
             </button>
           </div>
-          <div className="flex shrink-0 items-center gap-1 rounded-[8px] bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
-            <Star className="size-3 fill-amber-400 text-amber-400" />
-            {product.rating}
-          </div>
+          {product.totalReviews > 0 && (
+            <div className="flex shrink-0 items-center gap-1 rounded-[8px] bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+              <Star className="size-3 fill-amber-400 text-amber-400" />
+              {Number(product.averageRating || 0).toFixed(1)}
+            </div>
+          )}
         </div>
 
         <p className="line-clamp-2 min-h-10 text-sm leading-5 text-slate-500">
@@ -642,114 +644,6 @@ function CartDrawer({
   );
 }
 
-function QuickView({ product, onClose, onAddToCart, recentlyAdded }) {
-  if (!product) {
-    return null;
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center px-4 py-6">
-      <button
-        type="button"
-        aria-label="Đóng chi tiết sản phẩm"
-        onClick={onClose}
-        className="absolute inset-0 bg-slate-950/35 backdrop-blur-sm"
-      />
-      <article className="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[8px] bg-white shadow-2xl">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-3 top-3 z-10 inline-flex size-10 items-center justify-center rounded-[8px] bg-white/90 text-slate-600 shadow-sm transition hover:bg-white hover:text-slate-950"
-        >
-          <X className="size-5" />
-        </button>
-        <div className="grid lg:grid-cols-[1.05fr_0.95fr]">
-          <div
-            className="min-h-[320px] bg-cover bg-center"
-            style={{
-              backgroundImage: product.imageBackground,
-              backgroundPosition: product.imagePosition,
-            }}
-          />
-          <div className="space-y-5 p-6">
-            <div>
-              <p className="text-sm font-bold uppercase text-emerald-700">
-                {product.categoryName}
-              </p>
-              <h2 className="mt-2 text-3xl font-black tracking-normal text-slate-950">
-                {product.name}
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-slate-500">
-                {product.description}
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[8px] border border-emerald-100 bg-emerald-50 p-3">
-                <p className="text-xs font-bold uppercase text-emerald-700">
-                  Giá
-                </p>
-                <p className="mt-1 font-black text-slate-950">
-                  {formatCurrency(product.price)}
-                </p>
-              </div>
-              <div className="rounded-[8px] border border-amber-100 bg-amber-50 p-3">
-                <p className="text-xs font-bold uppercase text-amber-700">
-                  Đánh giá
-                </p>
-                <p className="mt-1 font-black text-slate-950">
-                  {product.rating}/5
-                </p>
-              </div>
-              <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3">
-                <p className="text-xs font-bold uppercase text-sky-700">
-                  Tồn kho
-                </p>
-                <p className="mt-1 font-black text-slate-950">
-                  {formatNumber(product.stock)}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm font-semibold text-slate-600">
-              <div className="flex items-center gap-2">
-                <MapPin className="size-4 text-emerald-600" />
-                Vùng cung ứng: {product.origin}
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock3 className="size-4 text-emerald-600" />
-                Ưu tiên giao trong ngày cho đơn nội thành
-              </div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="size-4 text-emerald-600" />
-                Kiểm tra chất lượng trước khi đóng gói
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={product.disabled}
-              onClick={() => onAddToCart(product)}
-              className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] px-4 text-sm font-black text-white transition disabled:bg-slate-200 disabled:text-slate-500 ${
-                recentlyAdded
-                  ? "scale-[1.01] bg-emerald-600 shadow-[0_0_0_4px_rgba(16,185,129,0.18)]"
-                  : "bg-slate-950 hover:bg-emerald-700"
-              }`}
-            >
-              {recentlyAdded ? (
-                <CheckCircle2 className="size-5" />
-              ) : (
-                <ShoppingBasket className="size-5" />
-              )}
-              {recentlyAdded ? "Đã thêm vào giỏ" : "Thêm vào giỏ"}
-            </button>
-          </div>
-        </div>
-      </article>
-    </div>
-  );
-}
-
 export default function Home() {
   const router = useRouter();
   const [filters, setFilters] = useState({
@@ -762,6 +656,8 @@ export default function Home() {
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState(fallbackProducts);
   const [totalProducts, setTotalProducts] = useState(fallbackProducts.length);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [reviewSummaries, setReviewSummaries] = useState({});
   const [productsLoading, setProductsLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
@@ -771,7 +667,6 @@ export default function Home() {
   const [cartUpdating, setCartUpdating] = useState(false);
   const [cartNotice, setCartNotice] = useState("");
   const [cartError, setCartError] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState(null);
   const [hoveredCategorySlug, setHoveredCategorySlug] = useState("");
   const [recentlyAddedProductId, setRecentlyAddedProductId] = useState("");
   const [cartPulse, setCartPulse] = useState(false);
@@ -856,8 +751,8 @@ export default function Home() {
 
       try {
         const params = {
-          page: 0,
-          size: 12,
+          page: currentPage,
+          size: PRODUCTS_PAGE_SIZE,
           status: "in_stock",
           sort: filters.sort,
           ...(filters.keyword.trim() ? { keyword: filters.keyword.trim() } : {}),
@@ -884,7 +779,8 @@ export default function Home() {
         }
 
         const fallback = applyFallbackFilters(fallbackProducts, filters);
-        setProducts(fallback);
+        const pageStart = currentPage * PRODUCTS_PAGE_SIZE;
+        setProducts(fallback.slice(pageStart, pageStart + PRODUCTS_PAGE_SIZE));
         setTotalProducts(fallback.length);
         setUsingFallback(true);
         setApiError(getApiErrorMessage(error));
@@ -899,7 +795,7 @@ export default function Home() {
       ignore = true;
       window.clearTimeout(timeoutId);
     };
-  }, [filters]);
+  }, [currentPage, filters]);
 
   useEffect(() => {
     let ignore = false;
@@ -971,9 +867,73 @@ export default function Home() {
     [products]
   );
 
+  useEffect(() => {
+    let ignore = false;
+    const slugs = Array.from(
+      new Set(productCards.map((product) => product.slug).filter(Boolean))
+    );
+
+    if (slugs.length === 0) {
+      return undefined;
+    }
+
+    async function loadReviewSummaries() {
+      const entries = await Promise.all(
+        slugs.map(async (slug) => {
+          try {
+            const response = await reviewService.getProductReviews(slug, {
+              page: 0,
+              size: 1,
+              sort: "createdAt,desc",
+            });
+            const summary = response?.summary || {};
+
+            return [
+              slug,
+              {
+                averageRating: Number(summary.averageRating || 0),
+                totalReviews: Number(summary.totalReviews || 0),
+              },
+            ];
+          } catch {
+            return [
+              slug,
+              {
+                averageRating: 0,
+                totalReviews: 0,
+              },
+            ];
+          }
+        })
+      );
+
+      if (!ignore) {
+        setReviewSummaries((current) => ({
+          ...current,
+          ...Object.fromEntries(entries),
+        }));
+      }
+    }
+
+    loadReviewSummaries();
+
+    return () => {
+      ignore = true;
+    };
+  }, [productCards]);
+
+  const productCardsWithReviews = useMemo(
+    () =>
+      productCards.map((product) => ({
+        ...product,
+        ...(reviewSummaries[product.slug] || {}),
+      })),
+    [productCards, reviewSummaries]
+  );
+
   const featuredProducts = useMemo(
-    () => productCards.filter((product) => !product.disabled).slice(0, 4),
-    [productCards]
+    () => productCardsWithReviews.filter((product) => !product.disabled).slice(0, 4),
+    [productCardsWithReviews]
   );
 
   const previewProductCards = useMemo(
@@ -996,6 +956,17 @@ export default function Home() {
 
   const shippingFee = subtotal === 0 ? 0 : 25000;
   const grandTotal = subtotal + shippingFee;
+  const totalProductPages = Math.max(
+    1,
+    Math.ceil(Number(totalProducts || 0) / PRODUCTS_PAGE_SIZE)
+  );
+  const paginationPages = useMemo(() => {
+    const visibleCount = Math.min(totalProductPages, 5);
+    const maxStart = Math.max(totalProductPages - visibleCount, 0);
+    const start = Math.min(Math.max(currentPage - 2, 0), maxStart);
+
+    return Array.from({ length: visibleCount }, (_, index) => start + index);
+  }, [currentPage, totalProductPages]);
 
   const activeCategoryName =
     categoryOptions.find((category) => category.slug === filters.categorySlug)
@@ -1038,6 +1009,7 @@ export default function Home() {
   ];
 
   function updateFilter(key, value) {
+    setCurrentPage(0);
     setFilters((current) => ({
       ...current,
       [key]: value,
@@ -1045,6 +1017,7 @@ export default function Home() {
   }
 
   function resetFilters() {
+    setCurrentPage(0);
     setFilters({
       keyword: "",
       categorySlug: ALL_CATEGORY,
@@ -1052,6 +1025,14 @@ export default function Home() {
       maxPrice: "",
       sort: "createdAt,desc",
     });
+  }
+
+  function openProductDetail(product) {
+    if (!product?.slug) {
+      return;
+    }
+
+    router.push(`/products/${encodeURIComponent(product.slug)}`);
   }
 
   function showAddToCartFeedback(product) {
@@ -1495,7 +1476,7 @@ export default function Home() {
                 <button
                   key={product.id}
                   type="button"
-                  onClick={() => setSelectedProduct(product)}
+                  onClick={() => openProductDetail(product)}
                   className="grid grid-cols-[64px_1fr] gap-3 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-2 text-left transition hover:border-emerald-200 hover:bg-emerald-50"
                 >
                   <span
@@ -1547,7 +1528,7 @@ export default function Home() {
                 <button
                   key={product.id}
                   type="button"
-                  onClick={() => setSelectedProduct(product)}
+                  onClick={() => openProductDetail(product)}
                   className="grid grid-cols-[92px_1fr] gap-3 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50"
                 >
                   <span
@@ -1646,18 +1627,74 @@ export default function Home() {
               <ProductSkeleton key={index} />
             ))}
           </div>
-        ) : productCards.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {productCards.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onAddToCart={addToCart}
-                onViewProduct={setSelectedProduct}
-                recentlyAdded={recentlyAddedProductId === String(product.id)}
-              />
-            ))}
-          </div>
+        ) : productCardsWithReviews.length > 0 ? (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {productCardsWithReviews.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onAddToCart={addToCart}
+                  onViewProduct={openProductDetail}
+                  recentlyAdded={recentlyAddedProductId === String(product.id)}
+                />
+              ))}
+            </div>
+
+            {totalProductPages > 1 && (
+              <div className="flex flex-col gap-3 rounded-[8px] border border-emerald-100 bg-white p-3 shadow-[0_12px_30px_rgba(15,61,38,0.05)] sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-bold text-slate-500">
+                  Trang {formatNumber(currentPage + 1)} / {formatNumber(totalProductPages)}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((page) => Math.max(page - 1, 0))}
+                    disabled={currentPage === 0 || productsLoading}
+                    className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-black text-emerald-800 transition hover:border-emerald-200 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-300"
+                  >
+                    <ArrowRight className="size-4 rotate-180" />
+                    Trước
+                  </button>
+
+                  {paginationPages.map((pageIndex) => {
+                    const active = pageIndex === currentPage;
+
+                    return (
+                      <button
+                        key={pageIndex}
+                        type="button"
+                        onClick={() => setCurrentPage(pageIndex)}
+                        disabled={productsLoading}
+                        className={`inline-flex size-10 items-center justify-center rounded-[8px] text-sm font-black transition ${
+                          active
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "border border-emerald-100 bg-white text-emerald-800 hover:border-emerald-200 hover:bg-emerald-50"
+                        }`}
+                        aria-label={`Trang ${pageIndex + 1}`}
+                      >
+                        {pageIndex + 1}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCurrentPage((page) =>
+                        Math.min(page + 1, totalProductPages - 1)
+                      )
+                    }
+                    disabled={currentPage >= totalProductPages - 1 || productsLoading}
+                    className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-black text-emerald-800 transition hover:border-emerald-200 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-300"
+                  >
+                    Sau
+                    <ArrowRight className="size-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="rounded-[8px] border border-emerald-100 bg-white p-10 text-center shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
             <div className="mx-auto flex size-14 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700">
@@ -1764,17 +1801,6 @@ export default function Home() {
         onRemove={removeCartItem}
         onClear={clearCart}
         onCheckout={handleCheckout}
-      />
-
-      <QuickView
-        product={selectedProduct}
-        onClose={() => setSelectedProduct(null)}
-        onAddToCart={addToCart}
-        recentlyAdded={
-          selectedProduct
-            ? recentlyAddedProductId === String(selectedProduct.id)
-            : false
-        }
       />
     </main>
   );
