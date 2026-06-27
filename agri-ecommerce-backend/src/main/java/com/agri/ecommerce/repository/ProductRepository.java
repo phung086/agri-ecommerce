@@ -40,6 +40,37 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
             select product
             from ProductEntity product
             join product.category category
+            where product.id <> :productId
+              and category.id = :categoryId
+              and product.status in :statuses
+            order by product.status asc, product.stock desc, product.createdAt desc, product.id desc
+            """)
+    List<ProductEntity> findRelatedProductsByCategory(
+            @Param("productId") Long productId,
+            @Param("categoryId") Long categoryId,
+            @Param("statuses") Collection<String> statuses,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = "category")
+    @Query("""
+            select product
+            from ProductEntity product
+            where product.id <> :productId
+              and product.status in :statuses
+            order by product.status asc, product.stock desc, product.createdAt desc, product.id desc
+            """)
+    List<ProductEntity> findPublicRelatedFallbackProducts(
+            @Param("productId") Long productId,
+            @Param("statuses") Collection<String> statuses,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = "category")
+    @Query("""
+            select product
+            from ProductEntity product
+            join product.category category
             where product.status = :status
               and (:keyword is null
                    or lower(product.name) like lower(concat('%', :keyword, '%'))

@@ -139,7 +139,23 @@ public class PublicProductController {
         );
     }
 
-    @Operation(summary = "Lấy chi tiết sản phẩm theo slug")
+    @Operation(summary = "Get related products for product detail page")
+    @GetMapping("/{slug}/related")
+    public ResponseEntity<ApiResponse<List<ProductResponse>>> getRelatedProducts(
+            @Parameter(description = "Product slug", example = "cai-ngot-1762274283")
+            @PathVariable String slug,
+
+            @Parameter(description = "Maximum products to return", example = "8")
+            @RequestParam(defaultValue = "8") Integer limit
+    ) {
+        List<ProductResponse> response = productService.getRelatedProducts(slug, limit);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Related products loaded successfully", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Get product detail by slug")
     @GetMapping("/{slug}")
     public ResponseEntity<ApiResponse<ProductResponse>> getProductBySlug(
             @Parameter(description = "Slug sản phẩm", example = "cai-ngot-1762274283")

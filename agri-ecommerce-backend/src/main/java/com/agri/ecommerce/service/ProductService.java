@@ -44,6 +44,8 @@ public interface ProductService {
 
     ProductResponse getProductBySlug(String slug);
 
+    List<ProductResponse> getRelatedProducts(String slug, Integer limit);
+
     PageResponse<ProductResponse> getAdminProducts(
             String keyword,
             String categorySlug,

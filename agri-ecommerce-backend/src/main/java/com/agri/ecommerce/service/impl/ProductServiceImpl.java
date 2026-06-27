@@ -20,6 +20,7 @@ import com.agri.ecommerce.mapper.ProductMapper;
 import com.agri.ecommerce.repository.CategoryRepository;
 import com.agri.ecommerce.repository.ProductImageRepository;
 import com.agri.ecommerce.repository.ProductRepository;
+import com.agri.ecommerce.repository.ReviewRepository;
 import com.agri.ecommerce.service.ProductService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -42,6 +44,7 @@ public class ProductServiceImpl implements ProductService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_FEATURED_LIMIT = 50;
     private static final int MAX_SUGGESTION_LIMIT = 10;
+    private static final int MAX_RELATED_LIMIT = 20;
     private static final Set<String> ALLOWED_STATUSES = Set.of(IN_STOCK_STATUS, OUT_OF_STOCK_STATUS, HIDDEN_STATUS);
     private static final Set<String> PUBLIC_STATUSES = Set.of(IN_STOCK_STATUS, OUT_OF_STOCK_STATUS);
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
@@ -53,6 +56,8 @@ public class ProductServiceImpl implements ProductService {
     private final ProductImageRepository productImageRepository;
 
     private final CategoryRepository categoryRepository;
+
+    private final ReviewRepository reviewRepository;
 
     private final ProductMapper productMapper;
 
@@ -92,12 +97,22 @@ public class ProductServiceImpl implements ProductService {
         Pageable pageable = PageRequest.of(0, safeLimit, Sort.by(Sort.Direction.DESC, "createdAt"));
         List<ProductEntity> products = productRepository.findByStatus(IN_STOCK_STATUS, pageable);
         Map<Long, List<ProductImageEntity>> imagesByProductId = getImagesByProductId(products);
+        Map<Long, ProductRatingSummary> ratingsByProductId = getRatingsByProductId(products);
 
         return products.stream()
-                .map(product -> productMapper.toProductResponse(
-                        product,
-                        imagesByProductId.getOrDefault(product.getId(), List.of())
-                ))
+                .map(product -> {
+                    ProductRatingSummary ratingSummary = ratingsByProductId.getOrDefault(
+                            product.getId(),
+                            ProductRatingSummary.empty()
+                    );
+
+                    return productMapper.toProductResponse(
+                            product,
+                            imagesByProductId.getOrDefault(product.getId(), List.of()),
+                            ratingSummary.averageRating(),
+                            ratingSummary.reviewCount()
+                    );
+                })
                 .toList();
     }
 
@@ -196,6 +211,70 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return toProductResponse(product);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductResponse> getRelatedProducts(String slug, Integer limit) {
+        int safeLimit = limit == null ? 8 : limit;
+        validateRelatedLimit(safeLimit);
+
+        ProductEntity currentProduct = productRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with slug: " + slug));
+
+        if (HIDDEN_STATUS.equals(currentProduct.getStatus())) {
+            throw new ResourceNotFoundException("Product not found with slug: " + slug);
+        }
+
+        Pageable candidatePageable = PageRequest.of(0, Math.min(safeLimit * 3, 60));
+        LinkedHashMap<Long, ProductEntity> candidatesById = new LinkedHashMap<>();
+        Long categoryId = currentProduct.getCategory() == null ? null : currentProduct.getCategory().getId();
+
+        if (categoryId != null) {
+            productRepository.findRelatedProductsByCategory(
+                    currentProduct.getId(),
+                    categoryId,
+                    PUBLIC_STATUSES,
+                    candidatePageable
+            ).forEach(product -> candidatesById.put(product.getId(), product));
+        }
+
+        if (candidatesById.size() < safeLimit) {
+            productRepository.findPublicRelatedFallbackProducts(
+                    currentProduct.getId(),
+                    PUBLIC_STATUSES,
+                    candidatePageable
+            ).forEach(product -> candidatesById.putIfAbsent(product.getId(), product));
+        }
+
+        List<ProductEntity> relatedProducts = candidatesById.values()
+                .stream()
+                .sorted(Comparator
+                        .comparingInt((ProductEntity product) -> relatedStatusRank(product.getStatus()))
+                        .thenComparing(product -> priceDistance(currentProduct.getPrice(), product.getPrice()))
+                        .thenComparing(ProductEntity::getStock, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(ProductEntity::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(ProductEntity::getId, Comparator.reverseOrder()))
+                .limit(safeLimit)
+                .toList();
+        Map<Long, List<ProductImageEntity>> imagesByProductId = getImagesByProductId(relatedProducts);
+        Map<Long, ProductRatingSummary> ratingsByProductId = getRatingsByProductId(relatedProducts);
+
+        return relatedProducts.stream()
+                .map(product -> {
+                    ProductRatingSummary ratingSummary = ratingsByProductId.getOrDefault(
+                            product.getId(),
+                            ProductRatingSummary.empty()
+                    );
+
+                    return productMapper.toProductResponse(
+                            product,
+                            imagesByProductId.getOrDefault(product.getId(), List.of()),
+                            ratingSummary.averageRating(),
+                            ratingSummary.reviewCount()
+                    );
+                })
+                .toList();
     }
 
     @Override
@@ -324,12 +403,22 @@ public class ProductServiceImpl implements ProductService {
 
     private PageResponse<ProductResponse> toPageResponse(Page<ProductEntity> productPage) {
         Map<Long, List<ProductImageEntity>> imagesByProductId = getImagesByProductId(productPage.getContent());
+        Map<Long, ProductRatingSummary> ratingsByProductId = getRatingsByProductId(productPage.getContent());
         List<ProductResponse> content = productPage.getContent()
                 .stream()
-                .map(product -> productMapper.toProductResponse(
-                        product,
-                        imagesByProductId.getOrDefault(product.getId(), List.of())
-                ))
+                .map(product -> {
+                    ProductRatingSummary ratingSummary = ratingsByProductId.getOrDefault(
+                            product.getId(),
+                            ProductRatingSummary.empty()
+                    );
+
+                    return productMapper.toProductResponse(
+                            product,
+                            imagesByProductId.getOrDefault(product.getId(), List.of()),
+                            ratingSummary.averageRating(),
+                            ratingSummary.reviewCount()
+                    );
+                })
                 .toList();
 
         return PageResponse.<ProductResponse>builder()
@@ -344,7 +433,15 @@ public class ProductServiceImpl implements ProductService {
 
     private ProductResponse toProductResponse(ProductEntity product) {
         List<ProductImageEntity> images = productImageRepository.findAllByProductId(product.getId());
-        return productMapper.toProductResponse(product, images);
+        ProductRatingSummary ratingSummary = getRatingsByProductId(List.of(product))
+                .getOrDefault(product.getId(), ProductRatingSummary.empty());
+
+        return productMapper.toProductResponse(
+                product,
+                images,
+                ratingSummary.averageRating(),
+                ratingSummary.reviewCount()
+        );
     }
 
     private ProductSearchSuggestionResponse toSuggestionResponse(ProductEntity product, List<ProductImageEntity> images) {
@@ -447,6 +544,32 @@ public class ProductServiceImpl implements ProductService {
                 .collect(Collectors.groupingBy(image -> image.getProduct().getId(), LinkedHashMap::new, Collectors.toList()));
     }
 
+    private Map<Long, ProductRatingSummary> getRatingsByProductId(List<ProductEntity> products) {
+        if (products.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> productIds = products.stream()
+                .map(ProductEntity::getId)
+                .toList();
+
+        return reviewRepository.summarizeByProductIds(productIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> ((Number) row[0]).longValue(),
+                        this::toProductRatingSummary,
+                        (left, right) -> right,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private ProductRatingSummary toProductRatingSummary(Object[] row) {
+        return new ProductRatingSummary(
+                roundedAverageRating(row[1]),
+                row[2] == null ? 0L : ((Number) row[2]).longValue()
+        );
+    }
+
     private ProductCategoryFacetResponse toCategoryFacetResponse(Object[] row) {
         return ProductCategoryFacetResponse.builder()
                 .categoryId(row[0] == null ? null : ((Number) row[0]).longValue())
@@ -510,6 +633,18 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return score;
+    }
+
+    private int relatedStatusRank(String status) {
+        return IN_STOCK_STATUS.equals(status) ? 0 : 1;
+    }
+
+    private BigDecimal priceDistance(BigDecimal basePrice, BigDecimal price) {
+        if (basePrice == null || price == null) {
+            return BigDecimal.valueOf(Long.MAX_VALUE);
+        }
+
+        return basePrice.subtract(price).abs();
     }
 
     private String toStatusLabel(String status) {
@@ -684,6 +819,12 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+    private void validateRelatedLimit(int limit) {
+        if (limit < 1 || limit > MAX_RELATED_LIMIT) {
+            throw new BadRequestException("limit must be between 1 and " + MAX_RELATED_LIMIT);
+        }
+    }
+
     private void validatePriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
         if (minPrice != null && minPrice.compareTo(BigDecimal.ZERO) < 0) {
             throw new BadRequestException("minPrice phải lớn hơn hoặc bằng 0");
@@ -724,5 +865,43 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return new BigDecimal(row[index].toString());
+    }
+
+    private Double roundedAverageRating(Object value) {
+        if (value == null) {
+            return 0D;
+        }
+
+        double averageRating = value instanceof Number number
+                ? number.doubleValue()
+                : Double.parseDouble(value.toString());
+
+        return BigDecimal.valueOf(averageRating)
+                .setScale(1, RoundingMode.HALF_UP)
+                .doubleValue();
+    }
+
+    private static class ProductRatingSummary {
+
+        private final Double averageRating;
+
+        private final Long reviewCount;
+
+        private ProductRatingSummary(Double averageRating, Long reviewCount) {
+            this.averageRating = averageRating;
+            this.reviewCount = reviewCount;
+        }
+
+        private static ProductRatingSummary empty() {
+            return new ProductRatingSummary(0D, 0L);
+        }
+
+        private Double averageRating() {
+            return averageRating;
+        }
+
+        private Long reviewCount() {
+            return reviewCount;
+        }
     }
 }

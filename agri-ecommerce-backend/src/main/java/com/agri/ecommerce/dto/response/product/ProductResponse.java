@@ -37,4 +37,8 @@ public class ProductResponse {
     private String thumbnail;
 
     private List<String> images;
+
+    private Double averageRating;
+
+    private Long reviewCount;
 }

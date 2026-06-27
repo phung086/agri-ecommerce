@@ -13,6 +13,15 @@ import java.util.Objects;
 public class ProductMapper {
 
     public ProductResponse toProductResponse(ProductEntity product, List<ProductImageEntity> productImages) {
+        return toProductResponse(product, productImages, null, 0L);
+    }
+
+    public ProductResponse toProductResponse(
+            ProductEntity product,
+            List<ProductImageEntity> productImages,
+            Double averageRating,
+            Long reviewCount
+    ) {
         CategoryEntity category = product.getCategory();
         List<String> images = productImages == null ? List.of() : productImages.stream()
                 .map(ProductImageEntity::getImage)
@@ -33,6 +42,8 @@ public class ProductMapper {
                 .categorySlug(category == null ? null : category.getSlug())
                 .thumbnail(images.isEmpty() ? null : images.getFirst())
                 .images(images)
+                .averageRating(averageRating == null ? 0D : averageRating)
+                .reviewCount(reviewCount == null ? 0L : reviewCount)
                 .build();
     }
 }
