@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  CalendarClock,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
   Eye,
   EyeOff,
   Home,
@@ -14,18 +18,25 @@ import {
   LogOut,
   Mail,
   MapPin,
+  PackageCheck,
   Phone,
+  ReceiptText,
+  RefreshCw,
   Save,
   ShieldCheck,
+  ShoppingBasket,
+  Truck,
   UserRound,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { StatCard } from "@/components/admin/stat-card";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatCurrency, formatDate, formatNumber } from "@/lib/admin-utils";
 import {
   AUTH_SCOPES,
   clearAuthSession,
@@ -35,6 +46,7 @@ import {
   saveAuthSession,
 } from "@/lib/auth-storage";
 import { authService } from "@/services/auth.service";
+import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
 
 const blankLoginForm = {
@@ -69,6 +81,45 @@ function unwrapApiData(response) {
 
 function getInitial(user) {
   return (user?.name || user?.email || "K").charAt(0).toUpperCase();
+}
+
+function readPageContent(response) {
+  return Array.isArray(response?.content) ? response.content : [];
+}
+
+function getOrderTotal(order) {
+  return Number(order?.totalPrice ?? order?.payment?.amount ?? 0);
+}
+
+function getOrderQuantity(order) {
+  return (order?.items || []).reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0
+  );
+}
+
+function getPaymentMethod(order) {
+  const method = order?.payment?.paymentMethod || "cash";
+  const labels = {
+    cash: "Tiền mặt",
+    cod: "COD",
+    paypal: "PayPal",
+    bank_transfer: "Chuyển khoản",
+  };
+
+  return labels[method] || method;
+}
+
+function getShippingText(order) {
+  const shippingAddress = order?.shippingAddress;
+
+  if (!shippingAddress) {
+    return "Chưa có địa chỉ giao hàng.";
+  }
+
+  return [shippingAddress.address, shippingAddress.city]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function AuthPanel({ onAuthenticated }) {
@@ -336,6 +387,279 @@ function AuthPanel({ onAuthenticated }) {
   );
 }
 
+function PurchaseHistorySection({
+  orders,
+  ordersMeta,
+  ordersLoading,
+  ordersError,
+  expandedOrderId,
+  orderDetailLoading,
+  onRefresh,
+  onToggleOrder,
+}) {
+  const completedOrders = orders.filter((order) =>
+    ["completed", "delivered"].includes(order.status)
+  ).length;
+  const totalSpent = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
+
+  return (
+    <section className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
+      <div className="flex flex-col gap-3 border-b border-emerald-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-black uppercase text-emerald-700">
+            Lịch sử mua hàng
+          </p>
+          <h2 className="mt-1 text-2xl font-black tracking-normal text-emerald-950">
+            Chi tiết các đơn đã đặt
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Xem trạng thái, sản phẩm, thanh toán, địa chỉ nhận hàng và tiến trình xử lý của từng đơn.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 border-emerald-100 bg-white text-emerald-800"
+          onClick={onRefresh}
+          disabled={ordersLoading}
+        >
+          <RefreshCw className={`size-4 ${ordersLoading ? "animate-spin" : ""}`} />
+          Tải lại
+        </Button>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[8px] border border-emerald-100 bg-emerald-50/70 p-3">
+          <div className="flex items-center gap-2 text-emerald-700">
+            <ReceiptText className="size-4" />
+            <span className="text-xs font-black uppercase">Tổng đơn</span>
+          </div>
+          <p className="mt-2 text-2xl font-black text-emerald-950">
+            {formatNumber(ordersMeta.totalElements || orders.length)}
+          </p>
+        </div>
+        <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3">
+          <div className="flex items-center gap-2 text-sky-700">
+            <PackageCheck className="size-4" />
+            <span className="text-xs font-black uppercase">Đã giao/hoàn tất</span>
+          </div>
+          <p className="mt-2 text-2xl font-black text-sky-950">
+            {formatNumber(completedOrders)}
+          </p>
+        </div>
+        <div className="rounded-[8px] border border-amber-100 bg-amber-50 p-3">
+          <div className="flex items-center gap-2 text-amber-700">
+            <CreditCard className="size-4" />
+            <span className="text-xs font-black uppercase">Giá trị hiển thị</span>
+          </div>
+          <p className="mt-2 text-2xl font-black text-amber-950">
+            {formatCurrency(totalSpent)}
+          </p>
+        </div>
+      </div>
+
+      {ordersError && (
+        <div className="mt-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {ordersError}
+        </div>
+      )}
+
+      {ordersLoading && orders.length === 0 ? (
+        <div className="mt-4 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-6 text-center text-sm font-semibold text-emerald-800">
+          Đang tải lịch sử mua hàng...
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="mt-4 rounded-[8px] border border-dashed border-emerald-200 bg-emerald-50/60 p-6 text-center">
+          <ShoppingBasket className="mx-auto size-8 text-emerald-700" />
+          <p className="mt-3 font-black text-emerald-950">
+            Chưa có đơn hàng nào.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Khi bạn checkout thành công, đơn hàng sẽ xuất hiện tại đây.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {orders.map((order) => {
+            const expanded = expandedOrderId === order.id;
+            const detailLoading = orderDetailLoading === String(order.id);
+
+            return (
+              <article
+                key={order.id}
+                className="overflow-hidden rounded-[8px] border border-emerald-100 bg-white shadow-sm"
+              >
+                <button
+                  type="button"
+                  onClick={() => onToggleOrder(order)}
+                  className="grid w-full gap-3 p-4 text-left transition hover:bg-emerald-50/70 lg:grid-cols-[1fr_auto_auto_auto]"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-black text-slate-950">
+                        Đơn hàng #{order.id}
+                      </h3>
+                      <StatusBadge status={order.status} />
+                      {order.payment?.status && (
+                        <StatusBadge status={order.payment.status} />
+                      )}
+                    </div>
+                    <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                      <CalendarClock className="size-4 text-emerald-600" />
+                      {formatDate(order.createdAt)}
+                    </p>
+                  </div>
+
+                  <div className="text-sm">
+                    <p className="font-black text-slate-950">
+                      {formatNumber(getOrderQuantity(order))} sản phẩm
+                    </p>
+                    <p className="mt-1 text-muted-foreground">
+                      {getPaymentMethod(order)}
+                    </p>
+                  </div>
+
+                  <div className="text-sm">
+                    <p className="font-black text-emerald-700">
+                      {formatCurrency(getOrderTotal(order))}
+                    </p>
+                    <p className="mt-1 text-muted-foreground">
+                      Phí giao {formatCurrency(order.shippingFee)}
+                    </p>
+                  </div>
+
+                  <span className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] border border-emerald-100 px-3 text-sm font-black text-emerald-800">
+                    {detailLoading ? "Đang tải" : expanded ? "Thu gọn" : "Chi tiết"}
+                    {expanded ? (
+                      <ChevronUp className="size-4" />
+                    ) : (
+                      <ChevronDown className="size-4" />
+                    )}
+                  </span>
+                </button>
+
+                {expanded && (
+                  <div className="border-t border-emerald-100 bg-[#f6faef] p-4">
+                    <div className="grid gap-3 lg:grid-cols-[1.3fr_0.7fr]">
+                      <div className="rounded-[8px] border border-emerald-100 bg-white p-3">
+                        <p className="mb-3 text-sm font-black uppercase text-emerald-700">
+                          Sản phẩm đã mua
+                        </p>
+                        <div className="space-y-2">
+                          {(order.items || []).map((item) => (
+                            <div
+                              key={item.id || `${order.id}-${item.productId}`}
+                              className="grid gap-2 rounded-[8px] border border-emerald-100 p-3 sm:grid-cols-[1fr_auto]"
+                            >
+                              <div className="min-w-0">
+                                <p className="line-clamp-1 font-black text-slate-950">
+                                  {item.productName}
+                                </p>
+                                <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                                  {formatCurrency(item.price)} / {item.unit || "sản phẩm"}
+                                </p>
+                              </div>
+                              <div className="text-sm sm:text-right">
+                                <p className="font-black text-slate-950">
+                                  x{formatNumber(item.quantity)}
+                                </p>
+                                <p className="mt-1 font-black text-emerald-700">
+                                  {formatCurrency(item.lineTotal)}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="rounded-[8px] border border-emerald-100 bg-white p-3">
+                          <p className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-emerald-700">
+                            <Truck className="size-4" />
+                            Giao hàng
+                          </p>
+                          <p className="font-black text-slate-950">
+                            {order.shippingAddress?.fullName || order.customerName || "Khách hàng"}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                            {order.shippingAddress?.phone || order.customerPhoneNumber || "Chưa có SĐT"}
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            {getShippingText(order)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-[8px] border border-emerald-100 bg-white p-3">
+                          <p className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-emerald-700">
+                            <CreditCard className="size-4" />
+                            Thanh toán
+                          </p>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">Tạm tính</span>
+                              <span className="font-bold">{formatCurrency(order.subtotal)}</span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">Giảm giá</span>
+                              <span className="font-bold">{formatCurrency(order.discountAmount)}</span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">Phí giao</span>
+                              <span className="font-bold">{formatCurrency(order.shippingFee)}</span>
+                            </div>
+                            <div className="flex justify-between gap-3 border-t border-emerald-100 pt-2 text-base font-black">
+                              <span>Tổng cộng</span>
+                              <span className="text-emerald-700">
+                                {formatCurrency(order.totalPrice)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-[8px] border border-emerald-100 bg-white p-3">
+                      <p className="mb-3 text-sm font-black uppercase text-emerald-700">
+                        Tiến trình đơn hàng
+                      </p>
+                      {order.statusHistory?.length > 0 ? (
+                        <div className="space-y-3">
+                          {order.statusHistory.map((history) => (
+                            <div
+                              key={history.id}
+                              className="border-l-2 border-emerald-200 pl-3"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <StatusBadge status={history.status} />
+                                <span className="text-xs font-semibold text-muted-foreground">
+                                  {formatDate(history.changedAt)}
+                                </span>
+                              </div>
+                              {history.note && (
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                  {history.note}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm font-semibold text-muted-foreground">
+                          Chưa có lịch sử trạng thái chi tiết cho đơn này.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function CustomerProfilePage() {
   const [authStatus, setAuthStatus] = useState("checking");
   const [profile, setProfile] = useState(null);
@@ -346,6 +670,15 @@ export default function CustomerProfilePage() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [orders, setOrders] = useState([]);
+  const [ordersMeta, setOrdersMeta] = useState({
+    totalElements: 0,
+    totalPages: 0,
+  });
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
+  const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [orderDetailLoading, setOrderDetailLoading] = useState("");
 
   const profileInitial = getInitial(profile);
 
@@ -404,6 +737,30 @@ export default function CustomerProfilePage() {
     }
   }, [applyProfile]);
 
+  const loadOrderHistory = useCallback(async () => {
+    setOrdersLoading(true);
+    setOrdersError("");
+
+    try {
+      const response = await orderService.getOrders({
+        page: 0,
+        size: 20,
+        sort: "createdAt,desc",
+      });
+      setOrders(readPageContent(response));
+      setOrdersMeta({
+        totalElements: Number(response?.totalElements || 0),
+        totalPages: Number(response?.totalPages || 0),
+      });
+    } catch (err) {
+      setOrders([]);
+      setOrdersMeta({ totalElements: 0, totalPages: 0 });
+      setOrdersError(err?.message || "Không thể tải lịch sử mua hàng.");
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       const session = getAuthSession(AUTH_SCOPES.customer);
@@ -417,10 +774,11 @@ export default function CustomerProfilePage() {
       setAuthStatus("authenticated");
       applyProfile(session.currentUser);
       loadProfile();
+      loadOrderHistory();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [applyProfile, loadProfile]);
+  }, [applyProfile, loadOrderHistory, loadProfile]);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -476,6 +834,36 @@ export default function CustomerProfilePage() {
     setAuthStatus("authenticated");
     applyProfile(user);
     loadProfile();
+    loadOrderHistory();
+  }
+
+  async function handleToggleOrder(order) {
+    if (expandedOrderId === order.id) {
+      setExpandedOrderId(null);
+      return;
+    }
+
+    setExpandedOrderId(order.id);
+
+    if (order.statusHistory?.length > 0) {
+      return;
+    }
+
+    setOrderDetailLoading(String(order.id));
+    setOrdersError("");
+
+    try {
+      const detail = await orderService.getOrder(order.id);
+      setOrders((current) =>
+        current.map((currentOrder) =>
+          currentOrder.id === detail.id ? detail : currentOrder
+        )
+      );
+    } catch (err) {
+      setOrdersError(err?.message || "Không thể tải chi tiết đơn hàng.");
+    } finally {
+      setOrderDetailLoading("");
+    }
   }
 
   async function handleChangePassword(event) {
@@ -510,6 +898,11 @@ export default function CustomerProfilePage() {
     setProfile(null);
     setForm(blankProfileForm);
     setPasswordForm(blankPasswordForm);
+    setOrders([]);
+    setOrdersMeta({ totalElements: 0, totalPages: 0 });
+    setOrdersError("");
+    setExpandedOrderId(null);
+    setOrderDetailLoading("");
     setAuthStatus("unauthenticated");
     setNotice("");
     setError("");
@@ -832,6 +1225,17 @@ export default function CustomerProfilePage() {
                 </div>
               </form>
             </section>
+
+            <PurchaseHistorySection
+              orders={orders}
+              ordersMeta={ordersMeta}
+              ordersLoading={ordersLoading}
+              ordersError={ordersError}
+              expandedOrderId={expandedOrderId}
+              orderDetailLoading={orderDetailLoading}
+              onRefresh={loadOrderHistory}
+              onToggleOrder={handleToggleOrder}
+            />
           </div>
         )}
       </div>
