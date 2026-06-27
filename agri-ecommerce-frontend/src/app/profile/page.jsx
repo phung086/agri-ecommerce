@@ -23,8 +23,10 @@ import {
   ReceiptText,
   RefreshCw,
   Save,
+  Send,
   ShieldCheck,
   ShoppingBasket,
+  Star,
   Truck,
   UserRound,
 } from "lucide-react";
@@ -48,6 +50,7 @@ import {
 import { authService } from "@/services/auth.service";
 import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
+import { reviewService } from "@/services/review.service";
 
 const blankLoginForm = {
   email: "",
@@ -75,6 +78,11 @@ const blankPasswordForm = {
   confirmPassword: "",
 };
 
+const defaultReviewDraft = {
+  rating: 5,
+  comment: "",
+};
+
 function unwrapApiData(response) {
   return response?.data ?? response;
 }
@@ -89,6 +97,26 @@ function readPageContent(response) {
 
 function getOrderTotal(order) {
   return Number(order?.totalPrice ?? order?.payment?.amount ?? 0);
+}
+
+function isCompletedOrder(order) {
+  return ["completed", "delivered"].includes(
+    String(order?.status || "").toLowerCase()
+  );
+}
+
+function getReviewByProduct(reviews, productId) {
+  const normalizedProductId = Number(productId);
+
+  if (!Number.isFinite(normalizedProductId)) {
+    return null;
+  }
+
+  return (
+    reviews.find(
+      (review) => Number(review.productId) === normalizedProductId
+    ) || null
+  );
 }
 
 function getOrderQuantity(order) {
@@ -392,14 +420,17 @@ function PurchaseHistorySection({
   ordersMeta,
   ordersLoading,
   ordersError,
+  reviews,
+  reviewDrafts,
+  reviewSubmittingId,
   expandedOrderId,
   orderDetailLoading,
   onRefresh,
   onToggleOrder,
+  onUpdateReviewDraft,
+  onSubmitReview,
 }) {
-  const completedOrders = orders.filter((order) =>
-    ["completed", "delivered"].includes(order.status)
-  ).length;
+  const completedOrders = orders.filter(isCompletedOrder).length;
   const totalSpent = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
 
   return (
@@ -546,29 +577,152 @@ function PurchaseHistorySection({
                           Sản phẩm đã mua
                         </p>
                         <div className="space-y-2">
-                          {(order.items || []).map((item) => (
-                            <div
-                              key={item.id || `${order.id}-${item.productId}`}
-                              className="grid gap-2 rounded-[8px] border border-emerald-100 p-3 sm:grid-cols-[1fr_auto]"
-                            >
-                              <div className="min-w-0">
-                                <p className="line-clamp-1 font-black text-slate-950">
-                                  {item.productName}
-                                </p>
-                                <p className="mt-1 text-xs font-semibold text-muted-foreground">
-                                  {formatCurrency(item.price)} / {item.unit || "sản phẩm"}
-                                </p>
+                          {(order.items || []).map((item) => {
+                            const existingReview = getReviewByProduct(
+                              reviews,
+                              item.productId
+                            );
+                            const reviewable = isCompletedOrder(order);
+                            const draft =
+                              reviewDrafts[String(item.productId)] ||
+                              defaultReviewDraft;
+                            const submitting =
+                              reviewSubmittingId === String(item.productId);
+
+                            return (
+                              <div
+                                key={item.id || `${order.id}-${item.productId}`}
+                                className="rounded-[8px] border border-emerald-100 p-3"
+                              >
+                                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                                  <div className="min-w-0">
+                                    <p className="line-clamp-1 font-black text-slate-950">
+                                      {item.productName}
+                                    </p>
+                                    <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                                      {formatCurrency(item.price)} / {item.unit || "sản phẩm"}
+                                    </p>
+                                  </div>
+                                  <div className="text-sm sm:text-right">
+                                    <p className="font-black text-slate-950">
+                                      x{formatNumber(item.quantity)}
+                                    </p>
+                                    <p className="mt-1 font-black text-emerald-700">
+                                      {formatCurrency(item.lineTotal)}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {reviewable && existingReview && (
+                                  <div className="mt-3 rounded-[8px] border border-amber-100 bg-amber-50 p-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-xs font-black uppercase text-amber-700">
+                                        Đã đánh giá
+                                      </span>
+                                      <span className="flex items-center gap-1 text-amber-600">
+                                        {Array.from({ length: 5 }).map((_, index) => (
+                                          <Star
+                                            key={index}
+                                            className={`size-4 ${
+                                              index < Number(existingReview.rating || 0)
+                                                ? "fill-current"
+                                                : ""
+                                            }`}
+                                          />
+                                        ))}
+                                      </span>
+                                    </div>
+                                    {existingReview.comment && (
+                                      <p className="mt-2 text-sm font-semibold text-amber-950">
+                                        {existingReview.comment}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+
+                                {reviewable && !existingReview && (
+                                  <form
+                                    className="mt-3 rounded-[8px] border border-emerald-100 bg-emerald-50/60 p-3"
+                                    onSubmit={(event) =>
+                                      onSubmitReview(event, item)
+                                    }
+                                  >
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                      <p className="text-xs font-black uppercase text-emerald-700">
+                                        Đánh giá sản phẩm
+                                      </p>
+                                      <div className="flex items-center gap-1">
+                                        {Array.from({ length: 5 }).map((_, index) => {
+                                          const rating = index + 1;
+                                          const active =
+                                            rating <= Number(draft.rating || 0);
+
+                                          return (
+                                            <button
+                                              key={rating}
+                                              type="button"
+                                              onClick={() =>
+                                                onUpdateReviewDraft(
+                                                  item.productId,
+                                                  "rating",
+                                                  rating
+                                                )
+                                              }
+                                              className={`inline-flex size-8 items-center justify-center rounded-[8px] transition ${
+                                                active
+                                                  ? "bg-amber-100 text-amber-600"
+                                                  : "bg-white text-slate-300 hover:text-amber-500"
+                                              }`}
+                                              aria-label={`${rating} sao`}
+                                            >
+                                              <Star
+                                                className={`size-4 ${
+                                                  active ? "fill-current" : ""
+                                                }`}
+                                              />
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                    <Textarea
+                                      value={draft.comment}
+                                      onChange={(event) =>
+                                        onUpdateReviewDraft(
+                                          item.productId,
+                                          "comment",
+                                          event.target.value
+                                        )
+                                      }
+                                      rows={3}
+                                      maxLength={255}
+                                      className="mt-3 bg-white"
+                                      placeholder="Chia sẻ cảm nhận sau khi nhận hàng..."
+                                    />
+                                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                      <span className="text-xs font-semibold text-muted-foreground">
+                                        {(draft.comment || "").length}/255 ký tự
+                                      </span>
+                                      <Button
+                                        type="submit"
+                                        className="h-9 bg-emerald-600 text-sm font-bold hover:bg-emerald-700"
+                                        disabled={submitting}
+                                      >
+                                        <Send className="size-4" />
+                                        {submitting ? "Đang gửi..." : "Gửi đánh giá"}
+                                      </Button>
+                                    </div>
+                                  </form>
+                                )}
+
+                                {!reviewable && (
+                                  <p className="mt-3 rounded-[8px] bg-slate-50 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                                    Có thể đánh giá sau khi đơn hàng được giao thành công.
+                                  </p>
+                                )}
                               </div>
-                              <div className="text-sm sm:text-right">
-                                <p className="font-black text-slate-950">
-                                  x{formatNumber(item.quantity)}
-                                </p>
-                                <p className="mt-1 font-black text-emerald-700">
-                                  {formatCurrency(item.lineTotal)}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -677,6 +831,9 @@ export default function CustomerProfilePage() {
   });
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
+  const [reviews, setReviews] = useState([]);
+  const [reviewDrafts, setReviewDrafts] = useState({});
+  const [reviewSubmittingId, setReviewSubmittingId] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
 
@@ -761,6 +918,19 @@ export default function CustomerProfilePage() {
     }
   }, []);
 
+  const loadMyReviews = useCallback(async () => {
+    try {
+      const response = await reviewService.getMyReviews({
+        page: 0,
+        size: 100,
+        sort: "createdAt,desc",
+      });
+      setReviews(readPageContent(response));
+    } catch {
+      setReviews([]);
+    }
+  }, []);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       const session = getAuthSession(AUTH_SCOPES.customer);
@@ -775,10 +945,11 @@ export default function CustomerProfilePage() {
       applyProfile(session.currentUser);
       loadProfile();
       loadOrderHistory();
+      loadMyReviews();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [applyProfile, loadOrderHistory, loadProfile]);
+  }, [applyProfile, loadMyReviews, loadOrderHistory, loadProfile]);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -835,6 +1006,63 @@ export default function CustomerProfilePage() {
     applyProfile(user);
     loadProfile();
     loadOrderHistory();
+    loadMyReviews();
+  }
+
+  function updateReviewDraft(productId, field, value) {
+    const key = String(productId);
+
+    setReviewDrafts((current) => ({
+      ...current,
+      [key]: {
+        ...defaultReviewDraft,
+        ...(current[key] || {}),
+        [field]: field === "rating" ? Number(value) : value,
+      },
+    }));
+  }
+
+  async function submitReview(event, item) {
+    event.preventDefault();
+
+    const productId = Number(item.productId);
+
+    if (!Number.isFinite(productId)) {
+      setOrdersError("Không thể xác định sản phẩm cần đánh giá.");
+      return;
+    }
+
+    const key = String(productId);
+    const draft = reviewDrafts[key] || defaultReviewDraft;
+    const rating = Number(draft.rating || 0);
+
+    if (rating < 1 || rating > 5) {
+      setOrdersError("Vui lòng chọn điểm đánh giá từ 1 đến 5 sao.");
+      return;
+    }
+
+    setReviewSubmittingId(key);
+    setOrdersError("");
+
+    try {
+      const createdReview = await reviewService.createReview({
+        productId,
+        rating,
+        comment: String(draft.comment || "").trim(),
+      });
+
+      setReviews((current) => [createdReview, ...current]);
+      setReviewDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[key];
+        return nextDrafts;
+      });
+      setNotice(`Đã gửi đánh giá cho "${item.productName}".`);
+    } catch (err) {
+      setOrdersError(err?.message || "Không thể gửi đánh giá sản phẩm.");
+    } finally {
+      setReviewSubmittingId("");
+    }
   }
 
   async function handleToggleOrder(order) {
@@ -1231,10 +1459,18 @@ export default function CustomerProfilePage() {
               ordersMeta={ordersMeta}
               ordersLoading={ordersLoading}
               ordersError={ordersError}
+              reviews={reviews}
+              reviewDrafts={reviewDrafts}
+              reviewSubmittingId={reviewSubmittingId}
               expandedOrderId={expandedOrderId}
               orderDetailLoading={orderDetailLoading}
-              onRefresh={loadOrderHistory}
+              onRefresh={() => {
+                loadOrderHistory();
+                loadMyReviews();
+              }}
               onToggleOrder={handleToggleOrder}
+              onUpdateReviewDraft={updateReviewDraft}
+              onSubmitReview={submitReview}
             />
           </div>
         )}

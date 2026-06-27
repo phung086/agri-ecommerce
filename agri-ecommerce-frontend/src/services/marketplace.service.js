@@ -12,4 +12,11 @@ export const marketplaceService = {
     const response = await axiosClient.get("/public/products", { params });
     return unwrapApiData(response);
   },
+
+  getProductBySlug: async (slug) => {
+    const response = await axiosClient.get(
+      `/public/products/${encodeURIComponent(slug)}`
+    );
+    return unwrapApiData(response);
+  },
 };
