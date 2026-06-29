@@ -40,6 +40,19 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
             select product
             from ProductEntity product
             join product.category category
+            where lower(product.name) like lower(concat('%', :keyword, '%'))
+               or lower(product.slug) like lower(concat('%', :keyword, '%'))
+               or lower(coalesce(product.description, '')) like lower(concat('%', :keyword, '%'))
+               or lower(category.name) like lower(concat('%', :keyword, '%'))
+            order by product.createdAt desc, product.id desc
+            """)
+    List<ProductEntity> searchAdminProducts(@Param("keyword") String keyword, Pageable pageable);
+
+    @EntityGraph(attributePaths = "category")
+    @Query("""
+            select product
+            from ProductEntity product
+            join product.category category
             where product.status = :status
               and (:keyword is null
                    or lower(product.name) like lower(concat('%', :keyword, '%'))

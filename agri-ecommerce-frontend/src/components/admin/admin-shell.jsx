@@ -10,6 +10,7 @@ import {
   FolderTree,
   LayoutDashboard,
   Leaf,
+  Loader2,
   LogOut,
   Menu,
   MessageSquare,
@@ -31,7 +32,9 @@ import {
   clearAuthSession,
   getAdminAuthState,
 } from "@/lib/auth-storage";
+import { getApiErrorMessage } from "@/lib/admin-utils";
 import { cn } from "@/lib/utils";
+import { adminService } from "@/services/admin.service";
 
 const navItems = [
   {
@@ -192,6 +195,11 @@ export function AdminShell({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchStatus, setSearchStatus] = useState("idle");
+  const [searchMessage, setSearchMessage] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [authState, setAuthState] = useState({
     status: "checking",
     session: null,
@@ -237,6 +245,93 @@ export function AdminShell({ children }) {
     clearAuthSession(AUTH_SCOPES.admin);
     router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
   }, [authState.status, isAuthPage, pathname, router]);
+
+  useEffect(() => {
+    if (isAuthPage || authState.status !== "authenticated") {
+      return undefined;
+    }
+
+    const keyword = searchTerm.trim();
+    if (keyword.length < 2) {
+      return undefined;
+    }
+
+    let active = true;
+    const timeoutId = window.setTimeout(async () => {
+      setSearchStatus("loading");
+      setSearchMessage("");
+      setSearchOpen(true);
+
+      try {
+        const results = await adminService.search(keyword);
+        if (!active) {
+          return;
+        }
+
+        setSearchResults(Array.isArray(results) ? results : []);
+        setSearchStatus("done");
+      } catch (err) {
+        if (!active) {
+          return;
+        }
+
+        setSearchResults([]);
+        setSearchStatus("error");
+        setSearchMessage(getApiErrorMessage(err));
+      }
+    }, 350);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [authState.status, isAuthPage, searchTerm]);
+
+  function handleSearchTermChange(event) {
+    const value = event.target.value;
+    setSearchTerm(value);
+
+    if (value.trim().length < 2) {
+      setSearchResults([]);
+      setSearchMessage("");
+      setSearchStatus("idle");
+      setSearchOpen(false);
+    }
+  }
+
+  async function handleAdminSearch(event) {
+    event.preventDefault();
+
+    const keyword = searchTerm.trim();
+    if (!keyword) {
+      setSearchResults([]);
+      setSearchMessage("Nhập từ khóa để tìm trong dữ liệu admin.");
+      setSearchStatus("idle");
+      setSearchOpen(true);
+      return;
+    }
+
+    setSearchOpen(true);
+    setSearchStatus("loading");
+    setSearchMessage("");
+
+    try {
+      const results = await adminService.search(keyword);
+      setSearchResults(Array.isArray(results) ? results : []);
+      setSearchStatus("done");
+    } catch (err) {
+      setSearchResults([]);
+      setSearchStatus("error");
+      setSearchMessage(getApiErrorMessage(err));
+    }
+  }
+
+  function handleSearchResultClick(result) {
+    setSearchOpen(false);
+    if (result?.targetUrl) {
+      router.push(result.targetUrl);
+    }
+  }
 
   function handleLogout() {
     clearAuthSession(AUTH_SCOPES.admin);
@@ -329,10 +424,99 @@ export function AdminShell({ children }) {
               </p>
             </div>
 
-            <div className="hidden h-10 w-72 items-center gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50/70 px-3 text-sm text-muted-foreground lg:flex">
-              <Search className="size-4 text-emerald-700" />
-              <span className="truncate">Tìm đơn, sản phẩm, khách hàng...</span>
-            </div>
+            <form
+              onSubmit={handleAdminSearch}
+              className="relative hidden w-[min(32rem,36vw)] lg:block"
+            >
+              <div className="flex h-10 overflow-hidden rounded-[8px] border border-emerald-100 bg-emerald-50/70 text-sm shadow-sm transition focus-within:border-emerald-300 focus-within:ring-3 focus-within:ring-emerald-100">
+                <div className="flex min-w-0 flex-1 items-center gap-2 px-3">
+                  <Search className="size-4 shrink-0 text-emerald-700" />
+                  <input
+                    value={searchTerm}
+                    onChange={handleSearchTermChange}
+                    onFocus={() => {
+                      if (searchTerm.trim()) {
+                        setSearchOpen(true);
+                      }
+                    }}
+                    placeholder="Tìm đơn, sản phẩm, khách hàng..."
+                    className="h-full min-w-0 flex-1 bg-transparent text-emerald-950 outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  size="icon-lg"
+                  className="h-full rounded-none border-l border-emerald-100 bg-emerald-600 text-white hover:bg-emerald-700"
+                  aria-label="Tìm kiếm"
+                  title="Tìm kiếm"
+                  disabled={searchStatus === "loading"}
+                >
+                  {searchStatus === "loading" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Search className="size-4" />
+                  )}
+                </Button>
+              </div>
+
+              {searchOpen && (
+                <div className="absolute right-0 top-12 z-40 w-full overflow-hidden rounded-[8px] border border-emerald-100 bg-white shadow-[0_18px_55px_rgba(15,61,38,0.14)]">
+                  <div className="border-b border-emerald-50 px-3 py-2 text-xs font-bold uppercase tracking-normal text-emerald-700">
+                    Kết quả tìm kiếm
+                  </div>
+
+                  {searchStatus === "loading" && (
+                    <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin text-emerald-700" />
+                      Đang tìm trong dữ liệu admin...
+                    </div>
+                  )}
+
+                  {searchStatus !== "loading" && searchMessage && (
+                    <div className="px-3 py-4 text-sm text-muted-foreground">
+                      {searchMessage}
+                    </div>
+                  )}
+
+                  {searchStatus === "done" && searchResults.length === 0 && (
+                    <div className="px-3 py-4 text-sm text-muted-foreground">
+                      Không tìm thấy dữ liệu phù hợp.
+                    </div>
+                  )}
+
+                  {searchStatus !== "loading" && searchResults.length > 0 && (
+                    <div className="max-h-[24rem] overflow-y-auto py-1">
+                      {searchResults.map((result, index) => (
+                        <button
+                          key={`${result.type}-${result.id}-${index}`}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => handleSearchResultClick(result)}
+                          className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition hover:bg-emerald-50"
+                        >
+                          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-emerald-100 text-xs font-black text-emerald-700">
+                            {result.groupLabel?.charAt(0) || "A"}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              <span className="truncate text-sm font-bold text-emerald-950">
+                                {result.title}
+                              </span>
+                              <span className="shrink-0 rounded-[8px] bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                                {result.groupLabel}
+                              </span>
+                            </span>
+                            <span className="mt-1 block truncate text-xs text-muted-foreground">
+                              {result.subtitle || `ID #${result.id}`}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </form>
 
             <div className="hidden items-center gap-2 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 xl:flex">
               <Clock3 className="size-4" />

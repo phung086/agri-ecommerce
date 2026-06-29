@@ -16,10 +16,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class ShippingAddressServiceImpl implements ShippingAddressService {
+
+    private static final Pattern VIETNAM_PHONE_PATTERN = Pattern.compile("^0\\d{9}$");
+    private static final String INVALID_PHONE_MESSAGE = "Số điện thoại không hợp lệ.";
 
     private final ShippingAddressRepository shippingAddressRepository;
 
@@ -41,6 +45,8 @@ public class ShippingAddressServiceImpl implements ShippingAddressService {
     @Override
     @Transactional
     public ShippingAddressResponse createShippingAddress(Long userId, ShippingAddressRequest request) {
+        validatePhone(request.getPhone());
+
         UserEntity user = findUserById(userId);
         boolean hasAddress = shippingAddressRepository.existsByUser_Id(userId);
         boolean shouldBeDefault = Boolean.TRUE.equals(request.getDefaultAddress()) || !hasAddress;
@@ -64,6 +70,8 @@ public class ShippingAddressServiceImpl implements ShippingAddressService {
     @Override
     @Transactional
     public ShippingAddressResponse updateShippingAddress(Long userId, Long addressId, ShippingAddressRequest request) {
+        validatePhone(request.getPhone());
+
         ShippingAddressEntity shippingAddress = findAddressByIdAndUserId(addressId, userId);
 
         if (Boolean.TRUE.equals(request.getDefaultAddress())) {
@@ -134,6 +142,12 @@ public class ShippingAddressServiceImpl implements ShippingAddressService {
     private UserEntity findUserById(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với id: " + userId));
+    }
+
+    private void validatePhone(String phone) {
+        if (phone == null || !VIETNAM_PHONE_PATTERN.matcher(phone).matches()) {
+            throw new BadRequestException(INVALID_PHONE_MESSAGE);
+        }
     }
 
     private String cleanBlank(String value) {

@@ -43,4 +43,22 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
 
     @Query("select orderEntity.status, count(orderEntity.id) from OrderEntity orderEntity group by orderEntity.status")
     List<Object[]> countOrdersByStatus();
+
+    @Query("""
+            select orderEntity
+            from OrderEntity orderEntity
+            join fetch orderEntity.user user
+            join fetch orderEntity.shippingAddress shippingAddress
+            left join fetch orderEntity.deliveryStaff deliveryStaff
+            where str(orderEntity.id) like concat('%', :keyword, '%')
+               or lower(orderEntity.status) like lower(concat('%', :keyword, '%'))
+               or lower(coalesce(orderEntity.couponCode, '')) like lower(concat('%', :keyword, '%'))
+               or lower(user.name) like lower(concat('%', :keyword, '%'))
+               or lower(user.email) like lower(concat('%', :keyword, '%'))
+               or lower(shippingAddress.fullName) like lower(concat('%', :keyword, '%'))
+               or lower(shippingAddress.phone) like lower(concat('%', :keyword, '%'))
+               or lower(shippingAddress.address) like lower(concat('%', :keyword, '%'))
+            order by orderEntity.createdAt desc, orderEntity.id desc
+            """)
+    List<OrderEntity> searchAdminOrders(@Param("keyword") String keyword, Pageable pageable);
 }

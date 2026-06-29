@@ -3,6 +3,13 @@ import axiosClient from "@/lib/axios-client";
 const unwrapApiData = (response) => response?.data ?? response;
 
 export const adminService = {
+  search: async (keyword) => {
+    const response = await axiosClient.get("/admin/dashboard/search", {
+      params: { keyword },
+    });
+    return unwrapApiData(response);
+  },
+
   getUsers: async () => {
     const response = await axiosClient.get("/admin/users");
     return unwrapApiData(response);

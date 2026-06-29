@@ -16,4 +16,6 @@ public interface AdminDashboardService {
     List<TopProductResponse> getTopProducts(LocalDateTime from, LocalDateTime to, Integer limit);
 
     List<LowStockProductResponse> getLowStockProducts(Integer threshold, Integer limit);
+
+    List<AdminSearchResponse> search(String keyword);
 }

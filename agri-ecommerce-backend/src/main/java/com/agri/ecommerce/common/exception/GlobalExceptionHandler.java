@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -37,10 +38,15 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors().forEach(error ->
                 errors.put(error.getField(), error.getDefaultMessage())
         );
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .filter(error -> "phone".equals(error.getField()))
+                .findFirst()
+                .map(FieldError::getDefaultMessage)
+                .orElse("Dữ liệu không hợp lệ");
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("Dữ liệu không hợp lệ", errors, HttpStatus.BAD_REQUEST.value()));
+                .body(ApiResponse.error(message, errors, HttpStatus.BAD_REQUEST.value()));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

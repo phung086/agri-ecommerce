@@ -106,4 +106,17 @@ public class AdminDashboardController {
                 ApiResponse.success("Lấy danh sách sản phẩm sắp hết hàng thành công", response, HttpStatus.OK.value())
         );
     }
+
+    @Operation(summary = "Tìm kiếm toàn cục dữ liệu quản trị")
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<List<AdminSearchResponse>>> search(
+            @Parameter(description = "Từ khóa tìm kiếm", example = "rau")
+            @RequestParam String keyword
+    ) {
+        List<AdminSearchResponse> response = adminDashboardService.search(keyword);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Tìm kiếm dữ liệu quản trị thành công", response, HttpStatus.OK.value())
+        );
+    }
 }

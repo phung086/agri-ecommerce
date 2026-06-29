@@ -4,6 +4,9 @@ import com.agri.ecommerce.entity.UserEntity;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,6 +23,19 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
 
     @EntityGraph(attributePaths = "role")
     List<UserEntity> findByRole_NameAndStatus(String roleName, com.agri.ecommerce.entity.UserStatus status, Sort sort);
+
+    @EntityGraph(attributePaths = "role")
+    @Query("""
+            select user
+            from UserEntity user
+            join user.role role
+            where lower(user.name) like lower(concat('%', :keyword, '%'))
+               or lower(user.email) like lower(concat('%', :keyword, '%'))
+               or lower(coalesce(user.phoneNumber, '')) like lower(concat('%', :keyword, '%'))
+               or lower(role.name) like lower(concat('%', :keyword, '%'))
+            order by user.createdAt desc, user.id desc
+            """)
+    List<UserEntity> searchAdminUsers(@Param("keyword") String keyword, Pageable pageable);
 
     long countByRole_Name(String roleName);
 

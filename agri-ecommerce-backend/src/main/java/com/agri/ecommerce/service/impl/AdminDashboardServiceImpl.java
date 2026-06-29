@@ -1,8 +1,13 @@
 package com.agri.ecommerce.service.impl;
 
 import com.agri.ecommerce.dto.response.dashboard.*;
+import com.agri.ecommerce.entity.ContactEntity;
 import com.agri.ecommerce.entity.CategoryEntity;
+import com.agri.ecommerce.entity.CouponEntity;
+import com.agri.ecommerce.entity.OrderEntity;
 import com.agri.ecommerce.entity.ProductEntity;
+import com.agri.ecommerce.entity.ShippingAddressEntity;
+import com.agri.ecommerce.entity.UserEntity;
 import com.agri.ecommerce.entity.UserStatus;
 import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.repository.*;
@@ -59,6 +64,8 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     private final OrderItemRepository orderItemRepository;
 
     private final ProductRepository productRepository;
+
+    private final CategoryRepository categoryRepository;
 
     private final UserRepository userRepository;
 
@@ -199,6 +206,50 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminSearchResponse> search(String keyword) {
+        String normalizedKeyword = cleanBlank(keyword);
+        if (normalizedKeyword == null) {
+            return List.of();
+        }
+
+        PageRequest limit = PageRequest.of(0, 5);
+        List<AdminSearchResponse> results = new ArrayList<>();
+
+        userRepository.searchAdminUsers(normalizedKeyword, limit)
+                .stream()
+                .map(this::toUserSearchResponse)
+                .forEach(results::add);
+
+        productRepository.searchAdminProducts(normalizedKeyword, limit)
+                .stream()
+                .map(this::toProductSearchResponse)
+                .forEach(results::add);
+
+        categoryRepository.searchAdminCategories(normalizedKeyword, limit)
+                .stream()
+                .map(this::toCategorySearchResponse)
+                .forEach(results::add);
+
+        orderRepository.searchAdminOrders(normalizedKeyword, limit)
+                .stream()
+                .map(this::toOrderSearchResponse)
+                .forEach(results::add);
+
+        couponRepository.searchAdminCoupons(normalizedKeyword, limit)
+                .stream()
+                .map(this::toCouponSearchResponse)
+                .forEach(results::add);
+
+        contactRepository.searchAdminContacts(normalizedKeyword, limit)
+                .stream()
+                .map(this::toContactSearchResponse)
+                .forEach(results::add);
+
+        return results;
+    }
+
     private LowStockProductResponse toLowStockProductResponse(ProductEntity product) {
         CategoryEntity category = product.getCategory();
 
@@ -212,6 +263,85 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .unit(product.getUnit())
                 .status(product.getStatus())
                 .price(product.getPrice())
+                .build();
+    }
+
+    private AdminSearchResponse toUserSearchResponse(UserEntity user) {
+        String roleName = user.getRole() == null ? "N/A" : user.getRole().getName();
+
+        return AdminSearchResponse.builder()
+                .type("user")
+                .groupLabel("Người dùng")
+                .id(user.getId())
+                .title(user.getName())
+                .subtitle(String.join(" • ", compact(user.getEmail(), user.getPhoneNumber(), roleName)))
+                .targetUrl("/admin/users")
+                .build();
+    }
+
+    private AdminSearchResponse toProductSearchResponse(ProductEntity product) {
+        CategoryEntity category = product.getCategory();
+        String categoryName = category == null ? "Chưa có danh mục" : category.getName();
+        String stockLabel = product.getStock() + " " + nullToEmpty(product.getUnit()).trim();
+
+        return AdminSearchResponse.builder()
+                .type("product")
+                .groupLabel("Sản phẩm")
+                .id(product.getId())
+                .title(product.getName())
+                .subtitle(String.join(" • ", compact(categoryName, product.getStatus(), stockLabel)))
+                .targetUrl("/admin/products")
+                .build();
+    }
+
+    private AdminSearchResponse toCategorySearchResponse(CategoryEntity category) {
+        return AdminSearchResponse.builder()
+                .type("category")
+                .groupLabel("Danh mục")
+                .id(category.getId())
+                .title(category.getName())
+                .subtitle(String.join(" • ", compact(category.getSlug(), category.getDescription())))
+                .targetUrl("/admin/categories")
+                .build();
+    }
+
+    private AdminSearchResponse toOrderSearchResponse(OrderEntity order) {
+        UserEntity user = order.getUser();
+        ShippingAddressEntity shippingAddress = order.getShippingAddress();
+        String customerName = shippingAddress == null ? null : shippingAddress.getFullName();
+        if (cleanBlank(customerName) == null && user != null) {
+            customerName = user.getName();
+        }
+
+        return AdminSearchResponse.builder()
+                .type("order")
+                .groupLabel("Đơn hàng")
+                .id(order.getId())
+                .title("Đơn #" + order.getId())
+                .subtitle(String.join(" • ", compact(customerName, order.getStatus(), safeMoney(order.getTotalPrice()).toPlainString() + " đ")))
+                .targetUrl("/admin/orders")
+                .build();
+    }
+
+    private AdminSearchResponse toCouponSearchResponse(CouponEntity coupon) {
+        return AdminSearchResponse.builder()
+                .type("coupon")
+                .groupLabel("Mã giảm giá")
+                .id(coupon.getId())
+                .title(coupon.getCode())
+                .subtitle(String.join(" • ", compact(coupon.getCouponType(), coupon.getDiscountType(), Boolean.TRUE.equals(coupon.getActive()) ? "Đang bật" : "Đang tắt")))
+                .targetUrl("/admin/coupons")
+                .build();
+    }
+
+    private AdminSearchResponse toContactSearchResponse(ContactEntity contact) {
+        return AdminSearchResponse.builder()
+                .type("contact")
+                .groupLabel("Liên hệ")
+                .id(contact.getId())
+                .title(contact.getFullName())
+                .subtitle(String.join(" • ", compact(contact.getEmail(), contact.getPhoneNumber(), Boolean.TRUE.equals(contact.getReplied()) ? "Đã phản hồi" : "Chưa phản hồi")))
+                .targetUrl("/admin/contacts")
                 .build();
     }
 
@@ -297,6 +427,17 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         }
 
         return value.trim();
+    }
+
+    private List<String> compact(String... values) {
+        return Arrays.stream(values)
+                .map(this::cleanBlank)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private record DateRange(LocalDateTime from, LocalDateTime to) {

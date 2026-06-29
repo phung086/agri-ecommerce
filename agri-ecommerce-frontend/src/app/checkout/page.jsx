@@ -78,6 +78,9 @@ function buildDetailedAddress(form) {
     .join(", ");
 }
 
+const PHONE_REGEX = /^0\d{9}$/;
+const PHONE_ERROR_MESSAGE = "Số điện thoại phải gồm đúng 10 chữ số.";
+
 function getActiveCustomerSession() {
   const session = getAuthSession(AUTH_SCOPES.customer);
   if (!session?.accessToken || isAuthSessionExpired(session)) {
@@ -459,6 +462,7 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   const cartItems = cart?.items || [];
   const cartTotal = Number(cart?.totalAmount || 0);
@@ -467,6 +471,13 @@ export default function CheckoutPage() {
   const selectedAddress = addresses.find(
     (address) => String(address.id) === String(selectedAddressId)
   );
+  const isAddressPhonePristine = addressForm.phone === "";
+  const isAddressPhoneValid = PHONE_REGEX.test(addressForm.phone);
+  const addressPhoneClassName = isAddressPhonePristine
+    ? ""
+    : isAddressPhoneValid
+      ? "border-emerald-500 focus-visible:ring-emerald-400"
+      : "border-red-500 focus-visible:ring-red-400";
 
   const selectedProvinceForForm = useMemo(
     () => findAddressOption(VIETNAM_PROVINCES, addressForm.provinceCode),
@@ -575,6 +586,15 @@ export default function CheckoutPage() {
 
   function updateAddressForm(field, value) {
     setAddressForm((cur) => ({ ...cur, [field]: value }));
+    if (field === "phone") {
+      if (value === "") {
+        setPhoneError("");
+      } else if (!PHONE_REGEX.test(value)) {
+        setPhoneError(PHONE_ERROR_MESSAGE);
+      } else {
+        setPhoneError("");
+      }
+    }
   }
 
   function handleProvinceChange(code) {
@@ -626,6 +646,12 @@ export default function CheckoutPage() {
     setSavingAddress(true);
     setError("");
     setNotice("");
+
+    if (!PHONE_REGEX.test(addressForm.phone)) {
+      setPhoneError(PHONE_ERROR_MESSAGE);
+      setSavingAddress(false);
+      return;
+    }
 
     try {
       const payload = {
@@ -1008,11 +1034,20 @@ export default function CheckoutPage() {
                       <Input
                         id="address-phone"
                         value={addressForm.phone}
+                        inputMode="numeric"
+                        autoComplete="tel"
                         onChange={(e) =>
                           updateAddressForm("phone", e.target.value)
                         }
                         required={showAddressForm}
+                        aria-invalid={Boolean(phoneError)}
+                        className={addressPhoneClassName}
                       />
+                      {phoneError && (
+                        <p className="text-xs font-medium text-red-500">
+                          {phoneError}
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="address-province">Tỉnh/thành phố</Label>
@@ -1094,7 +1129,7 @@ export default function CheckoutPage() {
                   <Button
                     type="button"
                     className="mt-4 bg-slate-950 font-bold hover:bg-emerald-700"
-                    disabled={savingAddress}
+                    disabled={savingAddress || !isAddressPhoneValid}
                     onClick={handleSaveAddress}
                   >
                     {savingAddress ? (
