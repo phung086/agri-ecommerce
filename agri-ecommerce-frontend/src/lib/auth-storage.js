@@ -85,8 +85,18 @@ function clearLegacyAuthKeys() {
   });
 }
 
+function notifyAuthSessionUpdated(scope) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const normalizedScope = normalizeScope(scope);
+  window.dispatchEvent(new Event(`${normalizedScope}-auth-session-updated`));
+}
+
 export function isAdminUser(user) {
-  return String(user?.roleName || "").toLowerCase() === "admin";
+  const roleName = String(user?.roleName || user?.role || "").toLowerCase();
+  return roleName === "admin" || roleName === "role_admin";
 }
 
 export function isDeliveryStaffUser(user) {
@@ -190,6 +200,7 @@ export function saveAuthSession(
   }
 
   removeKeys(staleStorage, authKeys);
+  notifyAuthSessionUpdated(scope);
 }
 
 export function clearAuthSession(scope) {
@@ -208,6 +219,8 @@ export function clearAuthSession(scope) {
   if (!scope) {
     clearLegacyAuthKeys();
   }
+
+  scopes.forEach(notifyAuthSessionUpdated);
 }
 
 export { AUTH_SCOPES };

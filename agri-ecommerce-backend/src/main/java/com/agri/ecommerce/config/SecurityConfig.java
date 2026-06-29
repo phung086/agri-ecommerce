@@ -5,6 +5,7 @@ import com.agri.ecommerce.security.JwtAuthenticationEntryPoint;
 import com.agri.ecommerce.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -20,6 +21,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -33,6 +35,9 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
+
+    @Value("${app.cors.allowed-origins:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}")
+    private String allowedOrigins;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -85,7 +90,7 @@ public class SecurityConfig {
             public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
                 CorsConfiguration config = new CorsConfiguration();
 
-                config.setAllowedOrigins(List.of("http://localhost:3000"));
+                config.setAllowedOrigins(parseAllowedOrigins());
                 config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
                 config.setAllowedHeaders(List.of("*"));
                 config.setAllowCredentials(true);
@@ -94,6 +99,13 @@ public class SecurityConfig {
                 return config;
             }
         };
+    }
+
+    private List<String> parseAllowedOrigins() {
+        return Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .toList();
     }
 
     @Bean

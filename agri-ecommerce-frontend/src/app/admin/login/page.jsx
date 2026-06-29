@@ -39,8 +39,23 @@ function getNextPath() {
 
   const next = new URLSearchParams(window.location.search).get("next");
 
-  if (next?.startsWith("/admin") && next !== "/admin/login") {
-    return next;
+  if (!next) {
+    return "/admin";
+  }
+
+  try {
+    const nextUrl = new URL(next, window.location.origin);
+    const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+
+    if (
+      nextUrl.origin === window.location.origin &&
+      nextUrl.pathname.startsWith("/admin") &&
+      !nextUrl.pathname.startsWith("/admin/login")
+    ) {
+      return nextPath;
+    }
+  } catch {
+    return "/admin";
   }
 
   return "/admin";
@@ -70,6 +85,7 @@ export default function AdminLoginPage() {
     event.preventDefault();
     setError("");
     setLoading(true);
+    clearAuthSession(AUTH_SCOPES.admin);
 
     try {
       const response = await authService.login({

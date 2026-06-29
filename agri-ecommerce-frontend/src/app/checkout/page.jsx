@@ -44,15 +44,39 @@ import { cartService } from "@/services/cart.service";
 import { orderService } from "@/services/order.service";
 import { promotionService } from "@/services/promotion.service";
 import { shippingAddressService } from "@/services/shipping-address.service";
+import vietnamAddresses from "@/data/vietnam-addresses.json";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
-const blankAddressForm = {
-  fullName: "",
-  phone: "",
-  city: "",
-  address: "",
-  defaultAddress: true,
-};
+const VIETNAM_PROVINCES = vietnamAddresses;
+
+function createBlankAddressForm(defaultAddress = true) {
+  return {
+    fullName: "",
+    phone: "",
+    provinceCode: "",
+    provinceName: "",
+    districtCode: "",
+    districtName: "",
+    wardCode: "",
+    wardName: "",
+    address: "",
+    defaultAddress,
+  };
+}
+
+function getProvinceLabel(province) {
+  return province.name.replace(/^(Tỉnh|Thành phố)\s+/i, "");
+}
+
+function findAddressOption(options = [], code) {
+  return options.find((option) => String(option.code) === String(code));
+}
+
+function buildDetailedAddress(form) {
+  return [form.address.trim(), form.wardName, form.districtName]
+    .filter(Boolean)
+    .join(", ");
+}
 
 function getActiveCustomerSession() {
   const session = getAuthSession(AUTH_SCOPES.customer);
@@ -163,6 +187,23 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  /* Sync input when appliedCoupon is removed externally */
+  useEffect(() => {
+    if (appliedCoupon) return undefined;
+
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setInputValue("");
+      setCouponError("");
+      setCouponSuccess("");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedCoupon]);
 
   /* Filter coupons by input */
   const filtered = useMemo(() => {
@@ -406,7 +447,10 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [appliedCoupon, setAppliedCoupon] = useState(null); // CouponResponse | null
-  const [addressForm, setAddressForm] = useState(blankAddressForm);
+  const [addressForm, setAddressForm] = useState(() =>
+    createBlankAddressForm()
+  );
+  const [showAddressForm, setShowAddressForm] = useState(false);
   const [preview, setPreview] = useState(null);
   const [createdOrder, setCreatedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -423,6 +467,21 @@ export default function CheckoutPage() {
   const selectedAddress = addresses.find(
     (address) => String(address.id) === String(selectedAddressId)
   );
+
+  const selectedProvinceForForm = useMemo(
+    () => findAddressOption(VIETNAM_PROVINCES, addressForm.provinceCode),
+    [addressForm.provinceCode]
+  );
+  const selectedDistrictForForm = useMemo(
+    () =>
+      findAddressOption(
+        selectedProvinceForForm?.districts,
+        addressForm.districtCode
+      ),
+    [addressForm.districtCode, selectedProvinceForForm]
+  );
+  const districtOptions = selectedProvinceForForm?.districts ?? [];
+  const wardOptions = selectedDistrictForForm?.wards ?? [];
 
   /* Live discount calculation — from preview if available, else compute locally */
   const summary = useMemo(() => {
@@ -494,6 +553,8 @@ export default function CheckoutPage() {
           setSelectedAddressId(
             defaultAddress?.id ? String(defaultAddress.id) : ""
           );
+          setShowAddressForm(nextAddresses.length === 0);
+          setAddressForm(createBlankAddressForm(nextAddresses.length === 0));
           setPreview(null);
         }
       } catch (err) {
@@ -516,6 +577,50 @@ export default function CheckoutPage() {
     setAddressForm((cur) => ({ ...cur, [field]: value }));
   }
 
+  function handleProvinceChange(code) {
+    const province = findAddressOption(VIETNAM_PROVINCES, code);
+    setAddressForm((cur) => ({
+      ...cur,
+      provinceCode: code,
+      provinceName: province ? getProvinceLabel(province) : "",
+      districtCode: "",
+      districtName: "",
+      wardCode: "",
+      wardName: "",
+    }));
+  }
+
+  function handleDistrictChange(code) {
+    const district = findAddressOption(selectedProvinceForForm?.districts, code);
+    setAddressForm((cur) => ({
+      ...cur,
+      districtCode: code,
+      districtName: district?.name ?? "",
+      wardCode: "",
+      wardName: "",
+    }));
+  }
+
+  function handleWardChange(code) {
+    const ward = findAddressOption(selectedDistrictForForm?.wards, code);
+    setAddressForm((cur) => ({
+      ...cur,
+      wardCode: code,
+      wardName: ward?.name ?? "",
+    }));
+  }
+
+  function openAddressForm() {
+    setAddressForm(createBlankAddressForm(addresses.length === 0));
+    setShowAddressForm(true);
+  }
+
+  function closeAddressForm() {
+    if (addresses.length === 0) return;
+    setAddressForm(createBlankAddressForm(false));
+    setShowAddressForm(false);
+  }
+
   async function handleSaveAddress(event) {
     event.preventDefault();
     setSavingAddress(true);
@@ -526,18 +631,34 @@ export default function CheckoutPage() {
       const payload = {
         fullName: addressForm.fullName.trim(),
         phone: addressForm.phone.trim(),
-        city: addressForm.city.trim(),
-        address: addressForm.address.trim(),
+        city: addressForm.provinceName.trim(),
+        address: buildDetailedAddress(addressForm),
         defaultAddress:
           Boolean(addressForm.defaultAddress) || addresses.length === 0,
       };
+      if (
+        !payload.fullName ||
+        !payload.phone ||
+        !payload.city ||
+        !addressForm.districtCode ||
+        !addressForm.wardCode ||
+        !payload.address
+      ) {
+        throw new Error("Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng.");
+      }
       const savedAddress =
         await shippingAddressService.createAddress(payload);
       const nextAddresses = await shippingAddressService.getAddresses();
+      const normalizedAddresses = Array.isArray(nextAddresses)
+        ? nextAddresses
+        : [];
 
-      setAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
-      setSelectedAddressId(String(savedAddress.id));
-      setAddressForm(blankAddressForm);
+      setAddresses(normalizedAddresses);
+      setSelectedAddressId(
+        String(savedAddress?.id ?? normalizedAddresses[0]?.id ?? "")
+      );
+      setAddressForm(createBlankAddressForm(false));
+      setShowAddressForm(false);
       setPreview(null);
       setNotice("Đã thêm địa chỉ giao hàng.");
     } catch (err) {
@@ -590,7 +711,11 @@ export default function CheckoutPage() {
     try {
       const currentPreview = await handlePreview();
 
-      if (!currentPreview?.canCheckout) {
+      if (!currentPreview) {
+        return;
+      }
+
+      if (!currentPreview.canCheckout) {
         setError(
           "Đơn hàng chưa đủ điều kiện thanh toán. Vui lòng kiểm tra lại."
         );
@@ -598,11 +723,19 @@ export default function CheckoutPage() {
       }
 
       const order = await orderService.checkout(checkoutPayload);
-      const nextCart = await cartService.getCart();
 
       setCreatedOrder(order);
-      setCart(nextCart);
       setPreview(null);
+
+      if (paymentMethod === "vnpay") {
+        setNotice(`Đã tạo đơn hàng #${order.id}. Đang chuyển sang VNPay...`);
+        const payment = await orderService.createVnpayPaymentUrl(order.id);
+        window.location.assign(payment.paymentUrl);
+        return;
+      }
+
+      const nextCart = await cartService.getCart();
+      setCart(nextCart);
       setNotice(`Đã tạo đơn hàng #${order.id}.`);
     } catch (err) {
       setError(getErrorMessage(err, "Không thể tạo đơn hàng."));
@@ -827,11 +960,36 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                {/* Add address form */}
-                <div className="mt-5 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4">
-                  <div className="mb-4 flex items-center gap-2 font-black text-emerald-950">
+                {addresses.length > 0 && !showAddressForm && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-5 h-11 border-emerald-200 bg-white font-bold text-emerald-800 hover:bg-emerald-50"
+                    onClick={openAddressForm}
+                  >
                     <Plus className="size-4" />
                     Thêm địa chỉ mới
+                  </Button>
+                )}
+
+                {/* Add address form */}
+                {showAddressForm && (
+                <div className="mt-5 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 font-black text-emerald-950">
+                      <Plus className="size-4" />
+                      Thêm địa chỉ mới
+                    </div>
+                    {addresses.length > 0 && (
+                      <button
+                        type="button"
+                        className="flex size-8 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 transition hover:bg-emerald-50"
+                        onClick={closeAddressForm}
+                        title="Đóng form thêm địa chỉ"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    )}
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
@@ -842,7 +1000,7 @@ export default function CheckoutPage() {
                         onChange={(e) =>
                           updateAddressForm("fullName", e.target.value)
                         }
-                        required={addresses.length === 0}
+                        required={showAddressForm}
                       />
                     </div>
                     <div className="space-y-2">
@@ -853,19 +1011,61 @@ export default function CheckoutPage() {
                         onChange={(e) =>
                           updateAddressForm("phone", e.target.value)
                         }
-                        required={addresses.length === 0}
+                        required={showAddressForm}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="address-province">Tỉnh/thành phố</Label>
+                      <select
+                        id="address-province"
+                        value={addressForm.provinceCode}
+                        onChange={(e) => handleProvinceChange(e.target.value)}
+                        required={showAddressForm}
+                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                      >
+                        <option value="">Chọn tỉnh/thành phố</option>
+                        {VIETNAM_PROVINCES.map((province) => (
+                          <option key={province.code} value={province.code}>
+                            {getProvinceLabel(province)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="address-district">Quận/huyện</Label>
+                      <select
+                        id="address-district"
+                        value={addressForm.districtCode}
+                        onChange={(e) => handleDistrictChange(e.target.value)}
+                        disabled={!selectedProvinceForForm}
+                        required={showAddressForm}
+                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="">Chọn quận/huyện</option>
+                        {districtOptions.map((district) => (
+                          <option key={district.code} value={district.code}>
+                            {district.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="address-city">Tỉnh/thành phố</Label>
-                      <Input
-                        id="address-city"
-                        value={addressForm.city}
-                        onChange={(e) =>
-                          updateAddressForm("city", e.target.value)
-                        }
-                        required={addresses.length === 0}
-                      />
+                      <Label htmlFor="address-ward">Phường/xã</Label>
+                      <select
+                        id="address-ward"
+                        value={addressForm.wardCode}
+                        onChange={(e) => handleWardChange(e.target.value)}
+                        disabled={!selectedDistrictForForm}
+                        required={showAddressForm}
+                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="">Chọn phường/xã</option>
+                        {wardOptions.map((ward) => (
+                          <option key={ward.code} value={ward.code}>
+                            {ward.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="address-detail">Địa chỉ chi tiết</Label>
@@ -876,7 +1076,7 @@ export default function CheckoutPage() {
                           updateAddressForm("address", e.target.value)
                         }
                         rows={3}
-                        required={addresses.length === 0}
+                        required={showAddressForm}
                       />
                     </div>
                   </div>
@@ -905,6 +1105,7 @@ export default function CheckoutPage() {
                     Thêm địa chỉ
                   </Button>
                 </div>
+                )}
               </section>
             </div>
 
@@ -937,10 +1138,11 @@ export default function CheckoutPage() {
                         setPreview(null);
                       }}
                       className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                    >
-                      <option value="cash">Thanh toán khi nhận hàng</option>
-                      <option value="paypal">PayPal</option>
-                    </select>
+                      >
+                        <option value="cash">Thanh toán khi nhận hàng</option>
+                        <option value="vnpay">VNPay Sandbox</option>
+                        <option value="paypal">PayPal</option>
+                      </select>
                   </div>
 
                   {/* ── COUPON PICKER ───────────────────────────────────── */}
@@ -1095,8 +1297,9 @@ export default function CheckoutPage() {
                   </div>
 
                   <p className="text-xs leading-5 text-slate-500">
-                    Đơn PayPal hiện được tạo ở trạng thái chờ thanh toán; bước
-                    xác nhận PayPal sẽ nối ở batch sau.
+                    Với VNPay, đơn hàng sẽ được tạo trước rồi chuyển sang cổng
+                    thanh toán; hệ thống chỉ cập nhật đã thanh toán sau khi IPN
+                    hợp lệ từ VNPay gửi về.
                   </p>
                 </div>
               </section>

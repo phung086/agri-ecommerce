@@ -28,4 +28,19 @@ export const orderService = {
     );
     return unwrapApiData(response);
   },
+
+  createVnpayPaymentUrl: async (orderId, payload = {}) => {
+    const response = await axiosClient.post(
+      `/customer/orders/${orderId}/payment/vnpay`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  verifyVnpayReturn: async (params = {}) => {
+    const response = await axiosClient.get("/public/payments/vnpay/return", {
+      params,
+    });
+    return unwrapApiData(response);
+  },
 };

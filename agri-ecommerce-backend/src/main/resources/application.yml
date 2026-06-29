@@ -1,12 +1,17 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:agri-ecommerce-backend/.env[.properties]
+
   application:
     name: agri-ecommerce-backend
 
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/veggie_main?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    url: ${DB_URL:jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:veggie_main}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -45,6 +50,15 @@ app:
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   public:
     base-url: ${APP_PUBLIC_BASE_URL:http://localhost:3000}
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}
+  payment:
+    vnpay:
+      pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      tmn-code: ${VNPAY_TMN_CODE:}
+      hash-secret: ${VNPAY_HASH_SECRET:}
+      return-url: ${VNPAY_RETURN_URL:http://localhost:3000/checkout/vnpay-return}
+      expire-minutes: ${VNPAY_EXPIRE_MINUTES:15}
   security:
     login:
       max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
