@@ -1,4 +1,5 @@
 import "./globals.css";
+import AiChatWidget from "@/components/AiChatWidget";
 
 export const metadata = {
   title: "AgriMarket - Sàn nông sản trực tuyến",
@@ -9,7 +10,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="vi" className="h-full antialiased" suppressHydrationWarning>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <AiChatWidget />
+      </body>
     </html>
   );
 }

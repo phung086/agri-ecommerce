@@ -41,14 +41,16 @@ export function getAssetUrl(path) {
     return `/${path.replace(/^\/+/, "")}`;
   }
 
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
   const backendRoot = apiBaseUrl.replace(/\/api\/?$/, "");
 
-  if (!backendRoot) {
-    return `/${path.replace(/^\/+/, "")}`;
+  // Tự động chuẩn hóa: nếu thiếu uploads/ ở đầu thì thêm vào (tránh lỗi 404 từ DB lưu thô tên file)
+  let cleanPath = path.replace(/^\/+/, "");
+  if (!cleanPath.startsWith("uploads/") && !cleanPath.startsWith("admin-assets/") && !cleanPath.startsWith("market-assets/")) {
+    cleanPath = `uploads/${cleanPath}`;
   }
 
-  return `${backendRoot}/${path.replace(/^\/+/, "")}`;
+  return `${backendRoot}/${cleanPath}`;
 }
 
 export function getImageBackground(
