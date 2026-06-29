@@ -91,13 +91,13 @@ public class AiChatServiceImpl implements AiChatService {
     private final UserRepository userRepository;
 
     public AiChatServiceImpl(
-            @Qualifier("aiChatLanguageModel") ChatLanguageModel chatLanguageModel,
+            @Qualifier("aiChatLanguageModel") java.util.Optional<ChatLanguageModel> chatLanguageModel,
             AiChatProperties aiChatProperties,
             AiProductContextService productContextService,
             ChatMessageRepository chatMessageRepository,
             UserRepository userRepository
     ) {
-        this.chatLanguageModel = chatLanguageModel;
+        this.chatLanguageModel = chatLanguageModel.orElse(null);
         this.aiChatProperties = aiChatProperties;
         this.productContextService = productContextService;
         this.chatMessageRepository = chatMessageRepository;
