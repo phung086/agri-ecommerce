@@ -29,6 +29,7 @@ public interface CouponRepository extends JpaRepository<CouponEntity, Long>, Jpa
             select count(coupon.id)
             from CouponEntity coupon
             where coupon.active = true
+              and (coupon.startsAt is null or coupon.startsAt <= :now)
               and (coupon.expiresAt is null or coupon.expiresAt >= :now)
               and (coupon.usageLimit is null or coupon.timesUsed < coupon.usageLimit)
             """)

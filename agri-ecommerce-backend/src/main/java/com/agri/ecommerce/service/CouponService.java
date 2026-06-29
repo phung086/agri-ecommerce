@@ -26,5 +26,5 @@ public interface CouponService {
 
     CouponResponse updateCouponStatus(Long couponId, CouponStatusUpdateRequest request);
 
-    CouponResponse deactivateCoupon(Long couponId);
+    void deleteCoupon(Long couponId);
 }

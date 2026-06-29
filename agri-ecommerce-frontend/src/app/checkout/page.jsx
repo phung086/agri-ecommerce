@@ -89,6 +89,51 @@ function deriveLabel(code = "") {
   return "Mã ưu đãi đặc biệt";
 }
 
+function isFreeshipCoupon(coupon) {
+  return (
+    coupon?.couponType === "FREESHIP" ||
+    String(coupon?.code || "").trim().toUpperCase() === "FREESHIP"
+  );
+}
+
+function getCouponBadgeText(coupon) {
+  if (isFreeshipCoupon(coupon)) {
+    return "Freeship";
+  }
+
+  if (coupon?.discountType === "FIXED_AMOUNT") {
+    return `-${formatCurrency(coupon.discountAmount || 0)}`;
+  }
+
+  return `-${coupon?.discountPercentage || 0}%`;
+}
+
+function getCouponSuccessMessage(coupon) {
+  if (isFreeshipCoupon(coupon)) {
+    return "Áp dụng thành công! Miễn phí vận chuyển cho đơn hàng.";
+  }
+
+  if (coupon?.discountType === "FIXED_AMOUNT") {
+    return `Áp dụng thành công! Giảm ${formatCurrency(
+      coupon.discountAmount || 0
+    )} cho đơn hàng.`;
+  }
+
+  return `Áp dụng thành công! Giảm ${coupon?.discountPercentage || 0}% cho đơn hàng.`;
+}
+
+function getEstimatedDiscountAmount(coupon, subtotal) {
+  if (!coupon || isFreeshipCoupon(coupon)) {
+    return 0;
+  }
+
+  if (coupon.discountType === "FIXED_AMOUNT") {
+    return Math.min(Number(coupon.discountAmount || 0), subtotal);
+  }
+
+  return Math.round((subtotal * Number(coupon.discountPercentage || 0)) / 100);
+}
+
 /* ─── Coupon Autocomplete widget ──────────────────────────────────────────── */
 function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
   const [inputValue, setInputValue] = useState(appliedCoupon?.code ?? "");
@@ -119,15 +164,6 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  /* Sync input when appliedCoupon is removed externally */
-  useEffect(() => {
-    if (!appliedCoupon) {
-      setInputValue("");
-      setCouponError("");
-      setCouponSuccess("");
-    }
-  }, [appliedCoupon]);
-
   /* Filter coupons by input */
   const filtered = useMemo(() => {
     const q = inputValue.trim().toLowerCase();
@@ -157,9 +193,7 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
       } else {
         const coupon = apiResp.data;
         setInputValue(coupon.code);
-        setCouponSuccess(
-          `Áp dụng thành công! Giảm ${coupon.discountPercentage}% cho đơn hàng.`
-        );
+        setCouponSuccess(getCouponSuccessMessage(coupon));
         onApply(coupon);
       }
     } catch (err) {
@@ -256,7 +290,7 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
               {appliedCoupon.code}
             </span>
             <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
-              -{appliedCoupon.discountPercentage}%
+              {getCouponBadgeText(appliedCoupon)}
             </span>
           </div>
         )}
@@ -278,12 +312,9 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
               ) : (
                 filtered.map((coupon) => {
                   const label = deriveLabel(coupon.code);
+                  const freeship = isFreeshipCoupon(coupon);
                   const discountAmt =
-                    subtotal > 0
-                      ? Math.round(
-                          (subtotal * coupon.discountPercentage) / 100
-                        )
-                      : null;
+                    subtotal > 0 ? getEstimatedDiscountAmount(coupon, subtotal) : null;
 
                   return (
                     <li key={coupon.id}>
@@ -303,7 +334,7 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
                               {label}
                             </p>
                             <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
-                              -{coupon.discountPercentage}%
+                              {getCouponBadgeText(coupon)}
                             </span>
                           </div>
 
@@ -312,7 +343,13 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
                           </p>
 
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-400">
-                            {discountAmt != null && discountAmt > 0 && (
+                            {freeship && (
+                              <span className="flex items-center gap-1 text-emerald-600">
+                                <BadgePercent className="size-3" />
+                                Miễn phí vận chuyển
+                              </span>
+                            )}
+                            {!freeship && discountAmt != null && discountAmt > 0 && (
                               <span className="flex items-center gap-1 text-emerald-600">
                                 <BadgePercent className="size-3" />
                                 Giảm {formatCurrency(discountAmt)}
@@ -390,15 +427,15 @@ export default function CheckoutPage() {
   /* Live discount calculation — from preview if available, else compute locally */
   const summary = useMemo(() => {
     const subtotal = Number(preview?.subtotal ?? cartTotal);
-    const shippingFee = Number(preview?.shippingFee ?? fallbackShippingFee);
+    const shippingFee = isFreeshipCoupon(appliedCoupon)
+      ? 0
+      : Number(preview?.shippingFee ?? fallbackShippingFee);
 
     let discountAmount = Number(preview?.discountAmount ?? 0);
 
     // If we have an applied coupon but no preview yet, show a live estimate
-    if (!preview && appliedCoupon?.discountPercentage) {
-      discountAmount = Math.round(
-        (subtotal * appliedCoupon.discountPercentage) / 100
-      );
+    if (!preview && appliedCoupon) {
+      discountAmount = getEstimatedDiscountAmount(appliedCoupon, subtotal);
     }
 
     const totalPrice = subtotal - discountAmount + shippingFee;
@@ -931,41 +968,56 @@ export default function CheckoutPage() {
                       {/* Discount row — highlighted only when nonzero */}
                       <div
                         className={`flex justify-between transition-all duration-300 ${
-                          summary.discountAmount > 0
+                          summary.discountAmount > 0 || isFreeshipCoupon(appliedCoupon)
                             ? "font-black text-emerald-700"
                             : ""
                         }`}
                       >
                         <span className="flex items-center gap-1.5">
-                          {summary.discountAmount > 0 && (
+                          {(summary.discountAmount > 0 ||
+                            isFreeshipCoupon(appliedCoupon)) && (
                             <BadgePercent className="size-3.5" />
                           )}
-                          Giảm giá
-                          {appliedCoupon && summary.discountAmount > 0 && (
+                          {isFreeshipCoupon(appliedCoupon)
+                            ? "Freeship"
+                            : "Giảm giá"}
+                          {appliedCoupon &&
+                            summary.discountAmount > 0 &&
+                            !isFreeshipCoupon(appliedCoupon) && (
                             <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                              {appliedCoupon.discountPercentage}%
+                              {getCouponBadgeText(appliedCoupon)}
                             </span>
                           )}
                         </span>
                         <span
                           className={
-                            summary.discountAmount > 0 ? "text-emerald-700" : ""
+                            summary.discountAmount > 0 ||
+                            isFreeshipCoupon(appliedCoupon)
+                              ? "text-emerald-700"
+                              : ""
                           }
                         >
-                          -{formatCurrency(summary.discountAmount)}
+                          {isFreeshipCoupon(appliedCoupon)
+                            ? "Miễn phí vận chuyển"
+                            : `-${formatCurrency(summary.discountAmount)}`}
                         </span>
                       </div>
 
                       <div className="flex justify-between">
                         <span>Phí giao hàng</span>
-                        <span>{formatCurrency(summary.shippingFee)}</span>
+                        <span>
+                          {summary.shippingFee === 0 && cartItems.length > 0
+                            ? "Miễn phí"
+                            : formatCurrency(summary.shippingFee)}
+                        </span>
                       </div>
 
                       <div className="flex justify-between border-t border-emerald-100 pt-3 text-base font-black text-slate-950">
                         <span>Tổng thanh toán</span>
                         <span
                           className={
-                            summary.discountAmount > 0
+                            summary.discountAmount > 0 ||
+                            isFreeshipCoupon(appliedCoupon)
                               ? "text-emerald-700"
                               : ""
                           }

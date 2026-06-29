@@ -389,7 +389,11 @@ export default function PromotionsPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    const timeoutId = window.setTimeout(() => {
+      load();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [load]);
 
   function handleCopy(code) {

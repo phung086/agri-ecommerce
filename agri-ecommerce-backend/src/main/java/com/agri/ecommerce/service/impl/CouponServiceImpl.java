@@ -17,6 +17,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Set;
@@ -26,10 +28,18 @@ import java.util.Set;
 public class CouponServiceImpl implements CouponService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final String COUPON_TYPE_ORDER_DISCOUNT = "ORDER_DISCOUNT";
+    private static final String COUPON_TYPE_FREESHIP = "FREESHIP";
+    private static final String DISCOUNT_TYPE_PERCENTAGE = "PERCENTAGE";
+    private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "id",
             "code",
+            "couponType",
+            "discountType",
             "discountPercentage",
+            "discountAmount",
+            "startsAt",
             "expiresAt",
             "usageLimit",
             "timesUsed",
@@ -85,10 +95,18 @@ public class CouponServiceImpl implements CouponService {
     public CouponResponse createCoupon(CouponCreateRequest request) {
         String code = normalizeCode(request.getCode());
         validateCodeUnique(code, null);
+        String couponType = normalizeCouponType(request.getCouponType());
+        String discountType = normalizeDiscountType(request.getDiscountType(), couponType);
+        validateCouponRule(couponType, discountType, request.getDiscountPercentage(), request.getDiscountAmount());
+        validateDateRange(request.getStartsAt(), request.getExpiresAt());
 
         CouponEntity coupon = CouponEntity.builder()
                 .code(code)
-                .discountPercentage(request.getDiscountPercentage())
+                .couponType(couponType)
+                .discountType(discountType)
+                .discountPercentage(resolveDiscountPercentage(couponType, discountType, request.getDiscountPercentage()))
+                .discountAmount(resolveDiscountAmount(couponType, discountType, request.getDiscountAmount()))
+                .startsAt(request.getStartsAt())
                 .expiresAt(request.getExpiresAt())
                 .usageLimit(request.getUsageLimit())
                 .timesUsed(0)
@@ -105,9 +123,17 @@ public class CouponServiceImpl implements CouponService {
         String code = normalizeCode(request.getCode());
         validateCodeUnique(code, couponId);
         validateUsageLimitCanApply(coupon, request.getUsageLimit());
+        String couponType = normalizeCouponType(request.getCouponType());
+        String discountType = normalizeDiscountType(request.getDiscountType(), couponType);
+        validateCouponRule(couponType, discountType, request.getDiscountPercentage(), request.getDiscountAmount());
+        validateDateRange(request.getStartsAt(), request.getExpiresAt());
 
         coupon.setCode(code);
-        coupon.setDiscountPercentage(request.getDiscountPercentage());
+        coupon.setCouponType(couponType);
+        coupon.setDiscountType(discountType);
+        coupon.setDiscountPercentage(resolveDiscountPercentage(couponType, discountType, request.getDiscountPercentage()));
+        coupon.setDiscountAmount(resolveDiscountAmount(couponType, discountType, request.getDiscountAmount()));
+        coupon.setStartsAt(request.getStartsAt());
         coupon.setExpiresAt(request.getExpiresAt());
         coupon.setUsageLimit(request.getUsageLimit());
 
@@ -129,11 +155,9 @@ public class CouponServiceImpl implements CouponService {
 
     @Override
     @Transactional
-    public CouponResponse deactivateCoupon(Long couponId) {
+    public void deleteCoupon(Long couponId) {
         CouponEntity coupon = findCouponById(couponId);
-        coupon.setActive(false);
-
-        return couponMapper.toCouponResponse(couponRepository.save(coupon));
+        couponRepository.delete(coupon);
     }
 
     private Specification<CouponEntity> hasKeyword(String keyword) {
@@ -217,6 +241,77 @@ public class CouponServiceImpl implements CouponService {
         if (usageLimit < timesUsed) {
             throw new BadRequestException("Giới hạn sử dụng không được nhỏ hơn số lượt đã dùng hiện tại: " + timesUsed);
         }
+    }
+
+    private void validateCouponRule(String couponType, String discountType, Integer discountPercentage, BigDecimal discountAmount) {
+        if (COUPON_TYPE_FREESHIP.equals(couponType)) {
+            return;
+        }
+
+        if (DISCOUNT_TYPE_PERCENTAGE.equals(discountType)) {
+            if (discountPercentage == null || discountPercentage < 1 || discountPercentage > 100) {
+                throw new BadRequestException("Phan tram giam gia phai tu 1 den 100");
+            }
+            return;
+        }
+
+        if (discountAmount == null || discountAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("So tien giam gia phai lon hon 0");
+        }
+    }
+
+    private void validateDateRange(LocalDateTime startsAt, LocalDateTime expiresAt) {
+        if (startsAt != null && expiresAt != null && expiresAt.isBefore(startsAt)) {
+            throw new BadRequestException("Ngay ket thuc phai sau ngay bat dau");
+        }
+    }
+
+    private String normalizeCouponType(String couponType) {
+        String normalizedType = cleanBlank(couponType);
+        if (normalizedType == null) {
+            return COUPON_TYPE_ORDER_DISCOUNT;
+        }
+
+        normalizedType = normalizedType.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of(COUPON_TYPE_ORDER_DISCOUNT, COUPON_TYPE_FREESHIP).contains(normalizedType)) {
+            throw new BadRequestException("Loai ma giam gia khong hop le");
+        }
+
+        return normalizedType;
+    }
+
+    private String normalizeDiscountType(String discountType, String couponType) {
+        if (COUPON_TYPE_FREESHIP.equals(couponType)) {
+            return DISCOUNT_TYPE_PERCENTAGE;
+        }
+
+        String normalizedType = cleanBlank(discountType);
+        if (normalizedType == null) {
+            return DISCOUNT_TYPE_PERCENTAGE;
+        }
+
+        normalizedType = normalizedType.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of(DISCOUNT_TYPE_PERCENTAGE, DISCOUNT_TYPE_FIXED_AMOUNT).contains(normalizedType)) {
+            throw new BadRequestException("Kieu giam gia khong hop le");
+        }
+
+        return normalizedType;
+    }
+
+    private Integer resolveDiscountPercentage(String couponType, String discountType, Integer discountPercentage) {
+        if (COUPON_TYPE_FREESHIP.equals(couponType) || DISCOUNT_TYPE_FIXED_AMOUNT.equals(discountType)) {
+            return 0;
+        }
+
+        return discountPercentage;
+    }
+
+    private BigDecimal resolveDiscountAmount(String couponType, String discountType, BigDecimal discountAmount) {
+        if (COUPON_TYPE_FREESHIP.equals(couponType) || DISCOUNT_TYPE_PERCENTAGE.equals(discountType)) {
+            return null;
+        }
+
+        return discountAmount.setScale(2, RoundingMode.HALF_UP);
     }
 
     private String normalizeCode(String code) {

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -15,7 +16,15 @@ public class CouponResponse {
 
     private String code;
 
+    private String couponType;
+
+    private String discountType;
+
     private Integer discountPercentage;
+
+    private BigDecimal discountAmount;
+
+    private LocalDateTime startsAt;
 
     private LocalDateTime expiresAt;
 
