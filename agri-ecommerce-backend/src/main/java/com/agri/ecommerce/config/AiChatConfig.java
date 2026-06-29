@@ -6,7 +6,11 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Condition;
+import org.springframework.context.annotation.ConditionContext;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 
 import java.time.Duration;
 
@@ -31,12 +35,8 @@ public class AiChatConfig {
      * Service layer sẽ kiểm tra null và dùng fallback.
      */
     @Bean(name = "aiChatLanguageModel")
+    @Conditional(AiChatReadyCondition.class)
     public ChatLanguageModel aiChatLanguageModel() {
-        if (!aiChatProperties.isEnabled()) {
-            log.info("[AI Chatbot] AI_CHATBOT_ENABLED=false — chatbot tắt, dùng fallback response");
-            return null;
-        }
-
         String provider = aiChatProperties.getProvider();
 
         if ("gemini".equalsIgnoreCase(provider)) {
@@ -44,8 +44,7 @@ public class AiChatConfig {
         } else if ("openai".equalsIgnoreCase(provider)) {
             return buildOpenAiModel();
         } else {
-            log.warn("[AI Chatbot] Provider không hỗ trợ: '{}'. Dùng fallback response.", provider);
-            return null;
+            throw new IllegalStateException("Unsupported AI provider: " + provider);
         }
     }
 
@@ -65,7 +64,7 @@ public class AiChatConfig {
         } catch (Exception ex) {
             // Log error nhưng không log API key
             log.error("[AI Chatbot] Lỗi khởi tạo Gemini model: {} — dùng fallback", ex.getMessage());
-            return null;
+            throw ex;
         }
     }
 
@@ -85,7 +84,32 @@ public class AiChatConfig {
         } catch (Exception ex) {
             // Log error nhưng không log API key
             log.error("[AI Chatbot] Lỗi khởi tạo OpenAI model: {} — dùng fallback", ex.getMessage());
-            return null;
+            throw ex;
+        }
+    }
+
+    static class AiChatReadyCondition implements Condition {
+
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            boolean enabled = context.getEnvironment().getProperty("app.ai.enabled", Boolean.class, false);
+            if (!enabled) {
+                return false;
+            }
+
+            String provider = context.getEnvironment().getProperty("app.ai.provider", "gemini");
+            if ("gemini".equalsIgnoreCase(provider)) {
+                return hasText(context.getEnvironment().getProperty("app.ai.gemini-api-key", ""));
+            }
+            if ("openai".equalsIgnoreCase(provider)) {
+                return hasText(context.getEnvironment().getProperty("app.ai.openai-api-key", ""));
+            }
+
+            return false;
+        }
+
+        private boolean hasText(String value) {
+            return value != null && !value.isBlank();
         }
     }
 }
