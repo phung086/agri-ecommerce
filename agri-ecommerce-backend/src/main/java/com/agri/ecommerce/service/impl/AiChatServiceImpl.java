@@ -17,7 +17,6 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -105,7 +104,6 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     @Override
-    @Transactional
     public AiChatResponse chat(AiChatRequest request, Long userId) {
         String message = cleanMessage(request.getMessage());
         String guestToken = resolveGuestToken(request.getGuestToken(), userId);
