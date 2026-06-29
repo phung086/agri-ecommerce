@@ -67,3 +67,11 @@ app:
   seo:
     sitemap:
       max-products: ${SITEMAP_MAX_PRODUCTS:10000}
+  ai:
+    enabled: ${AI_CHATBOT_ENABLED:false}
+    provider: ${AI_PROVIDER:gemini}
+    model: ${AI_MODEL:gemini-1.5-flash}
+    gemini-api-key: ${GEMINI_API_KEY:}
+    openai-api-key: ${OPENAI_API_KEY:}
+    max-products-context: ${AI_MAX_PRODUCTS_CONTEXT:10}
+    timeout-seconds: ${AI_TIMEOUT_SECONDS:20}
