@@ -3,10 +3,15 @@ package com.agri.ecommerce.service;
 import com.agri.ecommerce.dto.request.payment.AdminPaymentStatusUpdateRequest;
 import com.agri.ecommerce.dto.request.payment.PaymentRefundRequest;
 import com.agri.ecommerce.dto.request.payment.PaypalPaymentConfirmationRequest;
+import com.agri.ecommerce.dto.request.payment.VnpayPaymentUrlRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.payment.PaymentDetailResponse;
+import com.agri.ecommerce.dto.response.payment.VnpayIpnResponse;
+import com.agri.ecommerce.dto.response.payment.VnpayPaymentUrlResponse;
+import com.agri.ecommerce.dto.response.payment.VnpayReturnResponse;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 public interface PaymentService {
 
@@ -24,6 +29,17 @@ public interface PaymentService {
     PaymentDetailResponse getCustomerOrderPayment(Long userId, Long orderId);
 
     PaymentDetailResponse confirmPaypalPayment(Long userId, Long orderId, PaypalPaymentConfirmationRequest request);
+
+    VnpayPaymentUrlResponse createVnpayPaymentUrl(
+            Long userId,
+            Long orderId,
+            VnpayPaymentUrlRequest request,
+            String clientIp
+    );
+
+    VnpayReturnResponse verifyVnpayReturn(Map<String, String> params);
+
+    VnpayIpnResponse handleVnpayIpn(Map<String, String> params);
 
     PageResponse<PaymentDetailResponse> getAdminPayments(
             String status,

@@ -1,14 +1,17 @@
 package com.agri.ecommerce.controller.customer;
 
 import com.agri.ecommerce.dto.request.payment.PaypalPaymentConfirmationRequest;
+import com.agri.ecommerce.dto.request.payment.VnpayPaymentUrlRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.payment.PaymentDetailResponse;
+import com.agri.ecommerce.dto.response.payment.VnpayPaymentUrlResponse;
 import com.agri.ecommerce.security.UserPrincipal;
 import com.agri.ecommerce.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -102,5 +105,40 @@ public class PaymentController {
         return ResponseEntity.ok(
                 ApiResponse.success("Xác nhận thanh toán PayPal thành công", response, HttpStatus.OK.value())
         );
+    }
+
+    @Operation(summary = "Tạo URL thanh toán VNPay cho đơn hàng")
+    @PostMapping("/orders/{orderId}/payment/vnpay")
+    public ResponseEntity<ApiResponse<VnpayPaymentUrlResponse>> createVnpayPaymentUrl(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID đơn hàng", example = "10")
+            @PathVariable Long orderId,
+            @Valid @RequestBody(required = false) VnpayPaymentUrlRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        VnpayPaymentUrlResponse response = paymentService.createVnpayPaymentUrl(
+                principal.getId(),
+                orderId,
+                request,
+                resolveClientIp(httpServletRequest)
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Tạo URL thanh toán VNPay thành công", response, HttpStatus.OK.value())
+        );
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+
+        return request.getRemoteAddr();
     }
 }

@@ -6,6 +6,7 @@ import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.order.CheckoutPreviewItemResponse;
 import com.agri.ecommerce.dto.response.order.CheckoutPreviewResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
+import com.agri.ecommerce.config.VnpayProperties;
 import com.agri.ecommerce.entity.*;
 import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.common.exception.ResourceNotFoundException;
@@ -43,9 +44,10 @@ public class OrderServiceImpl implements OrderService {
     private static final String COUPON_TYPE_ORDER_DISCOUNT = "ORDER_DISCOUNT";
     private static final String COUPON_TYPE_FREESHIP = "FREESHIP";
     private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
+    private static final String PAYMENT_METHOD_VNPAY = "vnpay";
     private static final BigDecimal DEFAULT_SHIPPING_FEE = new BigDecimal("25000.00");
     private static final int MAX_PAGE_SIZE = 100;
-    private static final Set<String> ALLOWED_PAYMENT_METHODS = Set.of("cash", "paypal");
+    private static final Set<String> ALLOWED_PAYMENT_METHODS = Set.of("cash", "paypal", "vnpay");
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "id", "subtotal", "discountAmount", "shippingFee", "totalPrice", "status", "createdAt", "updatedAt"
     );
@@ -73,6 +75,8 @@ public class OrderServiceImpl implements OrderService {
     private final PaymentService paymentService;
 
     private final OrderMapper orderMapper;
+
+    private final VnpayProperties vnpayProperties;
 
     @Override
     @Transactional(readOnly = true)
@@ -169,6 +173,7 @@ public class OrderServiceImpl implements OrderService {
         UserEntity user = findUserById(userId);
         ShippingAddressEntity shippingAddress = findShippingAddressByIdAndUserId(request.getShippingAddressId(), userId);
         String paymentMethod = normalizePaymentMethod(request.getPaymentMethod());
+        validateVnpayConfigurationIfNeeded(paymentMethod);
         List<CartItemEntity> cartItems = cartItemRepository.findByUser_IdOrderByCreatedAtDesc(userId);
 
         if (cartItems.isEmpty()) {
@@ -737,10 +742,23 @@ public class OrderServiceImpl implements OrderService {
 
         normalizedPaymentMethod = normalizedPaymentMethod.toLowerCase(Locale.ROOT);
         if (!ALLOWED_PAYMENT_METHODS.contains(normalizedPaymentMethod)) {
-            throw new BadRequestException("Phương thức thanh toán không hợp lệ. Giá trị hợp lệ: cash, paypal");
+            throw new BadRequestException("Phương thức thanh toán không hợp lệ. Giá trị hợp lệ: cash, paypal, vnpay");
         }
 
         return normalizedPaymentMethod;
+    }
+
+    private void validateVnpayConfigurationIfNeeded(String paymentMethod) {
+        if (!PAYMENT_METHOD_VNPAY.equals(paymentMethod)) {
+            return;
+        }
+
+        if (cleanBlank(vnpayProperties.getPayUrl()) == null
+                || cleanBlank(vnpayProperties.getTmnCode()) == null
+                || cleanBlank(vnpayProperties.getHashSecret()) == null
+                || cleanBlank(vnpayProperties.getReturnUrl()) == null) {
+            throw new BadRequestException("VNPay chưa được cấu hình. Vui lòng thiết lập VNPAY_TMN_CODE và VNPAY_HASH_SECRET trong agri-ecommerce-backend/.env rồi khởi động lại backend");
+        }
     }
 
     private Sort parseSort(String sort) {
