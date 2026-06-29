@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -52,6 +52,19 @@ function getCustomerActionErrorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
+function getCartQuantity(cartResponse) {
+  const totalQuantity = Number(cartResponse?.totalQuantity);
+
+  if (Number.isFinite(totalQuantity)) {
+    return totalQuantity;
+  }
+
+  return (cartResponse?.items || []).reduce(
+    (sum, item) => sum + Number(item?.quantity || 0),
+    0
+  );
+}
+
 function normalizeProduct(product) {
   const price = Number(product?.price || 0);
   const stock = Number(product?.stock ?? 0);
@@ -99,8 +112,11 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [cartLoading, setCartLoading] = useState(false);
+  const [cartFeedbackActive, setCartFeedbackActive] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const cartFeedbackTimerRef = useRef(null);
 
   const normalizedProduct = useMemo(
     () => (product ? normalizeProduct(product) : null),
@@ -117,6 +133,26 @@ export default function ProductDetailPage() {
   const averageRating = Number(reviewSummary.averageRating || 0);
   const totalReviews = Number(reviewSummary.totalReviews || 0);
   const displayRating = totalReviews > 0 ? averageRating.toFixed(1) : "";
+
+  useEffect(() => {
+    return () => {
+      if (cartFeedbackTimerRef.current) {
+        window.clearTimeout(cartFeedbackTimerRef.current);
+      }
+    };
+  }, []);
+
+  function triggerAddToCartEffect() {
+    if (cartFeedbackTimerRef.current) {
+      window.clearTimeout(cartFeedbackTimerRef.current);
+    }
+
+    setCartFeedbackActive(true);
+    cartFeedbackTimerRef.current = window.setTimeout(() => {
+      setCartFeedbackActive(false);
+      cartFeedbackTimerRef.current = null;
+    }, 1400);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -154,6 +190,37 @@ export default function ProductDetailPage() {
       cancelled = true;
     };
   }, [slug]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCartCount() {
+      const session = getActiveCustomerSession();
+
+      if (!session) {
+        setCartCount(0);
+        return;
+      }
+
+      try {
+        const response = await cartService.getCart();
+
+        if (!cancelled) {
+          setCartCount(getCartQuantity(response));
+        }
+      } catch {
+        if (!cancelled) {
+          setCartCount(0);
+        }
+      }
+    }
+
+    loadCartCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,10 +318,12 @@ export default function ProductDetailPage() {
     setCartLoading(true);
 
     try {
-      await cartService.addItem({
+      const response = await cartService.addItem({
         productId,
         quantity: 1,
       });
+      setCartCount(getCartQuantity(response));
+      triggerAddToCartEffect();
       setNotice("Đã thêm sản phẩm vào giỏ hàng.");
     } catch (err) {
       setError(
@@ -341,11 +410,26 @@ export default function ProductDetailPage() {
           <div className="flex items-center gap-2">
             <Link
               href="/cart"
-              className="inline-flex size-10 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
+              className={`relative inline-flex size-10 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 ${
+                cartFeedbackActive
+                  ? "scale-105 border-emerald-300 bg-emerald-50 ring-4 ring-emerald-100"
+                  : ""
+              }`}
               aria-label="Xem giỏ hàng"
               title="Xem giỏ hàng"
             >
-              <ShoppingBasket className="size-5" />
+              <ShoppingBasket
+                className={`size-5 ${cartFeedbackActive ? "animate-bounce" : ""}`}
+              />
+              {cartCount > 0 && (
+                <span
+                  className={`absolute -right-2 -top-2 min-w-5 rounded-full bg-rose-500 px-1 text-center text-xs font-black leading-5 text-white shadow-sm ${
+                    cartFeedbackActive ? "animate-pulse" : ""
+                  }`}
+                >
+                  {cartCount}
+                </span>
+              )}
             </Link>
             <Link
               href="/profile"
@@ -527,16 +611,29 @@ export default function ProductDetailPage() {
                       type="button"
                       onClick={addToCart}
                       disabled={normalizedProduct.disabled || cartLoading}
-                      className="inline-flex h-12 items-center justify-center gap-2 rounded-[8px] bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500"
+                      className={`relative inline-flex h-12 items-center justify-center gap-2 overflow-hidden rounded-[8px] px-5 text-sm font-black text-white transition disabled:bg-slate-200 disabled:text-slate-500 ${
+                        cartFeedbackActive
+                          ? "scale-[1.02] bg-emerald-700 shadow-[0_14px_34px_rgba(16,185,129,0.28)] ring-4 ring-emerald-100"
+                          : "bg-slate-950 hover:bg-emerald-700"
+                      }`}
                     >
+                      {cartFeedbackActive && (
+                        <span className="absolute inset-0 animate-[add-to-cart-sheen_1.1s_ease-out] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+                      )}
                       {cartLoading ? (
                         <Loader2 className="size-5 animate-spin" />
+                      ) : cartFeedbackActive ? (
+                        <CheckCircle2 className="relative z-10 size-5 animate-[add-to-cart-pop_0.45s_ease-out]" />
                       ) : (
-                        <ShoppingBasket className="size-5" />
+                        <ShoppingBasket className="relative z-10 size-5" />
                       )}
-                      {normalizedProduct.disabled
-                        ? "Tạm hết hàng"
-                        : "Thêm vào giỏ"}
+                      <span className="relative z-10">
+                        {normalizedProduct.disabled
+                          ? "Tạm hết hàng"
+                          : cartFeedbackActive
+                            ? "Đã thêm"
+                            : "Thêm vào giỏ"}
+                      </span>
                     </button>
                     <Link
                       href="/cart"

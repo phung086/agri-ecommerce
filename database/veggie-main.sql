@@ -201,7 +201,11 @@ INSERT INTO `contacts` (`id`, `full_name`, `phone_number`, `email`, `message`, `
 CREATE TABLE `coupons` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `code` varchar(255) NOT NULL,
+  `coupon_type` varchar(50) NOT NULL DEFAULT 'ORDER_DISCOUNT',
+  `discount_type` varchar(50) NOT NULL DEFAULT 'PERCENTAGE',
   `discount_percentage` tinyint(3) UNSIGNED NOT NULL,
+  `discount_amount` decimal(10,2) DEFAULT NULL,
+  `starts_at` timestamp NULL DEFAULT NULL,
   `expires_at` timestamp NULL DEFAULT NULL,
   `usage_limit` int(10) UNSIGNED DEFAULT NULL,
   `times_used` int(10) UNSIGNED NOT NULL DEFAULT 0,
@@ -214,9 +218,9 @@ CREATE TABLE `coupons` (
 -- Dumping data for table `coupons`
 --
 
-INSERT INTO `coupons` (`id`, `code`, `discount_percentage`, `expires_at`, `usage_limit`, `times_used`, `is_active`, `created_at`, `updated_at`) VALUES
-(3, 'KK', 5, '2025-11-13 15:22:00', 1, 0, 1, '2025-11-12 15:22:35', '2025-11-12 15:22:35'),
-(4, 'KKKKKKD', 5, '2025-11-22 11:15:00', 1, 0, 1, '2025-11-15 11:15:32', '2025-11-15 11:15:32');
+INSERT INTO `coupons` (`id`, `code`, `coupon_type`, `discount_type`, `discount_percentage`, `discount_amount`, `starts_at`, `expires_at`, `usage_limit`, `times_used`, `is_active`, `created_at`, `updated_at`) VALUES
+(3, 'KK', 'ORDER_DISCOUNT', 'PERCENTAGE', 5, NULL, NULL, '2025-11-13 15:22:00', 1, 0, 1, '2025-11-12 15:22:35', '2025-11-12 15:22:35'),
+(4, 'KKKKKKD', 'ORDER_DISCOUNT', 'PERCENTAGE', 5, NULL, NULL, '2025-11-22 11:15:00', 1, 0, 1, '2025-11-15 11:15:32', '2025-11-15 11:15:32');
 
 -- --------------------------------------------------------
 

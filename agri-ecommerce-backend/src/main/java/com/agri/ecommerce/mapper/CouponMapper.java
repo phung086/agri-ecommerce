@@ -10,16 +10,22 @@ import java.time.LocalDateTime;
 public class CouponMapper {
 
     public CouponResponse toCouponResponse(CouponEntity coupon) {
-        boolean expired = coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        boolean expired = coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(now);
+        boolean notStarted = coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(now);
         boolean usageExhausted = coupon.getUsageLimit() != null
                 && coupon.getTimesUsed() != null
                 && coupon.getTimesUsed() >= coupon.getUsageLimit();
-        boolean available = Boolean.TRUE.equals(coupon.getActive()) && !expired && !usageExhausted;
+        boolean available = Boolean.TRUE.equals(coupon.getActive()) && !notStarted && !expired && !usageExhausted;
 
         return CouponResponse.builder()
                 .id(coupon.getId())
                 .code(coupon.getCode())
+                .couponType(coupon.getCouponType())
+                .discountType(coupon.getDiscountType())
                 .discountPercentage(coupon.getDiscountPercentage())
+                .discountAmount(coupon.getDiscountAmount())
+                .startsAt(coupon.getStartsAt())
                 .expiresAt(coupon.getExpiresAt())
                 .usageLimit(coupon.getUsageLimit())
                 .timesUsed(coupon.getTimesUsed())

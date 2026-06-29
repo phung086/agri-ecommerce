@@ -17,20 +17,20 @@ import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSpecificationExecutor<OrderEntity> {
 
-    @EntityGraph(attributePaths = {"shippingAddress", "coupon"})
+    @EntityGraph(attributePaths = {"shippingAddress"})
     Page<OrderEntity> findByUser_Id(Long userId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"shippingAddress", "coupon"})
+    @EntityGraph(attributePaths = {"shippingAddress"})
     Optional<OrderEntity> findByIdAndUser_Id(Long id, Long userId);
 
     boolean existsByShippingAddress_Id(Long shippingAddressId);
 
     @Override
-    @EntityGraph(attributePaths = {"user", "user.role", "deliveryStaff", "deliveryStaff.role", "shippingAddress", "coupon"})
+    @EntityGraph(attributePaths = {"user", "user.role", "deliveryStaff", "deliveryStaff.role", "shippingAddress"})
     Page<OrderEntity> findAll(org.springframework.data.jpa.domain.Specification<OrderEntity> specification, Pageable pageable);
 
     @Override
-    @EntityGraph(attributePaths = {"user", "user.role", "deliveryStaff", "deliveryStaff.role", "shippingAddress", "coupon"})
+    @EntityGraph(attributePaths = {"user", "user.role", "deliveryStaff", "deliveryStaff.role", "shippingAddress"})
     Optional<OrderEntity> findById(Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

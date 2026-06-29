@@ -17,7 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Admin - Coupon Management", description = "API quản trị mã giảm giá")
+@Tag(name = "Admin - Coupon Management", description = "API quan tri ma giam gia")
 @RestController
 @RequestMapping("/api/admin/coupons")
 @RequiredArgsConstructor
@@ -26,28 +26,28 @@ public class AdminCouponManagementController {
 
     private final CouponService couponService;
 
-    @Operation(summary = "Lấy danh sách mã giảm giá")
+    @Operation(summary = "Lay danh sach ma giam gia")
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<CouponResponse>>> getCoupons(
-            @Parameter(description = "Từ khóa tìm theo mã giảm giá", example = "SUMMER")
+            @Parameter(description = "Tu khoa tim theo ma giam gia", example = "SUMMER")
             @RequestParam(required = false) String keyword,
 
-            @Parameter(description = "Trạng thái bật/tắt", example = "true")
+            @Parameter(description = "Trang thai bat/tat", example = "true")
             @RequestParam(required = false) Boolean active,
 
-            @Parameter(description = "Trạng thái hết hạn", example = "false")
+            @Parameter(description = "Trang thai het han", example = "false")
             @RequestParam(required = false) Boolean expired,
 
-            @Parameter(description = "Trạng thái hết lượt sử dụng", example = "false")
+            @Parameter(description = "Trang thai het luot su dung", example = "false")
             @RequestParam(required = false) Boolean exhausted,
 
-            @Parameter(description = "Trang bắt đầu từ 0", example = "0")
+            @Parameter(description = "Trang bat dau tu 0", example = "0")
             @RequestParam(defaultValue = "0") int page,
 
-            @Parameter(description = "Số phần tử mỗi trang", example = "10")
+            @Parameter(description = "So phan tu moi trang", example = "10")
             @RequestParam(defaultValue = "10") int size,
 
-            @Parameter(description = "Sắp xếp theo field,direction", example = "createdAt,desc")
+            @Parameter(description = "Sap xep theo field,direction", example = "createdAt,desc")
             @RequestParam(defaultValue = "createdAt,desc") String sort
     ) {
         PageResponse<CouponResponse> response = couponService.getCoupons(
@@ -61,11 +61,11 @@ public class AdminCouponManagementController {
         );
 
         return ResponseEntity.ok(
-                ApiResponse.success("Lấy danh sách mã giảm giá thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Lay danh sach ma giam gia thanh cong", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Tạo mã giảm giá")
+    @Operation(summary = "Tao ma giam gia")
     @PostMapping
     public ResponseEntity<ApiResponse<CouponResponse>> createCoupon(
             @Valid @RequestBody CouponCreateRequest request
@@ -73,60 +73,60 @@ public class AdminCouponManagementController {
         CouponResponse response = couponService.createCoupon(request);
 
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo mã giảm giá thành công", response, HttpStatus.CREATED.value()));
+                .body(ApiResponse.success("Tao ma giam gia thanh cong", response, HttpStatus.CREATED.value()));
     }
 
-    @Operation(summary = "Lấy chi tiết mã giảm giá")
+    @Operation(summary = "Lay chi tiet ma giam gia")
     @GetMapping("/{couponId}")
     public ResponseEntity<ApiResponse<CouponResponse>> getCoupon(
-            @Parameter(description = "ID mã giảm giá", example = "1")
+            @Parameter(description = "ID ma giam gia", example = "1")
             @PathVariable Long couponId
     ) {
         CouponResponse response = couponService.getCoupon(couponId);
 
         return ResponseEntity.ok(
-                ApiResponse.success("Lấy chi tiết mã giảm giá thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Lay chi tiet ma giam gia thanh cong", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Cập nhật mã giảm giá")
+    @Operation(summary = "Cap nhat ma giam gia")
     @PutMapping("/{couponId}")
     public ResponseEntity<ApiResponse<CouponResponse>> updateCoupon(
-            @Parameter(description = "ID mã giảm giá", example = "1")
+            @Parameter(description = "ID ma giam gia", example = "1")
             @PathVariable Long couponId,
             @Valid @RequestBody CouponUpdateRequest request
     ) {
         CouponResponse response = couponService.updateCoupon(couponId, request);
 
         return ResponseEntity.ok(
-                ApiResponse.success("Cập nhật mã giảm giá thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Cap nhat ma giam gia thanh cong", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Bật hoặc tắt mã giảm giá")
+    @Operation(summary = "Bat hoac tat ma giam gia")
     @PatchMapping("/{couponId}/status")
     public ResponseEntity<ApiResponse<CouponResponse>> updateCouponStatus(
-            @Parameter(description = "ID mã giảm giá", example = "1")
+            @Parameter(description = "ID ma giam gia", example = "1")
             @PathVariable Long couponId,
             @Valid @RequestBody CouponStatusUpdateRequest request
     ) {
         CouponResponse response = couponService.updateCouponStatus(couponId, request);
 
         return ResponseEntity.ok(
-                ApiResponse.success("Cập nhật trạng thái mã giảm giá thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Cap nhat trang thai ma giam gia thanh cong", response, HttpStatus.OK.value())
         );
     }
 
-    @Operation(summary = "Vô hiệu hóa mã giảm giá")
+    @Operation(summary = "Xoa ma giam gia")
     @DeleteMapping("/{couponId}")
-    public ResponseEntity<ApiResponse<CouponResponse>> deactivateCoupon(
-            @Parameter(description = "ID mã giảm giá", example = "1")
+    public ResponseEntity<ApiResponse<Void>> deleteCoupon(
+            @Parameter(description = "ID ma giam gia", example = "1")
             @PathVariable Long couponId
     ) {
-        CouponResponse response = couponService.deactivateCoupon(couponId);
+        couponService.deleteCoupon(couponId);
 
         return ResponseEntity.ok(
-                ApiResponse.success("Vô hiệu hóa mã giảm giá thành công", response, HttpStatus.OK.value())
+                ApiResponse.success("Xoa ma giam gia thanh cong", null, HttpStatus.OK.value())
         );
     }
 }

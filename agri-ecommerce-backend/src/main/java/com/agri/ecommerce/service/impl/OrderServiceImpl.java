@@ -40,6 +40,9 @@ public class OrderServiceImpl implements OrderService {
     private static final String PAYMENT_PENDING = "pending";
     private static final String PAYMENT_COMPLETED = "completed";
     private static final String PAYMENT_FAILED = "failed";
+    private static final String COUPON_TYPE_ORDER_DISCOUNT = "ORDER_DISCOUNT";
+    private static final String COUPON_TYPE_FREESHIP = "FREESHIP";
+    private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final BigDecimal DEFAULT_SHIPPING_FEE = new BigDecimal("25000.00");
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ALLOWED_PAYMENT_METHODS = Set.of("cash", "paypal");
@@ -138,7 +141,7 @@ public class OrderServiceImpl implements OrderService {
         CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal);
         BigDecimal totalPrice = subtotal
                 .subtract(couponCalculation.discountAmount())
-                .add(DEFAULT_SHIPPING_FEE)
+                .add(couponCalculation.shippingFee())
                 .setScale(2, RoundingMode.HALF_UP);
         List<String> warnings = buildCheckoutPreviewWarnings(previewItems, couponCalculation);
 
@@ -153,7 +156,7 @@ public class OrderServiceImpl implements OrderService {
                         .sum())
                 .subtotal(subtotal)
                 .discountAmount(couponCalculation.discountAmount())
-                .shippingFee(DEFAULT_SHIPPING_FEE)
+                .shippingFee(couponCalculation.shippingFee())
                 .totalPrice(totalPrice)
                 .items(previewItems)
                 .warnings(warnings)
@@ -183,7 +186,7 @@ public class OrderServiceImpl implements OrderService {
         CouponCalculation couponCalculation = calculateCoupon(request.getCouponCode(), subtotal);
         BigDecimal totalPrice = subtotal
                 .subtract(couponCalculation.discountAmount())
-                .add(DEFAULT_SHIPPING_FEE)
+                .add(couponCalculation.shippingFee())
                 .setScale(2, RoundingMode.HALF_UP);
 
         OrderEntity order = orderRepository.save(OrderEntity.builder()
@@ -191,7 +194,7 @@ public class OrderServiceImpl implements OrderService {
                 .shippingAddress(shippingAddress)
                 .subtotal(subtotal)
                 .discountAmount(couponCalculation.discountAmount())
-                .shippingFee(DEFAULT_SHIPPING_FEE)
+                .shippingFee(couponCalculation.shippingFee())
                 .coupon(couponCalculation.coupon())
                 .couponCode(couponCalculation.couponCode())
                 .totalPrice(totalPrice)
@@ -505,25 +508,25 @@ public class OrderServiceImpl implements OrderService {
         String cleanCouponCode = cleanBlank(couponCode);
 
         if (cleanCouponCode == null) {
-            return new CouponCalculation(null, null, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            return new CouponCalculation(
+                    null,
+                    null,
+                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    DEFAULT_SHIPPING_FEE
+            );
         }
 
         CouponEntity coupon = couponRepository.findByCodeIgnoreCaseForUpdate(cleanCouponCode)
                 .orElseThrow(() -> new BadRequestException("Mã giảm giá không tồn tại"));
         validateCoupon(coupon);
 
-        BigDecimal discountAmount = subtotal
-                .multiply(BigDecimal.valueOf(coupon.getDiscountPercentage()))
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-
-        if (discountAmount.compareTo(subtotal) > 0) {
-            discountAmount = subtotal;
-        }
+        BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal);
+        BigDecimal shippingFee = calculateShippingFee(coupon);
 
         coupon.setTimesUsed((coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed()) + 1);
         couponRepository.save(coupon);
 
-        return new CouponCalculation(coupon, coupon.getCode(), discountAmount);
+        return new CouponCalculation(coupon, coupon.getCode(), discountAmount, shippingFee);
     }
 
     private CouponPreviewCalculation calculateCouponPreview(String couponCode, BigDecimal subtotal) {
@@ -533,6 +536,7 @@ public class OrderServiceImpl implements OrderService {
             return new CouponPreviewCalculation(
                     null,
                     BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    DEFAULT_SHIPPING_FEE,
                     false,
                     true,
                     "No coupon applied"
@@ -550,17 +554,13 @@ public class OrderServiceImpl implements OrderService {
             return invalidCouponPreview(coupon.getCode(), invalidMessage);
         }
 
-        BigDecimal discountAmount = subtotal
-                .multiply(BigDecimal.valueOf(coupon.getDiscountPercentage()))
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-
-        if (discountAmount.compareTo(subtotal) > 0) {
-            discountAmount = subtotal;
-        }
+        BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal);
+        BigDecimal shippingFee = calculateShippingFee(coupon);
 
         return new CouponPreviewCalculation(
                 coupon.getCode(),
                 discountAmount,
+                shippingFee,
                 true,
                 true,
                 "Coupon can be applied"
@@ -571,15 +571,57 @@ public class OrderServiceImpl implements OrderService {
         return new CouponPreviewCalculation(
                 couponCode,
                 BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                DEFAULT_SHIPPING_FEE,
                 false,
                 false,
                 message
         );
     }
 
+    private BigDecimal calculateDiscountAmount(CouponEntity coupon, BigDecimal subtotal) {
+        if (COUPON_TYPE_FREESHIP.equals(normalizeCouponType(coupon))) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal discountAmount;
+        if (DISCOUNT_TYPE_FIXED_AMOUNT.equals(normalizeDiscountType(coupon))) {
+            discountAmount = coupon.getDiscountAmount() == null ? BigDecimal.ZERO : coupon.getDiscountAmount();
+        } else {
+            discountAmount = subtotal
+                    .multiply(BigDecimal.valueOf(coupon.getDiscountPercentage()))
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        }
+
+        if (discountAmount.compareTo(subtotal) > 0) {
+            discountAmount = subtotal;
+        }
+
+        return discountAmount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateShippingFee(CouponEntity coupon) {
+        if (COUPON_TYPE_FREESHIP.equals(normalizeCouponType(coupon))) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return DEFAULT_SHIPPING_FEE;
+    }
+
+    private String normalizeCouponType(CouponEntity coupon) {
+        return coupon.getCouponType() == null ? COUPON_TYPE_ORDER_DISCOUNT : coupon.getCouponType();
+    }
+
+    private String normalizeDiscountType(CouponEntity coupon) {
+        return coupon.getDiscountType() == null ? "PERCENTAGE" : coupon.getDiscountType();
+    }
+
     private void validateCoupon(CouponEntity coupon) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             throw new BadRequestException("Mã giảm giá đã bị vô hiệu hóa");
+        }
+
+        if (coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(LocalDateTime.now())) {
+            throw new BadRequestException("Coupon has not started");
         }
 
         if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(LocalDateTime.now())) {
@@ -590,7 +632,20 @@ public class OrderServiceImpl implements OrderService {
             throw new BadRequestException("Mã giảm giá đã hết lượt sử dụng");
         }
 
-        if (coupon.getDiscountPercentage() == null || coupon.getDiscountPercentage() < 0 || coupon.getDiscountPercentage() > 100) {
+        if (COUPON_TYPE_FREESHIP.equals(normalizeCouponType(coupon))) {
+            return;
+        }
+
+        if (DISCOUNT_TYPE_FIXED_AMOUNT.equals(normalizeDiscountType(coupon))
+                && (coupon.getDiscountAmount() == null || coupon.getDiscountAmount().compareTo(BigDecimal.ZERO) <= 0)) {
+            throw new BadRequestException("Coupon discount is invalid");
+        }
+
+        if (DISCOUNT_TYPE_FIXED_AMOUNT.equals(normalizeDiscountType(coupon))) {
+            return;
+        }
+
+        if (coupon.getDiscountPercentage() == null || coupon.getDiscountPercentage() <= 0 || coupon.getDiscountPercentage() > 100) {
             throw new BadRequestException("Mã giảm giá không hợp lệ");
         }
     }
@@ -598,6 +653,10 @@ public class OrderServiceImpl implements OrderService {
     private String getCouponInvalidMessage(CouponEntity coupon) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             return "Coupon is inactive";
+        }
+
+        if (coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(LocalDateTime.now())) {
+            return "Coupon has not started";
         }
 
         if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(LocalDateTime.now())) {
@@ -608,7 +667,20 @@ public class OrderServiceImpl implements OrderService {
             return "Coupon usage limit has been reached";
         }
 
-        if (coupon.getDiscountPercentage() == null || coupon.getDiscountPercentage() < 0 || coupon.getDiscountPercentage() > 100) {
+        if (COUPON_TYPE_FREESHIP.equals(normalizeCouponType(coupon))) {
+            return null;
+        }
+
+        if (DISCOUNT_TYPE_FIXED_AMOUNT.equals(normalizeDiscountType(coupon))
+                && (coupon.getDiscountAmount() == null || coupon.getDiscountAmount().compareTo(BigDecimal.ZERO) <= 0)) {
+            return "Coupon discount is invalid";
+        }
+
+        if (DISCOUNT_TYPE_FIXED_AMOUNT.equals(normalizeDiscountType(coupon))) {
+            return null;
+        }
+
+        if (coupon.getDiscountPercentage() == null || coupon.getDiscountPercentage() <= 0 || coupon.getDiscountPercentage() > 100) {
             return "Coupon discount is invalid";
         }
 
@@ -731,12 +803,18 @@ public class OrderServiceImpl implements OrderService {
     private record CheckoutItem(ProductEntity product, int quantity, BigDecimal price, BigDecimal lineTotal) {
     }
 
-    private record CouponCalculation(CouponEntity coupon, String couponCode, BigDecimal discountAmount) {
+    private record CouponCalculation(
+            CouponEntity coupon,
+            String couponCode,
+            BigDecimal discountAmount,
+            BigDecimal shippingFee
+    ) {
     }
 
     private record CouponPreviewCalculation(
             String couponCode,
             BigDecimal discountAmount,
+            BigDecimal shippingFee,
             boolean valid,
             boolean checkoutAllowed,
             String message

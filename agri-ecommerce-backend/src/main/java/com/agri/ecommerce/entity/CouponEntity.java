@@ -3,6 +3,7 @@ package com.agri.ecommerce.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -23,6 +24,18 @@ public class CouponEntity {
 
     @Column(name = "discount_percentage", nullable = false)
     private Integer discountPercentage;
+
+    @Column(name = "discount_amount", precision = 10, scale = 2)
+    private BigDecimal discountAmount;
+
+    @Column(name = "coupon_type", nullable = false, length = 50)
+    private String couponType;
+
+    @Column(name = "discount_type", nullable = false, length = 50)
+    private String discountType;
+
+    @Column(name = "starts_at")
+    private LocalDateTime startsAt;
 
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
@@ -50,6 +63,18 @@ public class CouponEntity {
 
         if (this.timesUsed == null) {
             this.timesUsed = 0;
+        }
+
+        if (this.discountPercentage == null) {
+            this.discountPercentage = 0;
+        }
+
+        if (this.couponType == null) {
+            this.couponType = "ORDER_DISCOUNT";
+        }
+
+        if (this.discountType == null) {
+            this.discountType = "PERCENTAGE";
         }
 
         if (this.active == null) {

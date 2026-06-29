@@ -29,7 +29,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { formatDate, formatNumber, getApiErrorMessage } from "@/lib/admin-utils";
+import {
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  getApiErrorMessage,
+} from "@/lib/admin-utils";
 import { adminService } from "@/services/admin.service";
 
 const COUPON_FETCH_PARAMS = {
@@ -48,10 +53,19 @@ const COUPON_STATUS_OPTIONS = [
 
 const blankCouponForm = {
   code: "",
+  couponType: "ORDER_DISCOUNT",
+  discountType: "PERCENTAGE",
   discountPercentage: "",
+  discountAmount: "",
+  startsAt: "",
   expiresAt: "",
   usageLimit: "",
   active: true,
+};
+
+const COUPON_TYPE_LABELS = {
+  ORDER_DISCOUNT: "Giảm giá đơn hàng",
+  FREESHIP: "Freeship",
 };
 
 function readPageContent(response) {
@@ -91,13 +105,48 @@ function getCouponStatus(coupon) {
 }
 
 function buildCouponPayload(form) {
-  return {
+  const couponType = form.couponType || "ORDER_DISCOUNT";
+  const discountType =
+    couponType === "FREESHIP" ? "PERCENTAGE" : form.discountType || "PERCENTAGE";
+
+  const payload = {
     code: form.code.trim().toUpperCase(),
-    discountPercentage: Number(form.discountPercentage || 0),
+    couponType,
+    discountType,
+    startsAt: toApiDateTime(form.startsAt),
     expiresAt: toApiDateTime(form.expiresAt),
     usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
     active: Boolean(form.active),
   };
+
+  if (couponType === "ORDER_DISCOUNT" && discountType === "FIXED_AMOUNT") {
+    payload.discountPercentage = null;
+    payload.discountAmount = Number(form.discountAmount || 0);
+  } else if (couponType === "ORDER_DISCOUNT") {
+    payload.discountPercentage = Number(form.discountPercentage || 0);
+    payload.discountAmount = null;
+  } else {
+    payload.discountPercentage = null;
+    payload.discountAmount = null;
+  }
+
+  return payload;
+}
+
+function getCouponTypeLabel(coupon) {
+  return COUPON_TYPE_LABELS[coupon.couponType] || COUPON_TYPE_LABELS.ORDER_DISCOUNT;
+}
+
+function getCouponDiscountLabel(coupon) {
+  if (coupon.couponType === "FREESHIP") {
+    return "Miễn phí vận chuyển";
+  }
+
+  if (coupon.discountType === "FIXED_AMOUNT") {
+    return formatCurrency(coupon.discountAmount || 0);
+  }
+
+  return `${formatNumber(coupon.discountPercentage)}%`;
 }
 
 export default function AdminCouponsPage() {
@@ -211,7 +260,11 @@ export default function AdminCouponsPage() {
     setEditingCoupon(coupon);
     setForm({
       code: coupon.code || "",
+      couponType: coupon.couponType || "ORDER_DISCOUNT",
+      discountType: coupon.discountType || "PERCENTAGE",
       discountPercentage: String(coupon.discountPercentage ?? ""),
+      discountAmount: String(coupon.discountAmount ?? ""),
+      startsAt: toDateInput(coupon.startsAt),
       expiresAt: toDateInput(coupon.expiresAt),
       usageLimit: String(coupon.usageLimit ?? ""),
       active: Boolean(coupon.active),
@@ -271,8 +324,8 @@ export default function AdminCouponsPage() {
     }
   }
 
-  async function deactivateCoupon(coupon) {
-    const confirmed = window.confirm(`Vô hiệu hóa mã ${coupon.code}?`);
+  async function deleteCoupon(coupon) {
+    const confirmed = window.confirm(`Xóa mã ${coupon.code}?`);
 
     if (!confirmed) {
       return;
@@ -283,9 +336,11 @@ export default function AdminCouponsPage() {
     setNotice("");
 
     try {
-      const updatedCoupon = await adminService.deleteCoupon(coupon.id);
-      updateCouponInState(updatedCoupon);
-      setNotice(`Đã vô hiệu hóa mã ${updatedCoupon.code}.`);
+      await adminService.deleteCoupon(coupon.id);
+      setCoupons((current) =>
+        current.filter((currentCoupon) => currentCoupon.id !== coupon.id)
+      );
+      setNotice(`Đã xóa mã ${coupon.code}.`);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -297,7 +352,7 @@ export default function AdminCouponsPage() {
     <div className="space-y-5">
       <AdminPageHeader
         title="Quản lí mã giảm giá"
-        description="Tạo, cập nhật, bật tắt và vô hiệu hóa mã giảm giá bằng API quản trị thật."
+        description="Tạo, cập nhật, bật tắt và xóa mã giảm giá bằng API quản trị thật."
         image="/admin-assets/coupons.svg"
         badges={["Admin API", "CRUD thật", "Coupon checkout"]}
       >
@@ -388,6 +443,7 @@ export default function AdminCouponsPage() {
       <DataTable
         columns={[
           "Mã",
+          "Loại",
           "Giảm",
           "Lượt dùng",
           "Hạn dùng",
@@ -411,7 +467,10 @@ export default function AdminCouponsPage() {
                 </div>
               </TableCell>
               <TableCell className="px-4 font-medium">
-                {formatNumber(coupon.discountPercentage)}%
+                {getCouponTypeLabel(coupon)}
+              </TableCell>
+              <TableCell className="px-4 font-medium">
+                {getCouponDiscountLabel(coupon)}
               </TableCell>
               <TableCell className="px-4">
                 {formatNumber(coupon.timesUsed)} /{" "}
@@ -451,10 +510,10 @@ export default function AdminCouponsPage() {
                     type="button"
                     variant="destructive"
                     size="icon-sm"
-                    title="Vô hiệu hóa mã"
-                    aria-label="Vô hiệu hóa mã"
+                    title="Xóa mã"
+                    aria-label="Xóa mã"
                     disabled={Boolean(actionLoading)}
-                    onClick={() => deactivateCoupon(coupon)}
+                    onClick={() => deleteCoupon(coupon)}
                   >
                     {actionLoading === `delete:${coupon.id}` ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -493,17 +552,86 @@ export default function AdminCouponsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="coupon-discount">Phần trăm giảm</Label>
-                <Input
-                  id="coupon-discount"
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={form.discountPercentage}
+                <Label htmlFor="coupon-type">Loại mã</Label>
+                <select
+                  id="coupon-type"
+                  value={form.couponType}
                   onChange={(event) =>
-                    updateForm("discountPercentage", event.target.value)
+                    setForm((current) => ({
+                      ...current,
+                      couponType: event.target.value,
+                      discountType:
+                        event.target.value === "FREESHIP"
+                          ? "PERCENTAGE"
+                          : current.discountType,
+                    }))
                   }
-                  required
+                  className="h-8 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
+                >
+                  <option value="ORDER_DISCOUNT">Giảm giá đơn hàng</option>
+                  <option value="FREESHIP">Freeship</option>
+                </select>
+              </div>
+
+              {form.couponType === "ORDER_DISCOUNT" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="coupon-discount-type">Kiểu giảm</Label>
+                    <select
+                      id="coupon-discount-type"
+                      value={form.discountType}
+                      onChange={(event) =>
+                        updateForm("discountType", event.target.value)
+                      }
+                      className="h-8 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
+                    >
+                      <option value="PERCENTAGE">Theo phần trăm</option>
+                      <option value="FIXED_AMOUNT">Theo số tiền</option>
+                    </select>
+                  </div>
+
+                  {form.discountType === "FIXED_AMOUNT" ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="coupon-discount-amount">Số tiền giảm</Label>
+                      <Input
+                        id="coupon-discount-amount"
+                        type="number"
+                        min="1"
+                        value={form.discountAmount}
+                        onChange={(event) =>
+                          updateForm("discountAmount", event.target.value)
+                        }
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="coupon-discount">Phần trăm giảm</Label>
+                      <Input
+                        id="coupon-discount"
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={form.discountPercentage}
+                        onChange={(event) =>
+                          updateForm("discountPercentage", event.target.value)
+                        }
+                        required
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="coupon-starts">Ngày bắt đầu</Label>
+                <Input
+                  id="coupon-starts"
+                  type="datetime-local"
+                  value={form.startsAt}
+                  onChange={(event) =>
+                    updateForm("startsAt", event.target.value)
+                  }
                 />
               </div>
 
