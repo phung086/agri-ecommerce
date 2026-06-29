@@ -42,10 +42,18 @@ public class AiProductContextService {
             "vnd", "dong", "budget", "under", "100k", "50k", "200k"
     );
     private static final Set<String> STOP_WORDS = Set.of(
+            // Đại từ xưng hô, động từ hành vi mua sắm
             "toi", "minh", "ban", "can", "muon", "mua", "tim", "cho", "voi",
             "duoi", "tren", "tam", "khoang", "gia", "san", "pham", "hang",
             "loai", "gi", "la", "co", "khong", "duoc", "nhu", "the", "nao",
-            "please", "help", "need", "want", "buy", "product", "price"
+            "please", "help", "need", "want", "buy", "product", "price",
+            // Từ nghi vấn & Trợ từ tiếng Việt
+            "ha", "nhe", "nha", "a", "oi", "di", "chua", "roi", "dau", "sao",
+            // Từ chỉ mục đích gợi ý / tư vấn / chất lượng
+            "goi", "y", "ngan", "sach", "tu", "van", "tuoi", "ngon", "re", "tot",
+            "nhat", "chat", "luong", "tiet", "kiem",
+            // Từ chỉ đơn vị tiền tệ & số đếm phổ biến
+            "vnd", "dong", "nghin", "trieu", "tram", "chuc", "mot", "hai"
     );
 
     private final ProductRepository productRepository;
@@ -191,8 +199,9 @@ public class AiProductContextService {
                 .matcher(normalizedMessage)
                 .results()
                 .map(m -> m.group().trim())
-                .filter(t -> t.length() > 2)
+                .filter(t -> t.length() >= 2) // Giảm xuống 2 để giữ các từ ngắn tiếng Việt (cá, lê, bơ, hẹ...)
                 .filter(t -> !STOP_WORDS.contains(t))
+                .filter(t -> !t.matches(".*\\d.*")) // Loại bỏ các từ chứa số (như 100k, 50k, 100, 2...)
                 .filter(t -> t.chars().anyMatch(Character::isLetter))
                 .distinct()
                 .limit(4)
