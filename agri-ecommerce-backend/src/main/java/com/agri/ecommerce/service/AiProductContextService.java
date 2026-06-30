@@ -1,11 +1,16 @@
 package com.agri.ecommerce.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.agri.ecommerce.config.AiChatProperties;
 import com.agri.ecommerce.dto.response.chat.SuggestedProductResponse;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.entity.ProductImageEntity;
 import com.agri.ecommerce.repository.ProductImageRepository;
 import com.agri.ecommerce.repository.ProductRepository;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -59,9 +65,56 @@ public class AiProductContextService {
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
     private final AiChatProperties aiChatProperties;
+    private final Optional<ChatLanguageModel> chatLanguageModel;
 
     @Value("${app.public.base-url:http://localhost:3000}")
     private String publicBaseUrl;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    private static class IntentParameters {
+        private String keyword;
+        private BigDecimal maxPrice;
+        private String categorySlug;
+    }
+
+    private IntentParameters extractIntentWithLlm(String message) {
+        if (chatLanguageModel.isEmpty()) {
+            return null;
+        }
+
+        String prompt = """
+                You are an AI assistant for an agricultural e-commerce store.
+                Analyze the user's shopping request and extract search parameters in JSON format.
+                JSON keys:
+                - keyword: product name or product type keyword, for example "ca", "rau cai", "ca ngu". Return null if no specific product type is requested. Do not include quality descriptors such as fresh, clean, cheap, good, or budget words.
+                - maxPrice: maximum price or budget in VND as a number. If the user says "100k", output 100000. Return null if no budget constraint is mentioned.
+                - categorySlug: best matching category slug from: "rau-cu", "trai-cay", "thit", "ca", "thuc-pham-khac". Return null if not specific.
+
+                Only return raw JSON. No markdown code blocks, no explanations.
+                User request: "%s"
+                """.formatted(message);
+
+        try {
+            String response = chatLanguageModel.get().chat(prompt);
+            if (response == null || response.isBlank()) {
+                return null;
+            }
+
+            String json = response.trim();
+            if (json.startsWith("```")) {
+                json = json.replaceAll("^```json\\s*", "")
+                        .replaceAll("^```\\s*", "")
+                        .replaceAll("\\s*```$", "");
+            }
+
+            return new ObjectMapper().readValue(json.trim(), IntentParameters.class);
+        } catch (Exception ex) {
+            log.warn("[AI Context] Could not extract intent with LLM: {}. Falling back to keyword parser", ex.getMessage());
+            return null;
+        }
+    }
 
     /**
      * Tìm sản phẩm liên quan đến message và build danh sách SuggestedProductResponse.
@@ -71,15 +124,29 @@ public class AiProductContextService {
      */
     @Transactional(readOnly = true)
     public List<SuggestedProductResponse> findSuggestedProducts(String message) {
-        String normalized = normalizeText(message);
-        BigDecimal budget = extractBudget(normalized);
-        String keyword = buildSearchKeyword(normalized);
+        String keyword = null;
+        BigDecimal budget = null;
+        String categorySlug = null;
+
+        IntentParameters intent = extractIntentWithLlm(message);
+        if (intent != null) {
+            keyword = intent.getKeyword();
+            budget = intent.getMaxPrice();
+            categorySlug = intent.getCategorySlug();
+            log.info("[AI Context] LLM intent extracted: keyword='{}', budget={}, categorySlug='{}'",
+                    keyword, budget, categorySlug);
+        } else {
+            String normalized = normalizeText(message);
+            budget = extractBudget(normalized);
+            keyword = buildSearchKeyword(normalized);
+            log.info("[AI Context] Fallback parser extracted: keyword='{}', budget={}", keyword, budget);
+        }
 
         int limit = aiChatProperties.getMaxProductsContext();
 
         List<ProductEntity> products = productRepository.findPublicSearchSuggestions(
                 keyword,
-                null,
+                categorySlug,
                 budget,
                 IN_STOCK_STATUS,
                 PageRequest.of(0, limit)
