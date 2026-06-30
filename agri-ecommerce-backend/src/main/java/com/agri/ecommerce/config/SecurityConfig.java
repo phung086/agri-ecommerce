@@ -39,6 +39,9 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}")
     private String allowedOrigins;
 
+    @Value("${app.cors.allowed-origin-patterns:}")
+    private String allowedOriginPatterns;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
@@ -90,7 +93,8 @@ public class SecurityConfig {
             public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
                 CorsConfiguration config = new CorsConfiguration();
 
-                config.setAllowedOrigins(parseAllowedOrigins());
+                config.setAllowedOrigins(parseCsv(allowedOrigins));
+                config.setAllowedOriginPatterns(parseCsv(allowedOriginPatterns));
                 config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
                 config.setAllowedHeaders(List.of("*"));
                 config.setAllowCredentials(true);
@@ -101,8 +105,11 @@ public class SecurityConfig {
         };
     }
 
-    private List<String> parseAllowedOrigins() {
-        return Arrays.stream(allowedOrigins.split(","))
+    private List<String> parseCsv(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
                 .toList();
