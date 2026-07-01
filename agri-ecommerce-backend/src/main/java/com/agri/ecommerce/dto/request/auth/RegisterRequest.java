@@ -26,6 +26,10 @@ public class RegisterRequest {
 
     @Pattern(regexp = "^0\\d{9}$", message = "Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số")
     @Size(max = 255, message = "Số điện thoại không được vượt quá 255 ký tự")
+    @Pattern(
+            regexp = "^$|^(0[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$",
+            message = "Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0987654321 hoặc +84987654321"
+    )
     private String phoneNumber;
 
     private String address;

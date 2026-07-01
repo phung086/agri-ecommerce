@@ -31,6 +31,7 @@ import {
   clearAuthSession,
   getAdminAuthState,
 } from "@/lib/auth-storage";
+import { getAssetUrl } from "@/lib/admin-utils";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -206,6 +207,7 @@ export function AdminShell({ children }) {
   const adminInitial = (adminName || currentUser?.email || "A")
     .charAt(0)
     .toUpperCase();
+  const adminAvatarUrl = getAssetUrl(currentUser?.avatar);
 
   useEffect(() => {
     if (isAuthPage) {
@@ -231,6 +233,12 @@ export function AdminShell({ children }) {
       authState.status === "checking" ||
       authState.status === "authenticated"
     ) {
+      return;
+    }
+
+    const currentRealState = getAdminAuthState();
+    if (currentRealState.status === "authenticated") {
+      setAuthState(currentRealState);
       return;
     }
 
@@ -354,8 +362,15 @@ export function AdminShell({ children }) {
               className="flex items-center gap-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
               title="Chỉnh sửa hồ sơ admin"
             >
-              <div className="flex size-9 items-center justify-center rounded-[8px] bg-emerald-600 text-sm font-bold text-white">
-                {adminInitial}
+              <div className="flex size-9 items-center justify-center overflow-hidden rounded-[8px] bg-emerald-600 text-sm font-bold text-white">
+                {adminAvatarUrl ? (
+                  <span
+                    className="size-full bg-cover bg-center"
+                    style={{ backgroundImage: `url("${adminAvatarUrl}")` }}
+                  />
+                ) : (
+                  adminInitial
+                )}
               </div>
               <div className="hidden text-sm sm:block">
                 <p className="font-bold leading-none text-emerald-950">

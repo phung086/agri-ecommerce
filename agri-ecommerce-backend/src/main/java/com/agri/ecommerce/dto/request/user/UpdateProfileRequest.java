@@ -19,6 +19,10 @@ public class UpdateProfileRequest {
             message = "Số điện thoại không hợp lệ"
     )
     @Size(max = 255, message = "Số điện thoại không được vượt quá 255 ký tự")
+    @Pattern(
+            regexp = "^$|^(0[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$",
+            message = "Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0987654321 hoặc +84987654321"
+    )
     private String phoneNumber;
 
     private String address;

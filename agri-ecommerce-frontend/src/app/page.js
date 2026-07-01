@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -10,6 +10,7 @@ import {
   CreditCard,
   Heart,
   Leaf,
+  Loader2,
   MapPin,
   Minus,
   Plus,
@@ -29,6 +30,7 @@ import {
   formatCurrency,
   formatNumber,
   getApiErrorMessage,
+  getAssetUrl,
   getImageBackground,
 } from "@/lib/admin-utils";
 import {
@@ -911,6 +913,98 @@ export default function Home() {
   const [cartPulse, setCartPulse] = useState(false);
   const [catalogPreviewProducts, setCatalogPreviewProducts] =
     useState(fallbackProducts);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  const currentUserAvatarUrl = getAssetUrl(currentUser?.avatar);
+
+  useEffect(() => {
+    function syncCurrentUser() {
+      const session = getActiveCustomerSession();
+      setCurrentUser(session?.currentUser || null);
+    }
+
+    syncCurrentUser();
+    window.addEventListener("customer-auth-session-updated", syncCurrentUser);
+    window.addEventListener("storage", syncCurrentUser);
+
+    return () => {
+      window.removeEventListener("customer-auth-session-updated", syncCurrentUser);
+      window.removeEventListener("storage", syncCurrentUser);
+    };
+  }, []);
+
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const searchWrapperRef = useRef(null);
+
+  useEffect(() => {
+    const cleanKeyword = filters.keyword.trim();
+    if (!cleanKeyword) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return undefined;
+    }
+
+    setSuggestionsLoading(true);
+    const handler = setTimeout(async () => {
+      try {
+        const response = await marketplaceService.getSearchSuggestions(cleanKeyword, 8);
+        setSuggestions(Array.isArray(response) ? response : []);
+        setShowSuggestions(true);
+        setActiveSuggestionIndex(-1);
+      } catch (error) {
+        console.error("Failed to load search suggestions:", error);
+        setSuggestions([]);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [filters.keyword]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleKeyDown = (event) => {
+    if (!showSuggestions || suggestions.length === 0) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSuggestionIndex((prevIndex) =>
+        prevIndex < suggestions.length - 1 ? prevIndex + 1 : 0
+      );
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSuggestionIndex((prevIndex) =>
+        prevIndex > 0 ? prevIndex - 1 : suggestions.length - 1
+      );
+    } else if (event.key === "Enter") {
+      if (activeSuggestionIndex >= 0 && activeSuggestionIndex < suggestions.length) {
+        event.preventDefault();
+        const selected = suggestions[activeSuggestionIndex];
+        openProductDetail(selected);
+        setShowSuggestions(false);
+      }
+    } else if (event.key === "Escape") {
+      setShowSuggestions(false);
+    }
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -1664,18 +1758,106 @@ export default function Home() {
             </div>
           </Link>
 
-          <div className="order-last grid w-full gap-2 sm:grid-cols-[1fr_auto] lg:order-none lg:flex-1">
+          <div ref={searchWrapperRef} className="order-last grid w-full gap-2 sm:grid-cols-[1fr_auto] lg:order-none lg:flex-1 relative">
             <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
                 value={filters.keyword}
-                onChange={(event) => updateFilter("keyword", event.target.value)}
+                onChange={(event) => {
+                  updateFilter("keyword", event.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onKeyDown={handleKeyDown}
                 className="h-10 w-full rounded-[8px] border border-emerald-100 bg-emerald-50/70 pl-9 pr-4 text-sm font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
                 placeholder="Tìm rau củ, trái cây, gạo sạch..."
               />
+
+              {showSuggestions && (suggestions.length > 0 || suggestionsLoading) && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-1.5 max-h-[360px] overflow-y-auto rounded-lg border border-emerald-100/60 bg-white/95 p-1.5 shadow-xl backdrop-blur-md transition-all duration-200">
+                  {suggestionsLoading ? (
+                    <div className="flex items-center justify-center py-6 text-emerald-600">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      <span className="text-xs font-semibold">Đang tìm kiếm nông sản...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-1">
+                        {suggestions.map((item, index) => {
+                          const localizedItem = localizeProduct(item, locale) || item;
+                          const isActive = index === activeSuggestionIndex;
+                          const imageSrc = item.thumbnail ? getAssetUrl(item.thumbnail) : "";
+                          const productUrl = `/products/${encodeURIComponent(item.slug)}`;
+
+                          return (
+                            <Link
+                              key={item.id}
+                              href={productUrl}
+                              onClick={() => setShowSuggestions(false)}
+                              className={`flex items-center gap-3 rounded-md p-2 transition text-left ${
+                                isActive ? "bg-emerald-50 border-l-4 border-emerald-500 pl-1.5" : "hover:bg-slate-50"
+                              }`}
+                            >
+                              <div className="flex h-10 w-10 shrink-0 overflow-hidden rounded bg-emerald-50 items-center justify-center border border-slate-100">
+                                {imageSrc ? (
+                                  <img
+                                    src={imageSrc}
+                                    alt={localizedItem.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <Leaf className="h-4 w-4 text-emerald-600" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-bold text-slate-950">
+                                  {localizedItem.name}
+                                </p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1 rounded">
+                                    {localizeCategory(
+                                      { name: item.categoryName, nameEn: item.categoryNameEn },
+                                      locale
+                                    ).name}
+                                  </span>
+                                  {item.stock <= 0 && (
+                                    <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-1 rounded">
+                                      Hết hàng
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-xs font-bold text-emerald-700">
+                                  {Number(item.price).toLocaleString("vi-VN")}đ
+                                </p>
+                                {item.unit && (
+                                  <p className="text-[10px] text-slate-400">
+                                    /{locale === "en" ? item.unitEn || item.unit : item.unit}
+                                  </p>
+                                )}
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                      <div className="border-t border-slate-100 mt-1.5 pt-1.5 px-2 pb-1 text-center">
+                        <a
+                          href="#products"
+                          onClick={() => setShowSuggestions(false)}
+                          className="text-[10px] font-black text-emerald-700 hover:text-emerald-800 transition"
+                        >
+                          Xem tất cả gợi ý cho "{filters.keyword}" →
+                        </a>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             <a
               href="#products"
+              onClick={() => setShowSuggestions(false)}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700"
             >
               <Search className="size-4" />
@@ -1745,11 +1927,18 @@ export default function Home() {
 
           <Link
             href="/profile"
-            className="hidden size-10 shrink-0 items-center justify-center rounded-[8px] bg-slate-950 text-white transition hover:bg-emerald-800 sm:inline-flex"
+            className="hidden size-10 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-slate-950 text-white transition hover:bg-emerald-800 sm:inline-flex"
             aria-label="Hồ sơ khách hàng"
             title="Hồ sơ khách hàng"
           >
-            <UserRound className="size-4" />
+            {currentUserAvatarUrl ? (
+              <span
+                className="size-8 rounded-[6px] bg-cover bg-center"
+                style={{ backgroundImage: `url("${currentUserAvatarUrl}")` }}
+              />
+            ) : (
+              <UserRound className="size-4" />
+            )}
           </Link>
         </div>
       </header>

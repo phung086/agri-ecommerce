@@ -16,9 +16,13 @@ public class ProductResponse {
 
     private String name;
 
+    private String nameEn;
+
     private String slug;
 
     private String description;
+
+    private String descriptionEn;
 
     private BigDecimal price;
 
@@ -28,9 +32,13 @@ public class ProductResponse {
 
     private String unit;
 
+    private String unitEn;
+
     private Long categoryId;
 
     private String categoryName;
+
+    private String categoryNameEn;
 
     private String categorySlug;
 

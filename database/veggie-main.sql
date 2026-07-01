@@ -440,7 +440,7 @@ CREATE TABLE `password_reset_tokens` (
 CREATE TABLE `payments` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `order_id` bigint(20) UNSIGNED NOT NULL,
-  `payment_method` enum('cash','paypal') NOT NULL,
+  `payment_method` enum('cash','paypal','vnpay') NOT NULL,
   `transaction_id` varchar(255) DEFAULT NULL,
   `amount` decimal(10,2) NOT NULL,
   `status` enum('pending','completed','failed','refunded') NOT NULL DEFAULT 'pending',

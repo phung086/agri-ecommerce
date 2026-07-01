@@ -9,6 +9,17 @@ export const profileService = {
     return axiosClient.put("/customer/profile", payload);
   },
 
+  uploadAvatar: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    return axiosClient.post("/customer/profile/avatar", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+
   changePassword: async (payload) => {
     return axiosClient.patch("/customer/profile/change-password", payload);
   },

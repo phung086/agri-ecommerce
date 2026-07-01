@@ -45,6 +45,9 @@ public class AiChatProperties {
     /** Timeout gọi LLM tính bằng giây. */
     private int timeoutSeconds = 20;
 
+    /** Bật/tắt tính năng tự động dịch song ngữ Việt-Anh khi lưu dữ liệu. */
+    private boolean autoTranslateOnSave = true;
+
     /** Kiểm tra xem provider Gemini có đủ cấu hình không. */
     public boolean isGeminiReady() {
         return "gemini".equalsIgnoreCase(provider)

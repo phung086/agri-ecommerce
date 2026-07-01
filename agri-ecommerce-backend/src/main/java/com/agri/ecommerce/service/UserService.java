@@ -13,6 +13,8 @@ public interface UserService {
 
     UserResponse updateCurrentProfile(Long userId, UpdateProfileRequest request);
 
+    UserResponse updateCurrentProfileAvatar(Long userId, String avatarPath);
+
     void changePassword(Long userId, ChangePasswordRequest request);
 
     List<UserResponse> getAllUsers();
