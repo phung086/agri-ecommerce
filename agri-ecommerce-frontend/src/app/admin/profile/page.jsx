@@ -14,11 +14,11 @@ import {
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
-import { VietnamAddressFields } from "@/components/address/VietnamAddressFields";
 import { StatCard } from "@/components/admin/stat-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AUTH_SCOPES,
   getAuthSession,
@@ -26,11 +26,6 @@ import {
   saveAuthSession,
 } from "@/lib/auth-storage";
 import { getApiErrorMessage } from "@/lib/admin-utils";
-import {
-  buildProfileAddress,
-  createVietnamAddressForm,
-  getVietnamAddressError,
-} from "@/lib/vietnam-addresses";
 import { profileService } from "@/services/profile.service";
 
 const blankProfileForm = {
@@ -57,9 +52,6 @@ function getInitial(user) {
 export default function AdminProfilePage() {
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState(blankProfileForm);
-  const [profileAddressForm, setProfileAddressForm] = useState(() =>
-    createVietnamAddressForm()
-  );
   const [passwordForm, setPasswordForm] = useState(blankPasswordForm);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -75,9 +67,6 @@ export default function AdminProfilePage() {
       avatar: nextProfile?.avatar || "",
       address: nextProfile?.address || "",
     });
-    setProfileAddressForm(
-      createVietnamAddressForm({ address: nextProfile?.address || "" })
-    );
   }, []);
 
   const loadProfile = useCallback(async () => {
@@ -167,17 +156,11 @@ export default function AdminProfilePage() {
     setError("");
 
     try {
-      const addressError = getVietnamAddressError(profileAddressForm);
-
-      if (addressError) {
-        throw new Error(addressError);
-      }
-
       const response = await profileService.updateProfile({
         name: profileForm.name.trim(),
         phoneNumber: profileForm.phoneNumber.trim(),
         avatar: profileForm.avatar.trim(),
-        address: buildProfileAddress(profileAddressForm),
+        address: profileForm.address.trim(),
       });
       const nextProfile = unwrapApiData(response);
 
@@ -442,16 +425,19 @@ export default function AdminProfilePage() {
                 disabled={loading}
               />
             </div>
-            <VietnamAddressFields
-              value={profileAddressForm}
-              onChange={setProfileAddressForm}
-              idPrefix="admin-address"
-              className="sm:col-span-2"
-              disabled={loading}
-              detailLabel="Địa chỉ liên hệ"
-              detailPlaceholder="Số nhà, tên đường, tên toà nhà..."
-              detailRows={5}
-            />
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="admin-address">Địa chỉ liên hệ</Label>
+              <Textarea
+                id="admin-address"
+                value={profileForm.address}
+                onChange={(event) =>
+                  updateProfileForm("address", event.target.value)
+                }
+                rows={5}
+                placeholder="Địa chỉ vận hành hoặc liên hệ..."
+                disabled={loading}
+              />
+            </div>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">

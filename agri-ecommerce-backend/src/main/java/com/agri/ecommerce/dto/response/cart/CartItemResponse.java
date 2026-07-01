@@ -17,15 +17,11 @@ public class CartItemResponse {
 
     private String productName;
 
-    private String productNameEn;
-
     private String productSlug;
 
     private BigDecimal productPrice;
 
     private String unit;
-
-    private String unitEn;
 
     private String thumbnail;
 

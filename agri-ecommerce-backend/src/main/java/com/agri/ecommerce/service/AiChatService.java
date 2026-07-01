@@ -2,13 +2,19 @@ package com.agri.ecommerce.service;
 
 import com.agri.ecommerce.dto.request.chat.AiChatRequest;
 import com.agri.ecommerce.dto.response.chat.AiChatResponse;
-import com.agri.ecommerce.security.UserPrincipal;
 
 /**
- * Service xử lý AI Chatbot đa vai trò.
- * Endpoint public giữ nguyên: POST /api/public/ai-chat/messages
+ * Service xử lý AI Chatbot tư vấn nông sản.
+ * Endpoint: POST /api/public/ai-chat/messages
  */
 public interface AiChatService {
 
-    AiChatResponse chat(AiChatRequest request, UserPrincipal principal);
+    /**
+     * Xử lý tin nhắn từ khách vãng lai hoặc user đã đăng nhập.
+     *
+     * @param request   request chứa message và guestToken
+     * @param userId    ID user nếu đã đăng nhập (null nếu khách vãng lai)
+     * @return AiChatResponse chứa câu trả lời và sản phẩm gợi ý
+     */
+    AiChatResponse chat(AiChatRequest request, Long userId);
 }

@@ -30,8 +30,6 @@ import {
   getAuthSession,
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
-import { useLanguage } from "@/i18n/language-provider";
-import { localizeCartItem } from "@/i18n/localized-fields";
 import { cartService } from "@/services/cart.service";
 
 const SHIPPING_FEE = 25000;
@@ -64,7 +62,6 @@ async function fetchCartSnapshot() {
 
 export default function CartPage() {
   const router = useRouter();
-  const { locale } = useLanguage();
   const [authStatus, setAuthStatus] = useState("checking");
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -73,21 +70,7 @@ export default function CartPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  const rawCartItems = useMemo(() => cart?.items || [], [cart]);
-  const cartItems = useMemo(
-    () =>
-      rawCartItems.map((item) =>
-        localizeCartItem(
-          {
-            ...item,
-            name: item.productName,
-            nameEn: item.productNameEn,
-          },
-          locale
-        )
-      ),
-    [rawCartItems, locale]
-  );
+  const cartItems = useMemo(() => cart?.items || [], [cart]);
   const cartTotal = Number(cart?.totalAmount || 0);
   const cartQuantity = Number(cart?.totalQuantity || 0);
   const shippingFee = cartItems.length > 0 ? SHIPPING_FEE : 0;
@@ -390,12 +373,12 @@ export default function CartPage() {
                               backgroundImage: getImageBackground(item.thumbnail),
                             }}
                             role="img"
-                              aria-label={item.name || item.productName}
+                            aria-label={item.productName}
                           />
 
                           <div className="min-w-0">
                             <h3 className="line-clamp-2 text-lg font-black text-slate-950">
-                              {item.name || item.productName}
+                              {item.productName}
                             </h3>
                             <p className="mt-1 text-sm font-semibold text-slate-500">
                               {formatCurrency(item.productPrice)} /{" "}

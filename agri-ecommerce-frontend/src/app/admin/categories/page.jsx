@@ -35,8 +35,6 @@ import {
   getImageBackground,
   slugify,
 } from "@/lib/admin-utils";
-import { useLanguage } from "@/i18n/language-provider";
-import { localizeCategory } from "@/i18n/localized-fields";
 import { adminService } from "@/services/admin.service";
 
 const blankCategoryForm = {
@@ -56,7 +54,6 @@ function buildCategoryPayload(form) {
 }
 
 export default function AdminCategoriesPage() {
-  const { locale } = useLanguage();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -108,7 +105,7 @@ export default function AdminCategoriesPage() {
         return true;
       }
 
-      return [category.name, category.nameEn, category.slug, category.description, category.descriptionEn]
+      return [category.name, category.slug, category.description]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(keyword));
     });
@@ -323,10 +320,7 @@ export default function AdminCategoriesPage() {
         loading={loading}
         error={loading || categories.length === 0 ? error : ""}
         emptyText="Không tìm thấy danh mục"
-        renderRow={(category) => {
-          const displayCategory = localizeCategory(category, locale) || category;
-
-          return (
+        renderRow={(category) => (
           <TableRow key={category.id}>
             <TableCell className="px-4">
               <div className="flex items-center gap-3">
@@ -334,7 +328,7 @@ export default function AdminCategoriesPage() {
                   <div
                     className="size-11 rounded-lg bg-cover bg-center ring-1 ring-border"
                     role="img"
-                    aria-label={displayCategory.name}
+                    aria-label={category.name}
                     style={{
                       backgroundImage: getImageBackground(category.image),
                     }}
@@ -345,7 +339,7 @@ export default function AdminCategoriesPage() {
                   </div>
                 )}
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{displayCategory.name}</p>
+                  <p className="truncate font-medium">{category.name}</p>
                   <p className="truncate text-xs text-muted-foreground">
                     ID #{category.id}
                   </p>
@@ -354,7 +348,7 @@ export default function AdminCategoriesPage() {
             </TableCell>
             <TableCell className="px-4">{category.slug}</TableCell>
             <TableCell className="max-w-xs whitespace-normal px-4 text-muted-foreground">
-              {displayCategory.description || "Chưa có mô tả"}
+              {category.description || "Chưa có mô tả"}
             </TableCell>
             <TableCell className="px-4">
               <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
@@ -391,8 +385,7 @@ export default function AdminCategoriesPage() {
               </div>
             </TableCell>
           </TableRow>
-          );
-        }}
+        )}
       />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

@@ -15,8 +15,6 @@ public class ProductSearchSuggestionResponse {
 
     private String name;
 
-    private String nameEn;
-
     private String slug;
 
     private BigDecimal price;
@@ -25,15 +23,11 @@ public class ProductSearchSuggestionResponse {
 
     private String unit;
 
-    private String unitEn;
-
     private String status;
 
     private Long categoryId;
 
     private String categoryName;
-
-    private String categoryNameEn;
 
     private String categorySlug;
 

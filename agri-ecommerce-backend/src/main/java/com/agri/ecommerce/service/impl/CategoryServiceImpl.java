@@ -9,7 +9,6 @@ import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.CategoryMapper;
 import com.agri.ecommerce.repository.CategoryRepository;
 import com.agri.ecommerce.repository.ProductRepository;
-import com.agri.ecommerce.service.AutoTranslationService;
 import com.agri.ecommerce.service.CategoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,8 +25,6 @@ public class CategoryServiceImpl implements CategoryService {
     private final CategoryMapper categoryMapper;
 
     private final ProductRepository productRepository;
-
-    private final AutoTranslationService autoTranslationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -62,19 +59,11 @@ public class CategoryServiceImpl implements CategoryService {
 
         validateCategoryNameUnique(name, null);
         validateCategorySlugUnique(slug, null);
-        AutoTranslationService.CategoryTranslation translation = autoTranslationService.translateCategory(
-                name,
-                cleanBlank(request.getDescription()),
-                cleanBlank(request.getNameEn()),
-                cleanBlank(request.getDescriptionEn())
-        );
 
         CategoryEntity category = CategoryEntity.builder()
                 .name(name)
-                .nameEn(translation.nameEn())
                 .slug(slug)
                 .description(cleanBlank(request.getDescription()))
-                .descriptionEn(translation.descriptionEn())
                 .image(cleanBlank(request.getImage()))
                 .build();
 
@@ -91,18 +80,10 @@ public class CategoryServiceImpl implements CategoryService {
 
         validateCategoryNameUnique(name, id);
         validateCategorySlugUnique(slug, id);
-        AutoTranslationService.CategoryTranslation translation = autoTranslationService.translateCategory(
-                name,
-                cleanBlank(request.getDescription()),
-                cleanBlank(request.getNameEn()),
-                cleanBlank(request.getDescriptionEn())
-        );
 
         category.setName(name);
-        category.setNameEn(translation.nameEn());
         category.setSlug(slug);
         category.setDescription(cleanBlank(request.getDescription()));
-        category.setDescriptionEn(translation.descriptionEn());
         category.setImage(cleanBlank(request.getImage()));
 
         CategoryEntity savedCategory = categoryRepository.save(category);

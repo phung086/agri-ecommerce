@@ -22,9 +22,6 @@ public class ProductEntity {
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Column(name = "name_en", length = 255)
-    private String nameEn;
-
     @Column(nullable = false, unique = true, length = 255)
     private String slug;
 
@@ -34,9 +31,6 @@ public class ProductEntity {
 
     @Column(columnDefinition = "TEXT")
     private String description;
-
-    @Column(name = "description_en", columnDefinition = "TEXT")
-    private String descriptionEn;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
@@ -49,9 +43,6 @@ public class ProductEntity {
 
     @Column(length = 255)
     private String unit;
-
-    @Column(name = "unit_en", length = 255)
-    private String unitEn;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

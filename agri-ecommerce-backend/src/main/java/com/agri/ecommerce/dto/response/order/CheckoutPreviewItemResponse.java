@@ -15,13 +15,9 @@ public class CheckoutPreviewItemResponse {
 
     private String productName;
 
-    private String productNameEn;
-
     private String productSlug;
 
     private String unit;
-
-    private String unitEn;
 
     private Integer requestedQuantity;
 

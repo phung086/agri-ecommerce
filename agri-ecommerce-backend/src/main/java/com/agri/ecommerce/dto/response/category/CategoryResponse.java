@@ -13,13 +13,9 @@ public class CategoryResponse {
 
     private String name;
 
-    private String nameEn;
-
     private String slug;
 
     private String description;
-
-    private String descriptionEn;
 
     private String image;
 }

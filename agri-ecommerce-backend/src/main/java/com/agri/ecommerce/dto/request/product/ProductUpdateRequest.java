@@ -15,9 +15,6 @@ public class ProductUpdateRequest {
     @Size(max = 255, message = "Tên sản phẩm không được vượt quá 255 ký tự")
     private String name;
 
-    @Size(max = 255, message = "English product name must not exceed 255 characters")
-    private String nameEn;
-
     @NotBlank(message = "Slug sản phẩm không được để trống")
     @Size(max = 255, message = "Slug sản phẩm không được vượt quá 255 ký tự")
     private String slug;
@@ -26,8 +23,6 @@ public class ProductUpdateRequest {
     private Long categoryId;
 
     private String description;
-
-    private String descriptionEn;
 
     @NotNull(message = "Giá sản phẩm không được để trống")
     @DecimalMin(value = "0.01", message = "Giá sản phẩm phải lớn hơn 0")
@@ -42,9 +37,6 @@ public class ProductUpdateRequest {
 
     @Size(max = 255, message = "Đơn vị tính không được vượt quá 255 ký tự")
     private String unit;
-
-    @Size(max = 255, message = "English unit must not exceed 255 characters")
-    private String unitEn;
 
     @Size(max = 255, message = "Ảnh đại diện không được vượt quá 255 ký tự")
     private String thumbnail;

@@ -13,16 +13,11 @@ public class CategoryUpdateRequest {
     @Size(max = 255, message = "Tên danh mục không được vượt quá 255 ký tự")
     private String name;
 
-    @Size(max = 255, message = "English category name must not exceed 255 characters")
-    private String nameEn;
-
     @NotBlank(message = "Slug danh mục không được để trống")
     @Size(max = 255, message = "Slug danh mục không được vượt quá 255 ký tự")
     private String slug;
 
     private String description;
-
-    private String descriptionEn;
 
     @Size(max = 255, message = "Đường dẫn ảnh danh mục không được vượt quá 255 ký tự")
     private String image;

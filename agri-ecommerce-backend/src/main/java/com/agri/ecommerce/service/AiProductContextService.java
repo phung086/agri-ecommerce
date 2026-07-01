@@ -218,22 +218,16 @@ public class AiProductContextService {
         String categoryName = product.getCategory() != null
                 ? product.getCategory().getName()
                 : null;
-        String categoryNameEn = product.getCategory() != null
-                ? product.getCategory().getNameEn()
-                : null;
 
         return SuggestedProductResponse.builder()
                 .id(product.getId())
                 .name(product.getName())
-                .nameEn(product.getNameEn())
                 .slug(product.getSlug())
                 .price(product.getPrice())
                 .unit(product.getUnit())
-                .unitEn(product.getUnitEn())
                 .stock(product.getStock())
                 .status(product.getStatus())
                 .categoryName(categoryName)
-                .categoryNameEn(categoryNameEn)
                 .imageUrl(imageUrl)
                 .productUrl(productUrl)
                 .build();

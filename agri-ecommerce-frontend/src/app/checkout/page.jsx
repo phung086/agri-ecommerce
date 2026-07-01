@@ -24,10 +24,10 @@ import {
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
-import { VietnamAddressFields } from "@/components/address/VietnamAddressFields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   formatCurrency,
   formatDate,
@@ -40,25 +40,42 @@ import {
   getAuthSession,
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
-import {
-  addressFormToShippingPayload,
-  createVietnamAddressForm,
-  isVietnamAddressComplete,
-} from "@/lib/vietnam-addresses";
-import { useLanguage } from "@/i18n/language-provider";
-import { localizeCartItem } from "@/i18n/localized-fields";
 import { cartService } from "@/services/cart.service";
 import { orderService } from "@/services/order.service";
 import { promotionService } from "@/services/promotion.service";
 import { shippingAddressService } from "@/services/shipping-address.service";
+import vietnamAddresses from "@/data/vietnam-addresses.json";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
+const VIETNAM_PROVINCES = vietnamAddresses;
+
 function createBlankAddressForm(defaultAddress = true) {
-  return createVietnamAddressForm({
+  return {
     fullName: "",
     phone: "",
+    provinceCode: "",
+    provinceName: "",
+    districtCode: "",
+    districtName: "",
+    wardCode: "",
+    wardName: "",
+    address: "",
     defaultAddress,
-  });
+  };
+}
+
+function getProvinceLabel(province) {
+  return province.name.replace(/^(Tỉnh|Thành phố)\s+/i, "");
+}
+
+function findAddressOption(options = [], code) {
+  return options.find((option) => String(option.code) === String(code));
+}
+
+function buildDetailedAddress(form) {
+  return [form.address.trim(), form.wardName, form.districtName]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function getActiveCustomerSession() {
@@ -424,7 +441,6 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
 /* ─── Main checkout page ──────────────────────────────────────────────────── */
 export default function CheckoutPage() {
   const router = useRouter();
-  const { locale } = useLanguage();
   const [authStatus, setAuthStatus] = useState("checking");
   const [cart, setCart] = useState(null);
   const [addresses, setAddresses] = useState([]);
@@ -444,27 +460,28 @@ export default function CheckoutPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  const rawCartItems = useMemo(() => cart?.items || [], [cart]);
-  const cartItems = useMemo(
-    () =>
-      rawCartItems.map((item) =>
-        localizeCartItem(
-          {
-            ...item,
-            name: item.productName,
-            nameEn: item.productNameEn,
-          },
-          locale
-        )
-      ),
-    [rawCartItems, locale]
-  );
+  const cartItems = cart?.items || [];
   const cartTotal = Number(cart?.totalAmount || 0);
   const cartQuantity = Number(cart?.totalQuantity || 0);
   const fallbackShippingFee = cartItems.length > 0 ? 25000 : 0;
   const selectedAddress = addresses.find(
     (address) => String(address.id) === String(selectedAddressId)
   );
+
+  const selectedProvinceForForm = useMemo(
+    () => findAddressOption(VIETNAM_PROVINCES, addressForm.provinceCode),
+    [addressForm.provinceCode]
+  );
+  const selectedDistrictForForm = useMemo(
+    () =>
+      findAddressOption(
+        selectedProvinceForForm?.districts,
+        addressForm.districtCode
+      ),
+    [addressForm.districtCode, selectedProvinceForForm]
+  );
+  const districtOptions = selectedProvinceForForm?.districts ?? [];
+  const wardOptions = selectedDistrictForForm?.wards ?? [];
 
   /* Live discount calculation — from preview if available, else compute locally */
   const summary = useMemo(() => {
@@ -560,6 +577,39 @@ export default function CheckoutPage() {
     setAddressForm((cur) => ({ ...cur, [field]: value }));
   }
 
+  function handleProvinceChange(code) {
+    const province = findAddressOption(VIETNAM_PROVINCES, code);
+    setAddressForm((cur) => ({
+      ...cur,
+      provinceCode: code,
+      provinceName: province ? getProvinceLabel(province) : "",
+      districtCode: "",
+      districtName: "",
+      wardCode: "",
+      wardName: "",
+    }));
+  }
+
+  function handleDistrictChange(code) {
+    const district = findAddressOption(selectedProvinceForForm?.districts, code);
+    setAddressForm((cur) => ({
+      ...cur,
+      districtCode: code,
+      districtName: district?.name ?? "",
+      wardCode: "",
+      wardName: "",
+    }));
+  }
+
+  function handleWardChange(code) {
+    const ward = findAddressOption(selectedDistrictForForm?.wards, code);
+    setAddressForm((cur) => ({
+      ...cur,
+      wardCode: code,
+      wardName: ward?.name ?? "",
+    }));
+  }
+
   function openAddressForm() {
     setAddressForm(createBlankAddressForm(addresses.length === 0));
     setShowAddressForm(true);
@@ -578,12 +628,20 @@ export default function CheckoutPage() {
     setNotice("");
 
     try {
-      const payload = addressFormToShippingPayload(addressForm, addresses.length);
+      const payload = {
+        fullName: addressForm.fullName.trim(),
+        phone: addressForm.phone.trim(),
+        city: addressForm.provinceName.trim(),
+        address: buildDetailedAddress(addressForm),
+        defaultAddress:
+          Boolean(addressForm.defaultAddress) || addresses.length === 0,
+      };
       if (
         !payload.fullName ||
         !payload.phone ||
         !payload.city ||
-        !isVietnamAddressComplete(addressForm) ||
+        !addressForm.districtCode ||
+        !addressForm.wardCode ||
         !payload.address
       ) {
         throw new Error("Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng.");
@@ -812,7 +870,7 @@ export default function CheckoutPage() {
                         />
                         <div className="min-w-0">
                           <p className="line-clamp-1 font-black text-slate-950">
-                            {item.name || item.productName}
+                            {item.productName}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-slate-500">
                             {formatCurrency(item.productPrice)} /{" "}
@@ -956,15 +1014,71 @@ export default function CheckoutPage() {
                         required={showAddressForm}
                       />
                     </div>
-                    <VietnamAddressFields
-                      value={addressForm}
-                      onChange={setAddressForm}
-                      idPrefix="checkout-address"
-                      required={showAddressForm}
-                      className="sm:col-span-2"
-                      detailLabel="Địa chỉ chi tiết"
-                      detailPlaceholder="Số nhà, tên đường, tên toà nhà..."
-                    />
+                    <div className="space-y-2">
+                      <Label htmlFor="address-province">Tỉnh/thành phố</Label>
+                      <select
+                        id="address-province"
+                        value={addressForm.provinceCode}
+                        onChange={(e) => handleProvinceChange(e.target.value)}
+                        required={showAddressForm}
+                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                      >
+                        <option value="">Chọn tỉnh/thành phố</option>
+                        {VIETNAM_PROVINCES.map((province) => (
+                          <option key={province.code} value={province.code}>
+                            {getProvinceLabel(province)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="address-district">Quận/huyện</Label>
+                      <select
+                        id="address-district"
+                        value={addressForm.districtCode}
+                        onChange={(e) => handleDistrictChange(e.target.value)}
+                        disabled={!selectedProvinceForForm}
+                        required={showAddressForm}
+                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="">Chọn quận/huyện</option>
+                        {districtOptions.map((district) => (
+                          <option key={district.code} value={district.code}>
+                            {district.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="address-ward">Phường/xã</Label>
+                      <select
+                        id="address-ward"
+                        value={addressForm.wardCode}
+                        onChange={(e) => handleWardChange(e.target.value)}
+                        disabled={!selectedDistrictForForm}
+                        required={showAddressForm}
+                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="">Chọn phường/xã</option>
+                        {wardOptions.map((ward) => (
+                          <option key={ward.code} value={ward.code}>
+                            {ward.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="address-detail">Địa chỉ chi tiết</Label>
+                      <Textarea
+                        id="address-detail"
+                        value={addressForm.address}
+                        onChange={(e) =>
+                          updateAddressForm("address", e.target.value)
+                        }
+                        rows={3}
+                        required={showAddressForm}
+                      />
+                    </div>
                   </div>
                   <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
                     <input

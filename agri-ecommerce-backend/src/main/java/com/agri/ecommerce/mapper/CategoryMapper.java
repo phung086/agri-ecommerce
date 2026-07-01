@@ -11,10 +11,8 @@ public class CategoryMapper {
         return CategoryResponse.builder()
                 .id(category.getId())
                 .name(category.getName())
-                .nameEn(category.getNameEn())
                 .slug(category.getSlug())
                 .description(category.getDescription())
-                .descriptionEn(category.getDescriptionEn())
                 .image(category.getImage())
                 .build();
     }

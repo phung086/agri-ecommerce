@@ -13,8 +13,6 @@ public class ProductCategoryFacetResponse {
 
     private String categoryName;
 
-    private String categoryNameEn;
-
     private String categorySlug;
 
     private Long productCount;
