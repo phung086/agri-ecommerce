@@ -41,7 +41,6 @@ import {
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
 import {
-  PHONE_ERROR_MESSAGE,
   PHONE_PATTERN_SOURCE,
   isValidPhoneNumber,
 } from "@/lib/phone-utils";

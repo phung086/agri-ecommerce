@@ -991,7 +991,6 @@ export default function CustomerProfilePage() {
   const [reviewSubmittingId, setReviewSubmittingId] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [phoneError, setPhoneError] = useState("");
 
   const profileInitial = getInitial(profile);

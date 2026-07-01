@@ -470,6 +470,7 @@ export default function AdminProfilePage() {
                 <p className="text-xs font-semibold text-red-600">{phoneError}</p>
               )}
             </div>
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="admin-avatar">Avatar</Label>
               <AvatarUploadField
                 id="admin-avatar"
