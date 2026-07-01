@@ -52,6 +52,7 @@ app:
     base-url: ${APP_PUBLIC_BASE_URL:http://localhost:3000}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:https://agri-ecommerce*.vercel.app}
   payment:
     vnpay:
       pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
@@ -67,3 +68,11 @@ app:
   seo:
     sitemap:
       max-products: ${SITEMAP_MAX_PRODUCTS:10000}
+  ai:
+    enabled: ${AI_CHATBOT_ENABLED:false}
+    provider: ${AI_PROVIDER:gemini}
+    model: ${AI_MODEL:gemini-2.5-flash}
+    gemini-api-key: ${GEMINI_API_KEY:}
+    openai-api-key: ${OPENAI_API_KEY:}
+    max-products-context: ${AI_MAX_PRODUCTS_CONTEXT:10}
+    timeout-seconds: ${AI_TIMEOUT_SECONDS:20}

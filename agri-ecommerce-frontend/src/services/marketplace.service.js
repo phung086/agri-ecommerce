@@ -19,4 +19,9 @@ export const marketplaceService = {
     );
     return unwrapApiData(response);
   },
+
+  createContact: async (payload) => {
+    const response = await axiosClient.post("/public/contacts", payload);
+    return unwrapApiData(response);
+  },
 };

@@ -1,0 +1,7 @@
+.git
+.vercel
+agri-ecommerce-backend/target
+agri-ecommerce-frontend/.next
+agri-ecommerce-frontend/node_modules
+**/.env
+**/.env.*

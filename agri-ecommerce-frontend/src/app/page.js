@@ -40,9 +40,11 @@ import {
 import { cartService } from "@/services/cart.service";
 import { marketplaceService } from "@/services/marketplace.service";
 import { reviewService } from "@/services/review.service";
+import { wishlistService } from "@/services/wishlist.service";
 
 const ALL_CATEGORY = "all";
 const PRODUCTS_PAGE_SIZE = 12;
+const WISHLIST_STORAGE_KEY = "agri-market:wishlist";
 
 const fallbackCategories = [
   {
@@ -337,14 +339,85 @@ function mapCartResponseToItems(cartResponse) {
   });
 }
 
-function ProductCard({ product, onAddToCart, onViewProduct, recentlyAdded }) {
+function mapWishlistResponseToItems(wishlistResponse) {
+  return (wishlistResponse?.items || []).map((item, index) => {
+    const price = Number(item.productPrice || 0);
+    const stock = Number(item.stock ?? 0);
+    const imageBackground = getImageBackground(item.thumbnail);
+
+    return {
+      id: String(item.productId || item.id || index),
+      wishlistItemId: item.id,
+      productId: String(item.productId || item.id || index),
+      slug: item.productSlug || String(item.productId || item.id || index),
+      name: item.productName || "Sản phẩm yêu thích",
+      price,
+      unit: item.unit || "sản phẩm",
+      stock,
+      imageBackground,
+      imagePosition:
+        ["76% 32%", "51% 82%", "82% 74%", "94% 74%", "64% 82%"][index % 5],
+      status: item.status,
+    };
+  });
+}
+
+function mapProductToWishlistItem(product) {
+  return {
+    id: String(product.id),
+    productId: String(product.id),
+    slug: product.slug || String(product.id),
+    name: product.name || "Sản phẩm yêu thích",
+    price: Number(product.price || 0),
+    unit: product.unit || "sản phẩm",
+    stock: Number(product.stock ?? 0),
+    categoryName: product.categoryName || "Nông sản",
+    imageBackground: product.imageBackground,
+    imagePosition: product.imagePosition,
+    status: product.status,
+    localOnly: true,
+  };
+}
+
+function readStoredWishlist() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(WISHLIST_STORAGE_KEY);
+    const parsedValue = rawValue ? JSON.parse(rawValue) : [];
+
+    return Array.isArray(parsedValue) ? parsedValue : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredWishlist(items) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(items));
+}
+
+function ProductCard({
+  product,
+  onAddToCart,
+  onToggleWishlist,
+  onViewProduct,
+  recentlyAdded,
+  wishlisted,
+  wishlistUpdating,
+}) {
   const salePercent = Math.max(
     0,
     Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
   );
 
   return (
-    <article className="group overflow-hidden rounded-[8px] border border-emerald-100 bg-white shadow-[0_16px_42px_rgba(15,61,38,0.07)] transition hover:-translate-y-1 hover:border-emerald-200">
+    <article className="group relative overflow-hidden rounded-[8px] border border-emerald-100 bg-white shadow-[0_16px_42px_rgba(15,61,38,0.07)] transition hover:-translate-y-1 hover:border-emerald-200">
       <button
         type="button"
         onClick={() => onViewProduct(product)}
@@ -366,6 +439,20 @@ function ProductCard({ product, onAddToCart, onViewProduct, recentlyAdded }) {
             -{salePercent}%
           </span>
         )}
+      </button>
+      <button
+        type="button"
+        onClick={() => onToggleWishlist(product)}
+        disabled={wishlistUpdating}
+        className={`absolute right-3 top-36 z-10 inline-flex size-10 items-center justify-center rounded-[8px] border shadow-sm backdrop-blur transition disabled:cursor-not-allowed disabled:opacity-60 ${
+          wishlisted
+            ? "border-rose-200 bg-rose-500 text-white hover:bg-rose-600"
+            : "border-white/70 bg-white/92 text-slate-700 hover:bg-rose-50 hover:text-rose-600"
+        }`}
+        aria-label={wishlisted ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích"}
+        title={wishlisted ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích"}
+      >
+        <Heart className={`size-5 ${wishlisted ? "fill-current" : ""}`} />
       </button>
 
       <div className="space-y-3 p-4">
@@ -644,6 +731,152 @@ function CartDrawer({
   );
 }
 
+function WishlistDrawer({
+  items,
+  wishlistOpen,
+  wishlistNotice,
+  wishlistError,
+  wishlistUpdating,
+  onClose,
+  onViewProduct,
+  onAddToCart,
+  onRemove,
+}) {
+  return (
+    <div
+      className={`fixed inset-0 z-50 transition ${
+        wishlistOpen ? "pointer-events-auto" : "pointer-events-none"
+      }`}
+      aria-hidden={!wishlistOpen}
+    >
+      <button
+        type="button"
+        aria-label="Đóng danh sách yêu thích"
+        onClick={onClose}
+        className={`absolute inset-0 bg-slate-950/25 backdrop-blur-sm transition-opacity ${
+          wishlistOpen ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      <aside
+        className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-rose-100 bg-white shadow-2xl transition-transform duration-300 ${
+          wishlistOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-rose-100 px-5 py-4">
+          <div>
+            <p className="text-xs font-bold uppercase text-rose-600">
+              Yêu thích
+            </p>
+            <h2 className="text-xl font-black text-slate-950">
+              {items.length} sản phẩm
+            </h2>
+            {wishlistUpdating && (
+              <p className="mt-1 text-xs font-bold text-rose-600">
+                Đang đồng bộ yêu thích...
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex size-10 items-center justify-center rounded-[8px] border border-rose-100 text-slate-600 transition hover:bg-rose-50"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {(wishlistNotice || wishlistError) && (
+          <div className="px-5 pt-4">
+            <div
+              className={`rounded-[8px] border px-3 py-2 text-sm font-semibold ${
+                wishlistError
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700"
+              }`}
+            >
+              {wishlistError || wishlistNotice}
+            </div>
+          </div>
+        )}
+
+        {items.length > 0 ? (
+          <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+            {items.map((item) => (
+              <div
+                key={item.productId}
+                className="grid grid-cols-[76px_1fr] gap-3 rounded-[8px] border border-rose-100 bg-white p-3 shadow-[0_10px_24px_rgba(15,61,38,0.04)]"
+              >
+                <button
+                  type="button"
+                  onClick={() => onViewProduct(item)}
+                  className="h-20 rounded-[8px] bg-rose-50 bg-cover bg-center"
+                  style={{
+                    backgroundImage: item.imageBackground,
+                    backgroundPosition: item.imagePosition,
+                  }}
+                  aria-label={`Xem ${item.name}`}
+                />
+                <div className="min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onViewProduct(item)}
+                      className="min-w-0 text-left"
+                    >
+                      <h3 className="line-clamp-1 font-bold text-slate-950 hover:text-rose-600">
+                        {item.name}
+                      </h3>
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        {formatCurrency(item.price)} / {item.unit}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(item)}
+                      disabled={wishlistUpdating}
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                      aria-label="Bỏ khỏi yêu thích"
+                      title="Bỏ khỏi yêu thích"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <span className="line-clamp-1 text-xs font-semibold text-slate-500">
+                      {formatNumber(item.stock)} còn lại
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onAddToCart(item)}
+                      disabled={wishlistUpdating || Number(item.stock || 0) <= 0}
+                      className="inline-flex h-9 items-center gap-2 rounded-[8px] bg-slate-950 px-3 text-xs font-black text-white transition hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500"
+                    >
+                      <ShoppingBasket className="size-4" />
+                      Thêm
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+            <div className="flex size-16 items-center justify-center rounded-[8px] bg-rose-50 text-rose-600">
+              <Heart className="size-8" />
+            </div>
+            <h3 className="mt-5 text-xl font-black text-slate-950">
+              Chưa có sản phẩm yêu thích
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Bấm trái tim trên sản phẩm để lưu lại và xem nhanh ở đây.
+            </p>
+          </div>
+        )}
+      </aside>
+    </div>
+  );
+}
+
 export default function Home() {
   const router = useRouter();
   const [filters, setFilters] = useState({
@@ -667,6 +900,12 @@ export default function Home() {
   const [cartUpdating, setCartUpdating] = useState(false);
   const [cartNotice, setCartNotice] = useState("");
   const [cartError, setCartError] = useState("");
+  const [wishlistItems, setWishlistItems] = useState([]);
+  const [wishlistOpen, setWishlistOpen] = useState(false);
+  const [wishlistUpdating, setWishlistUpdating] = useState(false);
+  const [wishlistNotice, setWishlistNotice] = useState("");
+  const [wishlistError, setWishlistError] = useState("");
+  const [wishlistPulse, setWishlistPulse] = useState(false);
   const [hoveredCategorySlug, setHoveredCategorySlug] = useState("");
   const [recentlyAddedProductId, setRecentlyAddedProductId] = useState("");
   const [cartPulse, setCartPulse] = useState(false);
@@ -732,6 +971,46 @@ export default function Home() {
       } finally {
         if (!ignore) {
           setCartUpdating(false);
+        }
+      }
+    }, 0);
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const timeoutId = window.setTimeout(async () => {
+      const session = getActiveCustomerSession();
+
+      if (!session) {
+        setWishlistItems(readStoredWishlist());
+        return;
+      }
+
+      setWishlistUpdating(true);
+      setWishlistError("");
+
+      try {
+        const response = await wishlistService.getWishlist();
+
+        if (!ignore) {
+          setWishlistItems(mapWishlistResponseToItems(response));
+        }
+      } catch (error) {
+        if (!ignore) {
+          setWishlistItems([]);
+          setWishlistError(
+            error?.message ||
+              "Không thể tải danh sách yêu thích từ tài khoản của bạn."
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setWishlistUpdating(false);
         }
       }
     }, 0);
@@ -842,6 +1121,18 @@ export default function Home() {
     return () => window.clearTimeout(timeoutId);
   }, [cartPulse, recentlyAddedProductId]);
 
+  useEffect(() => {
+    if (!wishlistPulse) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setWishlistPulse(false);
+    }, 1100);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [wishlistPulse]);
+
   const categoryOptions = useMemo(
     () => [
       {
@@ -949,6 +1240,13 @@ export default function Home() {
     [cart]
   );
 
+  const wishlistProductIds = useMemo(
+    () => new Set(wishlistItems.map((item) => String(item.productId))),
+    [wishlistItems]
+  );
+
+  const wishlistCount = wishlistItems.length;
+
   const subtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [cart]
@@ -1052,7 +1350,7 @@ export default function Home() {
       if (!Number.isFinite(productId)) {
         setCartError("Sản phẩm mẫu chưa thể thêm vào giỏ tài khoản.");
         window.alert("Sản phẩm mẫu chưa thể thêm vào giỏ tài khoản.");
-        return;
+        return false;
       }
 
       setCartUpdating(true);
@@ -1065,14 +1363,14 @@ export default function Home() {
         setCart(mapCartResponseToItems(response));
         setCartNotice("Đã thêm sản phẩm vào giỏ hàng của bạn.");
         showAddToCartFeedback(product);
+        return true;
       } catch (error) {
         setCartError(error?.message || "Không thể thêm sản phẩm vào giỏ.");
         window.alert(error?.message || "Không thể thêm sản phẩm vào giỏ.");
+        return false;
       } finally {
         setCartUpdating(false);
       }
-
-      return;
     }
 
     setCart((current) => {
@@ -1090,6 +1388,120 @@ export default function Home() {
     });
     setCartNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Đăng nhập để đặt hàng.");
     showAddToCartFeedback(product);
+    return true;
+  }
+
+  async function addWishlistItemToCart(item) {
+    setWishlistNotice("");
+    setWishlistError("");
+
+    const added = await addToCart(item);
+
+    if (added) {
+      setWishlistNotice(`Đã thêm ${item.name} vào giỏ hàng.`);
+      return;
+    }
+
+    setWishlistError("Không thể thêm sản phẩm vào giỏ hàng.");
+  }
+
+  async function toggleWishlist(product) {
+    if (!product) {
+      return;
+    }
+
+    setWishlistNotice("");
+    setWishlistError("");
+
+    const productKey = String(product.id);
+    const isWishlisted = wishlistProductIds.has(productKey);
+    const session = getActiveCustomerSession();
+    const productId = Number(product.id);
+
+    if (session && Number.isFinite(productId)) {
+      setWishlistUpdating(true);
+
+      try {
+        const response = isWishlisted
+          ? await wishlistService.removeItem(productId)
+          : await wishlistService.addItem({ productId });
+
+        setWishlistItems(mapWishlistResponseToItems(response));
+        setWishlistNotice(
+          isWishlisted
+            ? "Đã bỏ sản phẩm khỏi danh sách yêu thích."
+            : "Đã thêm sản phẩm vào danh sách yêu thích."
+        );
+
+        if (!isWishlisted) {
+          setWishlistPulse(true);
+        }
+      } catch (error) {
+        setWishlistError(
+          error?.message || "Không thể cập nhật danh sách yêu thích."
+        );
+      } finally {
+        setWishlistUpdating(false);
+      }
+
+      return;
+    }
+
+    setWishlistItems((current) => {
+      const nextItems = isWishlisted
+        ? current.filter((item) => String(item.productId) !== productKey)
+        : [mapProductToWishlistItem(product), ...current];
+
+      writeStoredWishlist(nextItems);
+      return nextItems;
+    });
+    setWishlistNotice(
+      isWishlisted
+        ? "Đã bỏ sản phẩm khỏi danh sách yêu thích."
+        : "Đã lưu sản phẩm yêu thích trên trình duyệt."
+    );
+
+    if (!isWishlisted) {
+      setWishlistPulse(true);
+    }
+  }
+
+  async function removeWishlistItem(item) {
+    if (!item) {
+      return;
+    }
+
+    setWishlistNotice("");
+    setWishlistError("");
+
+    const productKey = String(item.productId);
+    const session = getActiveCustomerSession();
+    const productId = Number(item.productId);
+
+    if (session && Number.isFinite(productId) && !item.localOnly) {
+      setWishlistUpdating(true);
+
+      try {
+        const response = await wishlistService.removeItem(productId);
+        setWishlistItems(mapWishlistResponseToItems(response));
+        setWishlistNotice("Đã bỏ sản phẩm khỏi danh sách yêu thích.");
+      } catch (error) {
+        setWishlistError(error?.message || "Không thể bỏ sản phẩm yêu thích.");
+      } finally {
+        setWishlistUpdating(false);
+      }
+
+      return;
+    }
+
+    setWishlistItems((current) => {
+      const nextItems = current.filter(
+        (currentItem) => String(currentItem.productId) !== productKey
+      );
+      writeStoredWishlist(nextItems);
+      return nextItems;
+    });
+    setWishlistNotice("Đã bỏ sản phẩm khỏi danh sách yêu thích.");
   }
 
   async function increaseCartItem(id) {
@@ -1281,7 +1693,33 @@ export default function Home() {
             <a href="#delivery" className="hover:text-emerald-700">
               Giao hàng
             </a>
+            <Link href="/contact" className="hover:text-emerald-700">
+              Liên hệ
+            </Link>
           </nav>
+
+          <button
+            type="button"
+            onClick={() => setWishlistOpen(true)}
+            className={`relative inline-flex size-10 shrink-0 items-center justify-center rounded-[8px] border bg-white text-rose-600 shadow-sm transition hover:border-rose-200 hover:bg-rose-50 ${
+              wishlistPulse
+                ? "scale-110 border-rose-300 ring-4 ring-rose-100"
+                : "border-rose-100"
+            }`}
+            aria-label="Xem danh sách yêu thích"
+            title="Xem danh sách yêu thích"
+          >
+            <Heart className={`size-5 ${wishlistCount > 0 ? "fill-current" : ""}`} />
+            {wishlistCount > 0 && (
+              <span
+                className={`absolute -right-2 -top-2 min-w-5 rounded-full bg-rose-500 px-1 text-center text-xs font-black leading-5 text-white ${
+                  wishlistPulse ? "animate-pulse" : ""
+                }`}
+              >
+                {wishlistCount}
+              </span>
+            )}
+          </button>
 
           <Link
             href="/cart"
@@ -1635,8 +2073,11 @@ export default function Home() {
                   key={product.id}
                   product={product}
                   onAddToCart={addToCart}
+                  onToggleWishlist={toggleWishlist}
                   onViewProduct={openProductDetail}
                   recentlyAdded={recentlyAddedProductId === String(product.id)}
+                  wishlisted={wishlistProductIds.has(String(product.id))}
+                  wishlistUpdating={wishlistUpdating}
                 />
               ))}
             </div>
@@ -1808,6 +2249,17 @@ export default function Home() {
         onRemove={removeCartItem}
         onClear={clearCart}
         onCheckout={handleCheckout}
+      />
+      <WishlistDrawer
+        items={wishlistItems}
+        wishlistOpen={wishlistOpen}
+        wishlistNotice={wishlistNotice}
+        wishlistError={wishlistError}
+        wishlistUpdating={wishlistUpdating}
+        onClose={() => setWishlistOpen(false)}
+        onViewProduct={openProductDetail}
+        onAddToCart={addWishlistItemToCart}
+        onRemove={removeWishlistItem}
       />
     </main>
   );
