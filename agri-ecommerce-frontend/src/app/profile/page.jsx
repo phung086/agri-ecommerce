@@ -40,7 +40,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency, formatDate, formatNumber } from "@/lib/admin-utils";
+import {
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  getAssetUrl,
+} from "@/lib/admin-utils";
 import {
   AUTH_SCOPES,
   clearAuthSession,
@@ -970,6 +975,7 @@ export default function CustomerProfilePage() {
   const [passwordForm, setPasswordForm] = useState(blankPasswordForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -989,6 +995,7 @@ export default function CustomerProfilePage() {
   const [phoneError, setPhoneError] = useState("");
 
   const profileInitial = getInitial(profile);
+  const profileAvatarUrl = getAssetUrl(form.avatar || profile?.avatar);
 
   const profileStats = useMemo(
     () => [
@@ -1152,12 +1159,63 @@ export default function CustomerProfilePage() {
     setPasswordForm((current) => ({ ...current, [field]: value }));
   }
 
+  function updateStoredProfile(nextProfile) {
+    const session = getAuthSession(AUTH_SCOPES.customer);
+
+    if (!session?.accessToken) {
+      return;
+    }
+
+    saveAuthSession(
+      {
+        accessToken: session.accessToken,
+        tokenType: session.tokenType,
+        user: nextProfile,
+        expiresIn: session.tokenExpiresAt
+          ? Math.max(session.tokenExpiresAt - Date.now(), 0)
+          : undefined,
+      },
+      {
+        remember: isAuthSessionRemembered(AUTH_SCOPES.customer),
+        scope: AUTH_SCOPES.customer,
+      }
+    );
+  }
+
+  async function handleAvatarFile(file) {
+    if (!file) {
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await profileService.uploadAvatar(file);
+      const nextProfile = unwrapApiData(response);
+      applyProfile(nextProfile);
+      updateStoredProfile(nextProfile);
+      setNotice("Da cap nhat anh profile.");
+    } catch (err) {
+      setError(err?.message || "Khong the tai anh profile.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   async function handleSave(event) {
     event.preventDefault();
     setSaving(true);
     setError("");
     setNotice("");
     setPhoneError("");
+
+    if (!isValidPhoneNumber(form.phoneNumber)) {
+      setError(PHONE_ERROR_MESSAGE);
+      setSaving(false);
+      return;
+    }
 
     try {
       const phoneValidationError = getVietnamPhoneError(form.phoneNumber);
@@ -1175,31 +1233,8 @@ export default function CustomerProfilePage() {
         avatar: form.avatar.trim(),
       });
       const nextProfile = unwrapApiData(response);
-      setProfile(nextProfile);
-      setForm({
-        name: nextProfile?.name || "",
-        phoneNumber: nextProfile?.phoneNumber || "",
-        address: nextProfile?.address || "",
-        avatar: nextProfile?.avatar || "",
-      });
-
-      const session = getAuthSession(AUTH_SCOPES.customer);
-      if (session?.accessToken) {
-        saveAuthSession(
-          {
-            accessToken: session.accessToken,
-            tokenType: session.tokenType,
-            user: nextProfile,
-            expiresIn: session.tokenExpiresAt
-              ? Math.max(session.tokenExpiresAt - Date.now(), 0)
-              : undefined,
-          },
-          {
-            remember: isAuthSessionRemembered(AUTH_SCOPES.customer),
-            scope: AUTH_SCOPES.customer,
-          }
-        );
-      }
+      applyProfile(nextProfile);
+      updateStoredProfile(nextProfile);
 
       setNotice("Đã cập nhật hồ sơ cá nhân thành công.");
     } catch (err) {
@@ -1684,8 +1719,15 @@ export default function CustomerProfilePage() {
               <div className="space-y-5">
                 <div className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
                   <div className="flex items-start gap-4">
-                    <div className="flex size-16 shrink-0 items-center justify-center rounded-[8px] bg-emerald-600 text-2xl font-black text-white shadow-sm">
-                      {profileInitial}
+                    <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-emerald-600 text-2xl font-black text-white shadow-sm">
+                      {profileAvatarUrl ? (
+                        <span
+                          className="size-full bg-cover bg-center"
+                          style={{ backgroundImage: `url("${profileAvatarUrl}")` }}
+                        />
+                      ) : (
+                        profileInitial
+                      )}
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-black uppercase text-emerald-700">
@@ -1850,30 +1892,44 @@ export default function CustomerProfilePage() {
                     <div className="space-y-2 sm:col-span-2">
                       <Label htmlFor="profile-avatar">Avatar</Label>
                       <AvatarUploadField
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Button
-                    type="submit"
-                    className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
-                    disabled={saving || loading || uploadingAvatar}
-                  >
-                    <Save className="size-4" />
-                    {saving ? "Đang lưu..." : "Lưu hồ sơ"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 border-emerald-100 bg-white text-emerald-800"
-                    onClick={loadProfile}
-                    disabled={loading}
-                  >
-                    Tải lại
-                  </Button>
-=======
+                        id="profile-avatar"
+                        value={form.avatar}
+                        disabled={saving || loading}
+                        uploading={uploadingAvatar}
+                        onChange={(value) => updateForm("avatar", value)}
+                        onUpload={(file) => profileService.uploadAvatar(file)}
+                        onUploadStart={() => {
+                          setUploadingAvatar(true);
+                          setError("");
+                          setNotice("");
+                        }}
+                        onUploadEnd={() => setUploadingAvatar(false)}
+                        onUploadSuccess={(msg) => {
+                          setNotice(msg);
+                        }}
+                        onUploadError={(msg) => {
+                          setError(msg);
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {notice && (
+                    <div className="mt-4 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                      {notice}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="mt-4 rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                      {error}
+                    </div>
+                  )}
+
                   <div className="mt-5 flex flex-wrap gap-2">
                     <Button
                       type="submit"
                       className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
-                      disabled={saving || loading}
+                      disabled={saving || loading || uploadingAvatar}
                     >
                       <Save className="size-4" />
                       {saving ? "Đang lưu..." : "Lưu hồ sơ"}
@@ -2061,7 +2117,6 @@ export default function CustomerProfilePage() {
                       )}
                     </div>
                   )}
->>>>>>> Stashed changes
                 </div>
               </div>
             </section>

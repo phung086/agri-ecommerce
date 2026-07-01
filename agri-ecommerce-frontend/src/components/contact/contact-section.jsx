@@ -4,6 +4,11 @@ import { useRef, useState } from "react";
 import { Mail, MessageCircle, Phone, Send, Truck } from "lucide-react";
 
 import { formatNumber } from "@/lib/admin-utils";
+import {
+  PHONE_ERROR_MESSAGE,
+  PHONE_PATTERN_SOURCE,
+  isValidPhoneNumber,
+} from "@/lib/phone-utils";
 import { marketplaceService } from "@/services/marketplace.service";
 
 const NAME_REGEX = /^[A-Za-zÀ-ỹ\s]{2,50}$/;
@@ -136,6 +141,7 @@ export function ContactSection({ className = "" }) {
       email: contactForm.email.trim(),
       message: contactForm.message.trim(),
     };
+
 
     setContactSubmitting(true);
 
