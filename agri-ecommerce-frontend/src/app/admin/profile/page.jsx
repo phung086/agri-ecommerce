@@ -25,7 +25,12 @@ import {
   isAuthSessionRemembered,
   saveAuthSession,
 } from "@/lib/auth-storage";
-import { getApiErrorMessage } from "@/lib/admin-utils";
+import { getApiErrorMessage, getAssetUrl } from "@/lib/admin-utils";
+import {
+  PHONE_ERROR_MESSAGE,
+  PHONE_PATTERN_SOURCE,
+  isValidPhoneNumber,
+} from "@/lib/phone-utils";
 import { profileService } from "@/services/profile.service";
 
 const blankProfileForm = {
@@ -55,6 +60,7 @@ export default function AdminProfilePage() {
   const [passwordForm, setPasswordForm] = useState(blankPasswordForm);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -149,11 +155,40 @@ export default function AdminProfilePage() {
     window.dispatchEvent(new Event("admin-auth-session-updated"));
   }
 
+  async function handleAvatarFile(file) {
+    if (!file) {
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const response = await profileService.uploadAvatar(file);
+      const nextProfile = unwrapApiData(response);
+
+      applyProfile(nextProfile);
+      syncStoredAdminProfile(nextProfile);
+      setNotice("Đã cập nhật ảnh admin.");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   async function handleSaveProfile(event) {
     event.preventDefault();
     setSavingProfile(true);
     setNotice("");
     setError("");
+
+    if (!isValidPhoneNumber(profileForm.phoneNumber)) {
+      setError(PHONE_ERROR_MESSAGE);
+      setSavingProfile(false);
+      return;
+    }
 
     try {
       const response = await profileService.updateProfile({
@@ -202,6 +237,7 @@ export default function AdminProfilePage() {
   }
 
   const adminInitial = getInitial(profile);
+  const adminAvatarUrl = getAssetUrl(profileForm.avatar || profile?.avatar);
 
   return (
     <div className="space-y-5">
@@ -252,8 +288,15 @@ export default function AdminProfilePage() {
         <div className="space-y-5">
           <div className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
             <div className="flex items-start gap-4">
-              <div className="flex size-16 shrink-0 items-center justify-center rounded-[8px] bg-emerald-600 text-2xl font-black text-white shadow-sm">
-                {adminInitial}
+              <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-emerald-600 text-2xl font-black text-white shadow-sm">
+                {adminAvatarUrl ? (
+                  <span
+                    className="size-full bg-cover bg-center"
+                    style={{ backgroundImage: `url("${adminAvatarUrl}")` }}
+                  />
+                ) : (
+                  adminInitial
+                )}
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-black uppercase text-emerald-700">
@@ -403,27 +446,38 @@ export default function AdminProfilePage() {
               <Label htmlFor="admin-phone">Số điện thoại</Label>
               <Input
                 id="admin-phone"
+                type="tel"
                 value={profileForm.phoneNumber}
                 onChange={(event) =>
                   updateProfileForm("phoneNumber", event.target.value)
                 }
+                inputMode="tel"
+                maxLength={12}
+                pattern={PHONE_PATTERN_SOURCE}
+                title={PHONE_ERROR_MESSAGE}
                 className="h-11"
-                placeholder="099999999"
+                placeholder="0987654321"
                 disabled={loading}
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="admin-avatar">Avatar URL</Label>
+              <Label htmlFor="admin-avatar">Ảnh profile</Label>
               <Input
                 id="admin-avatar"
-                value={profileForm.avatar}
-                onChange={(event) =>
-                  updateProfileForm("avatar", event.target.value)
-                }
-                className="h-11"
-                placeholder="uploads/users/admin.webp"
-                disabled={loading}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(event) => {
+                  handleAvatarFile(event.target.files?.[0] || null);
+                  event.target.value = "";
+                }}
+                className="h-11 cursor-pointer file:mr-3 file:h-8 file:rounded-[8px] file:bg-slate-950 file:px-3 file:text-white"
+                disabled={loading || uploadingAvatar}
               />
+              {uploadingAvatar && (
+                <p className="text-xs font-semibold text-emerald-700">
+                  Đang tải ảnh...
+                </p>
+              )}
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="admin-address">Địa chỉ liên hệ</Label>
@@ -444,7 +498,7 @@ export default function AdminProfilePage() {
             <Button
               type="submit"
               className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
-              disabled={savingProfile || loading}
+              disabled={savingProfile || loading || uploadingAvatar}
             >
               <Save className="size-4" />
               {savingProfile ? "Đang lưu..." : "Lưu hồ sơ"}

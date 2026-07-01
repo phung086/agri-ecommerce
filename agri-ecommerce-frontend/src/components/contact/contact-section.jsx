@@ -4,6 +4,11 @@ import { useState } from "react";
 import { Mail, MessageCircle, Phone, Send, Truck } from "lucide-react";
 
 import { formatNumber } from "@/lib/admin-utils";
+import {
+  PHONE_ERROR_MESSAGE,
+  PHONE_PATTERN_SOURCE,
+  isValidPhoneNumber,
+} from "@/lib/phone-utils";
 import { marketplaceService } from "@/services/marketplace.service";
 
 export function ContactSection({ className = "" }) {
@@ -38,6 +43,11 @@ export function ContactSection({ className = "" }) {
 
     if (!payload.fullName || !payload.message) {
       setContactError("Vui lòng nhập họ tên và nội dung cần hỗ trợ.");
+      return;
+    }
+
+    if (!isValidPhoneNumber(payload.phoneNumber)) {
+      setContactError(PHONE_ERROR_MESSAGE);
       return;
     }
 
@@ -145,13 +155,17 @@ export function ContactSection({ className = "" }) {
             <div className="relative mt-2">
               <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
+                type="tel"
                 value={contactForm.phoneNumber}
                 onChange={(event) =>
                   updateContactForm("phoneNumber", event.target.value)
                 }
-                maxLength={255}
+                inputMode="tel"
+                maxLength={12}
+                pattern={PHONE_PATTERN_SOURCE}
+                title={PHONE_ERROR_MESSAGE}
                 className="h-11 w-full rounded-[8px] border border-emerald-100 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                placeholder="090..."
+                placeholder="0987654321"
               />
             </div>
           </label>

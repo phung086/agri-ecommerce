@@ -40,6 +40,11 @@ import {
   getAuthSession,
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
+import {
+  PHONE_ERROR_MESSAGE,
+  PHONE_PATTERN_SOURCE,
+  isValidPhoneNumber,
+} from "@/lib/phone-utils";
 import { cartService } from "@/services/cart.service";
 import { orderService } from "@/services/order.service";
 import { promotionService } from "@/services/promotion.service";
@@ -646,6 +651,10 @@ export default function CheckoutPage() {
       ) {
         throw new Error("Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng.");
       }
+      if (!isValidPhoneNumber(payload.phone, { required: true })) {
+        throw new Error(PHONE_ERROR_MESSAGE);
+      }
+
       const savedAddress =
         await shippingAddressService.createAddress(payload);
       const nextAddresses = await shippingAddressService.getAddresses();
@@ -1007,10 +1016,16 @@ export default function CheckoutPage() {
                       <Label htmlFor="address-phone">Số điện thoại</Label>
                       <Input
                         id="address-phone"
+                        type="tel"
                         value={addressForm.phone}
                         onChange={(e) =>
                           updateAddressForm("phone", e.target.value)
                         }
+                        inputMode="tel"
+                        maxLength={12}
+                        pattern={PHONE_PATTERN_SOURCE}
+                        title={PHONE_ERROR_MESSAGE}
+                        placeholder="0987654321"
                         required={showAddressForm}
                       />
                     </div>

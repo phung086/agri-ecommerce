@@ -50,6 +50,18 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
+    public UserResponse updateCurrentProfileAvatar(Long userId, String avatarPath) {
+        UserEntity user = findUserById(userId);
+
+        user.setAvatar(cleanBlank(avatarPath));
+
+        UserEntity savedUser = userRepository.save(user);
+
+        return userMapper.toUserResponse(savedUser);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"))

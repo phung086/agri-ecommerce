@@ -29,6 +29,7 @@ import {
   formatCurrency,
   formatNumber,
   getApiErrorMessage,
+  getAssetUrl,
   getImageBackground,
 } from "@/lib/admin-utils";
 import {
@@ -911,6 +912,25 @@ export default function Home() {
   const [cartPulse, setCartPulse] = useState(false);
   const [catalogPreviewProducts, setCatalogPreviewProducts] =
     useState(fallbackProducts);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  const currentUserAvatarUrl = getAssetUrl(currentUser?.avatar);
+
+  useEffect(() => {
+    function syncCurrentUser() {
+      const session = getActiveCustomerSession();
+      setCurrentUser(session?.currentUser || null);
+    }
+
+    syncCurrentUser();
+    window.addEventListener("customer-auth-session-updated", syncCurrentUser);
+    window.addEventListener("storage", syncCurrentUser);
+
+    return () => {
+      window.removeEventListener("customer-auth-session-updated", syncCurrentUser);
+      window.removeEventListener("storage", syncCurrentUser);
+    };
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -1745,11 +1765,18 @@ export default function Home() {
 
           <Link
             href="/profile"
-            className="hidden size-10 shrink-0 items-center justify-center rounded-[8px] bg-slate-950 text-white transition hover:bg-emerald-800 sm:inline-flex"
+            className="hidden size-10 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-slate-950 text-white transition hover:bg-emerald-800 sm:inline-flex"
             aria-label="Hồ sơ khách hàng"
             title="Hồ sơ khách hàng"
           >
-            <UserRound className="size-4" />
+            {currentUserAvatarUrl ? (
+              <span
+                className="size-8 rounded-[6px] bg-cover bg-center"
+                style={{ backgroundImage: `url("${currentUserAvatarUrl}")` }}
+              />
+            ) : (
+              <UserRound className="size-4" />
+            )}
           </Link>
         </div>
       </header>

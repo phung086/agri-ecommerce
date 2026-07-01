@@ -2,6 +2,7 @@ package com.agri.ecommerce.dto.request.auth;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -24,6 +25,10 @@ public class RegisterRequest {
     private String password;
 
     @Size(max = 255, message = "Số điện thoại không được vượt quá 255 ký tự")
+    @Pattern(
+            regexp = "^$|^(0[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$",
+            message = "Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0987654321 hoặc +84987654321"
+    )
     private String phoneNumber;
 
     private String address;

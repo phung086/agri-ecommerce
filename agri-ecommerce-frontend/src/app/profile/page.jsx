@@ -38,7 +38,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency, formatDate, formatNumber } from "@/lib/admin-utils";
+import {
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  getAssetUrl,
+} from "@/lib/admin-utils";
 import {
   AUTH_SCOPES,
   clearAuthSession,
@@ -47,6 +52,11 @@ import {
   isAuthSessionRemembered,
   saveAuthSession,
 } from "@/lib/auth-storage";
+import {
+  PHONE_ERROR_MESSAGE,
+  PHONE_PATTERN_SOURCE,
+  isValidPhoneNumber,
+} from "@/lib/phone-utils";
 import { authService } from "@/services/auth.service";
 import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
@@ -179,6 +189,12 @@ function AuthPanel({ onAuthenticated }) {
 
     try {
       if (!isLogin) {
+        if (!isValidPhoneNumber(registerForm.phoneNumber)) {
+          setError(PHONE_ERROR_MESSAGE);
+          setLoading(false);
+          return;
+        }
+
         await authService.register({
           name: registerForm.name.trim(),
           email: registerForm.email.trim(),
@@ -349,12 +365,17 @@ function AuthPanel({ onAuthenticated }) {
                 <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   id="register-phone"
+                  type="tel"
                   value={registerForm.phoneNumber}
                   onChange={(event) =>
                     updateRegister("phoneNumber", event.target.value)
                   }
+                  inputMode="tel"
+                  maxLength={12}
+                  pattern={PHONE_PATTERN_SOURCE}
+                  title={PHONE_ERROR_MESSAGE}
                   className="h-11 pl-9"
-                  placeholder="090..."
+                  placeholder="0987654321"
                 />
               </div>
             </div>
@@ -821,6 +842,7 @@ export default function CustomerProfilePage() {
   const [passwordForm, setPasswordForm] = useState(blankPasswordForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -838,6 +860,7 @@ export default function CustomerProfilePage() {
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
 
   const profileInitial = getInitial(profile);
+  const profileAvatarUrl = getAssetUrl(form.avatar || profile?.avatar);
 
   const profileStats = useMemo(
     () => [
@@ -959,11 +982,62 @@ export default function CustomerProfilePage() {
     setPasswordForm((current) => ({ ...current, [field]: value }));
   }
 
+  function updateStoredProfile(nextProfile) {
+    const session = getAuthSession(AUTH_SCOPES.customer);
+
+    if (!session?.accessToken) {
+      return;
+    }
+
+    saveAuthSession(
+      {
+        accessToken: session.accessToken,
+        tokenType: session.tokenType,
+        user: nextProfile,
+        expiresIn: session.tokenExpiresAt
+          ? Math.max(session.tokenExpiresAt - Date.now(), 0)
+          : undefined,
+      },
+      {
+        remember: isAuthSessionRemembered(AUTH_SCOPES.customer),
+        scope: AUTH_SCOPES.customer,
+      }
+    );
+  }
+
+  async function handleAvatarFile(file) {
+    if (!file) {
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await profileService.uploadAvatar(file);
+      const nextProfile = unwrapApiData(response);
+      applyProfile(nextProfile);
+      updateStoredProfile(nextProfile);
+      setNotice("Da cap nhat anh profile.");
+    } catch (err) {
+      setError(err?.message || "Khong the tai anh profile.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   async function handleSave(event) {
     event.preventDefault();
     setSaving(true);
     setError("");
     setNotice("");
+
+    if (!isValidPhoneNumber(form.phoneNumber)) {
+      setError(PHONE_ERROR_MESSAGE);
+      setSaving(false);
+      return;
+    }
 
     try {
       const response = await profileService.updateProfile({
@@ -974,24 +1048,7 @@ export default function CustomerProfilePage() {
       });
       const nextProfile = unwrapApiData(response);
       applyProfile(nextProfile);
-      const session = getAuthSession(AUTH_SCOPES.customer);
-
-      if (session?.accessToken) {
-        saveAuthSession(
-          {
-            accessToken: session.accessToken,
-            tokenType: session.tokenType,
-            user: nextProfile,
-            expiresIn: session.tokenExpiresAt
-              ? Math.max(session.tokenExpiresAt - Date.now(), 0)
-              : undefined,
-          },
-          {
-            remember: isAuthSessionRemembered(AUTH_SCOPES.customer),
-            scope: AUTH_SCOPES.customer,
-          }
-        );
-      }
+      updateStoredProfile(nextProfile);
 
       setNotice("Đã cập nhật hồ sơ khách hàng.");
     } catch (err) {
@@ -1242,8 +1299,15 @@ export default function CustomerProfilePage() {
               <div className="space-y-5">
                 <div className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
                   <div className="flex items-start gap-4">
-                    <div className="flex size-16 shrink-0 items-center justify-center rounded-[8px] bg-emerald-600 text-2xl font-black text-white shadow-sm">
-                      {profileInitial}
+                    <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-emerald-600 text-2xl font-black text-white shadow-sm">
+                      {profileAvatarUrl ? (
+                        <span
+                          className="size-full bg-cover bg-center"
+                          style={{ backgroundImage: `url("${profileAvatarUrl}")` }}
+                        />
+                      ) : (
+                        profileInitial
+                      )}
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-black uppercase text-emerald-700">
@@ -1387,25 +1451,37 @@ export default function CustomerProfilePage() {
                     <Label htmlFor="profile-phone">Số điện thoại</Label>
                     <Input
                       id="profile-phone"
+                      type="tel"
                       value={form.phoneNumber}
                       onChange={(event) =>
                         updateForm("phoneNumber", event.target.value)
                       }
+                      inputMode="tel"
+                      maxLength={12}
+                      pattern={PHONE_PATTERN_SOURCE}
+                      title={PHONE_ERROR_MESSAGE}
                       className="h-11"
-                      placeholder="090..."
+                      placeholder="0987654321"
                     />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="profile-avatar">Avatar URL</Label>
+                    <Label htmlFor="profile-avatar">Anh profile</Label>
                     <Input
                       id="profile-avatar"
-                      value={form.avatar}
-                      onChange={(event) =>
-                        updateForm("avatar", event.target.value)
-                      }
-                      className="h-11"
-                      placeholder="uploads/avatars/customer.jpg"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={(event) => {
+                        handleAvatarFile(event.target.files?.[0] || null);
+                        event.target.value = "";
+                      }}
+                      className="h-11 cursor-pointer file:mr-3 file:h-8 file:rounded-[8px] file:bg-slate-950 file:px-3 file:text-white"
+                      disabled={uploadingAvatar}
                     />
+                    {uploadingAvatar && (
+                      <p className="text-xs font-semibold text-emerald-700">
+                        Dang tai anh...
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="profile-address">Địa chỉ nhận hàng</Label>
@@ -1436,7 +1512,7 @@ export default function CustomerProfilePage() {
                   <Button
                     type="submit"
                     className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
-                    disabled={saving || loading}
+                    disabled={saving || loading || uploadingAvatar}
                   >
                     <Save className="size-4" />
                     {saving ? "Đang lưu..." : "Lưu hồ sơ"}
