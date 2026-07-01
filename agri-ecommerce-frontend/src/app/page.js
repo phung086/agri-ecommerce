@@ -43,6 +43,8 @@ import { cartService } from "@/services/cart.service";
 import { marketplaceService } from "@/services/marketplace.service";
 import { reviewService } from "@/services/review.service";
 import { wishlistService } from "@/services/wishlist.service";
+import { useLanguage } from "@/i18n/language-provider";
+import { localizeProduct, localizeCategory } from "@/i18n/localized-fields";
 
 const ALL_CATEGORY = "all";
 const PRODUCTS_PAGE_SIZE = 12;
@@ -881,6 +883,7 @@ function WishlistDrawer({
 
 export default function Home() {
   const router = useRouter();
+  const { locale } = useLanguage();
   const [filters, setFilters] = useState({
     keyword: "",
     categorySlug: ALL_CATEGORY,
