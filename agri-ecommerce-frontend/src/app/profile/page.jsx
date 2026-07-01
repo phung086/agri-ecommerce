@@ -160,15 +160,40 @@ function AuthPanel({ onAuthenticated }) {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   const isLogin = mode === "login";
+
+  // Validate phone number: must be 0 followed by 9 digits
+  function validatePhoneNumber(phone) {
+    const phoneRegex = /^0\d{9}$/;
+    return phoneRegex.test(phone);
+  }
 
   function updateLogin(field, value) {
     setLoginForm((current) => ({ ...current, [field]: value }));
   }
 
   function updateRegister(field, value) {
-    setRegisterForm((current) => ({ ...current, [field]: value }));
+    if (field === "phoneNumber") {
+      // Only allow digits
+      const digitsOnly = value.replace(/\D/g, "");
+      // Limit to 10 digits
+      const limited = digitsOnly.slice(0, 10);
+      
+      setRegisterForm((current) => ({ ...current, [field]: limited }));
+      
+      // Validate realtime
+      if (limited === "") {
+        setPhoneError("");
+      } else if (!validatePhoneNumber(limited)) {
+        setPhoneError("Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số");
+      } else {
+        setPhoneError("");
+      }
+    } else {
+      setRegisterForm((current) => ({ ...current, [field]: value }));
+    }
   }
 
   async function handleSubmit(event) {
@@ -179,6 +204,13 @@ function AuthPanel({ onAuthenticated }) {
 
     try {
       if (!isLogin) {
+        // Validate phone number before submitting
+        if (registerForm.phoneNumber && !validatePhoneNumber(registerForm.phoneNumber)) {
+          setError("Vui lòng nhập số điện thoại hợp lệ (bắt đầu bằng 0 và có 10 chữ số)");
+          setLoading(false);
+          return;
+        }
+
         await authService.register({
           name: registerForm.name.trim(),
           email: registerForm.email.trim(),
@@ -349,14 +381,19 @@ function AuthPanel({ onAuthenticated }) {
                 <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   id="register-phone"
+                  type="tel"
                   value={registerForm.phoneNumber}
                   onChange={(event) =>
                     updateRegister("phoneNumber", event.target.value)
                   }
-                  className="h-11 pl-9"
-                  placeholder="090..."
+                  className={`h-11 pl-9 ${phoneError ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                  placeholder="090xxxxxxxx"
+                  maxLength="10"
                 />
               </div>
+              {phoneError && (
+                <p className="text-sm font-medium text-red-600">{phoneError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="register-address">Địa chỉ</Label>
