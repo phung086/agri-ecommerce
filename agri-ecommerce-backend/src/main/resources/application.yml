@@ -65,6 +65,9 @@ app:
       max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
       lock-minutes: ${LOGIN_LOCK_MINUTES:15}
       window-minutes: ${LOGIN_WINDOW_MINUTES:15}
+  seed:
+    admin-email: ${ADMIN_SEED_EMAIL:admin@example.com}
+    admin-password: ${ADMIN_SEED_PASSWORD:123456}
   seo:
     sitemap:
       max-products: ${SITEMAP_MAX_PRODUCTS:10000}
@@ -74,5 +77,9 @@ app:
     model: ${AI_MODEL:gemini-2.5-flash}
     gemini-api-key: ${GEMINI_API_KEY:}
     openai-api-key: ${OPENAI_API_KEY:}
+    auto-translate-on-save: ${AI_AUTO_TRANSLATE_ON_SAVE:true}
     max-products-context: ${AI_MAX_PRODUCTS_CONTEXT:10}
+    max-order-context-rows: ${AI_MAX_ORDER_CONTEXT_ROWS:5}
+    max-admin-context-rows: ${AI_MAX_ADMIN_CONTEXT_ROWS:5}
+    max-delivery-context-rows: ${AI_MAX_DELIVERY_CONTEXT_ROWS:7}
     timeout-seconds: ${AI_TIMEOUT_SECONDS:20}

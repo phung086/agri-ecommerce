@@ -20,6 +20,7 @@ import com.agri.ecommerce.mapper.ProductMapper;
 import com.agri.ecommerce.repository.CategoryRepository;
 import com.agri.ecommerce.repository.ProductImageRepository;
 import com.agri.ecommerce.repository.ProductRepository;
+import com.agri.ecommerce.service.AutoTranslationService;
 import com.agri.ecommerce.service.ProductService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
@@ -55,6 +56,8 @@ public class ProductServiceImpl implements ProductService {
     private final CategoryRepository categoryRepository;
 
     private final ProductMapper productMapper;
+
+    private final AutoTranslationService autoTranslationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -237,16 +240,27 @@ public class ProductServiceImpl implements ProductService {
         CategoryEntity category = findCategoryById(request.getCategoryId());
         String status = normalizeAdminStatusOrDefault(request.getStatus());
         status = applyStatusForProductWrite(status, request.getStock());
+        AutoTranslationService.ProductTranslation translation = autoTranslationService.translateProduct(
+                cleanBlank(request.getName()),
+                cleanBlank(request.getDescription()),
+                cleanBlank(request.getUnit()),
+                cleanBlank(request.getNameEn()),
+                cleanBlank(request.getDescriptionEn()),
+                cleanBlank(request.getUnitEn())
+        );
 
         ProductEntity product = ProductEntity.builder()
                 .name(cleanBlank(request.getName()))
+                .nameEn(translation.nameEn())
                 .slug(slug)
                 .category(category)
                 .description(cleanBlank(request.getDescription()))
+                .descriptionEn(translation.descriptionEn())
                 .price(request.getPrice())
                 .stock(request.getStock())
                 .status(status)
                 .unit(cleanBlank(request.getUnit()))
+                .unitEn(translation.unitEn())
                 .build();
 
         ProductEntity savedProduct = productRepository.save(product);
@@ -265,15 +279,26 @@ public class ProductServiceImpl implements ProductService {
         CategoryEntity category = findCategoryById(request.getCategoryId());
         String status = normalizeAdminStatusOrDefault(request.getStatus());
         status = applyStatusForProductWrite(status, request.getStock());
+        AutoTranslationService.ProductTranslation translation = autoTranslationService.translateProduct(
+                cleanBlank(request.getName()),
+                cleanBlank(request.getDescription()),
+                cleanBlank(request.getUnit()),
+                cleanBlank(request.getNameEn()),
+                cleanBlank(request.getDescriptionEn()),
+                cleanBlank(request.getUnitEn())
+        );
 
         product.setName(cleanBlank(request.getName()));
+        product.setNameEn(translation.nameEn());
         product.setSlug(slug);
         product.setCategory(category);
         product.setDescription(cleanBlank(request.getDescription()));
+        product.setDescriptionEn(translation.descriptionEn());
         product.setPrice(request.getPrice());
         product.setStock(request.getStock());
         product.setStatus(status);
         product.setUnit(cleanBlank(request.getUnit()));
+        product.setUnitEn(translation.unitEn());
 
         ProductEntity savedProduct = productRepository.save(product);
 
@@ -358,13 +383,16 @@ public class ProductServiceImpl implements ProductService {
         return ProductSearchSuggestionResponse.builder()
                 .id(product.getId())
                 .name(product.getName())
+                .nameEn(product.getNameEn())
                 .slug(product.getSlug())
                 .price(product.getPrice())
                 .stock(product.getStock())
                 .unit(product.getUnit())
+                .unitEn(product.getUnitEn())
                 .status(product.getStatus())
                 .categoryId(category == null ? null : category.getId())
                 .categoryName(category == null ? null : category.getName())
+                .categoryNameEn(category == null ? null : category.getNameEn())
                 .categorySlug(category == null ? null : category.getSlug())
                 .thumbnail(thumbnail)
                 .build();
@@ -403,7 +431,10 @@ public class ProductServiceImpl implements ProductService {
             String pattern = "%" + keyword.toLowerCase(Locale.ROOT) + "%";
             return criteriaBuilder.or(
                     criteriaBuilder.like(criteriaBuilder.lower(root.get("name")), pattern),
-                    criteriaBuilder.like(criteriaBuilder.lower(root.get("description")), pattern)
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("nameEn")), pattern),
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("description")), pattern),
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("descriptionEn")), pattern),
+                    criteriaBuilder.like(criteriaBuilder.lower(root.get("unitEn")), pattern)
             );
         };
     }
@@ -451,8 +482,9 @@ public class ProductServiceImpl implements ProductService {
         return ProductCategoryFacetResponse.builder()
                 .categoryId(row[0] == null ? null : ((Number) row[0]).longValue())
                 .categoryName(row[1] == null ? null : row[1].toString())
-                .categorySlug(row[2] == null ? null : row[2].toString())
-                .productCount(row[3] == null ? 0 : ((Number) row[3]).longValue())
+                .categoryNameEn(row[2] == null ? null : row[2].toString())
+                .categorySlug(row[3] == null ? null : row[3].toString())
+                .productCount(row[4] == null ? 0 : ((Number) row[4]).longValue())
                 .build();
     }
 
@@ -484,25 +516,30 @@ public class ProductServiceImpl implements ProductService {
 
         String normalizedKeyword = cleanKeyword.toLowerCase(Locale.ROOT);
         String productName = product.getName() == null ? "" : product.getName().toLowerCase(Locale.ROOT);
+        String productNameEn = product.getNameEn() == null ? "" : product.getNameEn().toLowerCase(Locale.ROOT);
         String productDescription = product.getDescription() == null ? "" : product.getDescription().toLowerCase(Locale.ROOT);
+        String productDescriptionEn = product.getDescriptionEn() == null ? "" : product.getDescriptionEn().toLowerCase(Locale.ROOT);
         String categoryName = product.getCategory() == null || product.getCategory().getName() == null
                 ? ""
                 : product.getCategory().getName().toLowerCase(Locale.ROOT);
+        String categoryNameEn = product.getCategory() == null || product.getCategory().getNameEn() == null
+                ? ""
+                : product.getCategory().getNameEn().toLowerCase(Locale.ROOT);
         int score = 0;
 
-        if (productName.equals(normalizedKeyword)) {
+        if (productName.equals(normalizedKeyword) || productNameEn.equals(normalizedKeyword)) {
             score += 30;
         }
-        if (productName.startsWith(normalizedKeyword)) {
+        if (productName.startsWith(normalizedKeyword) || productNameEn.startsWith(normalizedKeyword)) {
             score += 20;
         }
-        if (productName.contains(normalizedKeyword)) {
+        if (productName.contains(normalizedKeyword) || productNameEn.contains(normalizedKeyword)) {
             score += 12;
         }
-        if (categoryName.contains(normalizedKeyword)) {
+        if (categoryName.contains(normalizedKeyword) || categoryNameEn.contains(normalizedKeyword)) {
             score += 6;
         }
-        if (productDescription.contains(normalizedKeyword)) {
+        if (productDescription.contains(normalizedKeyword) || productDescriptionEn.contains(normalizedKeyword)) {
             score += 3;
         }
         if (product.getStock() != null && product.getStock() > 0) {

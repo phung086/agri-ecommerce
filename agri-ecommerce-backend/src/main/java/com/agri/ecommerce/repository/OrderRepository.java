@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +41,24 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
     long countByStatus(String status);
 
     long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(LocalDateTime fromDate, LocalDateTime toDate);
+
+    @EntityGraph(attributePaths = {"user", "deliveryStaff", "shippingAddress"})
+    List<OrderEntity> findByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
+
+    @Query("""
+            select orderEntity
+            from OrderEntity orderEntity
+            left join fetch orderEntity.user
+            left join fetch orderEntity.shippingAddress
+            where orderEntity.deliveryStaff.id = :deliveryStaffId
+              and orderEntity.status in :statuses
+            order by orderEntity.createdAt desc
+            """)
+    List<OrderEntity> findAssignedDeliveryContextOrders(
+            @Param("deliveryStaffId") Long deliveryStaffId,
+            @Param("statuses") Collection<String> statuses,
+            Pageable pageable
+    );
 
     @Query("select orderEntity.status, count(orderEntity.id) from OrderEntity orderEntity group by orderEntity.status")
     List<Object[]> countOrdersByStatus();

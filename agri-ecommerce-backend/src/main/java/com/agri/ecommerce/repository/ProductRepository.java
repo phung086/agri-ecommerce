@@ -43,7 +43,11 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
             where product.status = :status
               and (:keyword is null
                    or lower(product.name) like lower(concat('%', :keyword, '%'))
+                   or lower(product.nameEn) like lower(concat('%', :keyword, '%'))
                    or lower(product.description) like lower(concat('%', :keyword, '%'))
+                   or lower(product.descriptionEn) like lower(concat('%', :keyword, '%'))
+                   or lower(product.unitEn) like lower(concat('%', :keyword, '%'))
+                   or lower(category.nameEn) like lower(concat('%', :keyword, '%'))
                    or lower(category.name) like lower(concat('%', :keyword, '%')))
               and (:categorySlug is null or category.slug = :categorySlug)
               and (:maxPrice is null or product.price <= :maxPrice)
@@ -58,19 +62,23 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
     );
 
     @Query("""
-            select category.id, category.name, category.slug, count(product.id)
+            select category.id, category.name, category.nameEn, category.slug, count(product.id)
             from ProductEntity product
             join product.category category
             where product.status <> :hiddenStatus
               and (:keyword is null
                    or lower(product.name) like lower(concat('%', :keyword, '%'))
+                   or lower(product.nameEn) like lower(concat('%', :keyword, '%'))
                    or lower(product.description) like lower(concat('%', :keyword, '%'))
+                   or lower(product.descriptionEn) like lower(concat('%', :keyword, '%'))
+                   or lower(product.unitEn) like lower(concat('%', :keyword, '%'))
+                   or lower(category.nameEn) like lower(concat('%', :keyword, '%'))
                    or lower(category.name) like lower(concat('%', :keyword, '%')))
               and (:categorySlug is null or category.slug = :categorySlug)
               and (:minPrice is null or product.price >= :minPrice)
               and (:maxPrice is null or product.price <= :maxPrice)
               and (:status is null or product.status = :status)
-            group by category.id, category.name, category.slug
+            group by category.id, category.name, category.nameEn, category.slug
             order by count(product.id) desc, category.name asc
             """)
     List<Object[]> findPublicCategoryFacets(
@@ -89,7 +97,11 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
             where product.status <> :hiddenStatus
               and (:keyword is null
                    or lower(product.name) like lower(concat('%', :keyword, '%'))
+                   or lower(product.nameEn) like lower(concat('%', :keyword, '%'))
                    or lower(product.description) like lower(concat('%', :keyword, '%'))
+                   or lower(product.descriptionEn) like lower(concat('%', :keyword, '%'))
+                   or lower(product.unitEn) like lower(concat('%', :keyword, '%'))
+                   or lower(category.nameEn) like lower(concat('%', :keyword, '%'))
                    or lower(category.name) like lower(concat('%', :keyword, '%')))
               and (:categorySlug is null or category.slug = :categorySlug)
               and (:minPrice is null or product.price >= :minPrice)
@@ -114,7 +126,11 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
             where product.status <> :hiddenStatus
               and (:keyword is null
                    or lower(product.name) like lower(concat('%', :keyword, '%'))
+                   or lower(product.nameEn) like lower(concat('%', :keyword, '%'))
                    or lower(product.description) like lower(concat('%', :keyword, '%'))
+                   or lower(product.descriptionEn) like lower(concat('%', :keyword, '%'))
+                   or lower(product.unitEn) like lower(concat('%', :keyword, '%'))
+                   or lower(category.nameEn) like lower(concat('%', :keyword, '%'))
                    or lower(category.name) like lower(concat('%', :keyword, '%')))
               and (:categorySlug is null or category.slug = :categorySlug)
               and (:minPrice is null or product.price >= :minPrice)
