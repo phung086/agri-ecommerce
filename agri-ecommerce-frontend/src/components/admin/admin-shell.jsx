@@ -234,6 +234,12 @@ export function AdminShell({ children }) {
       return;
     }
 
+    const currentRealState = getAdminAuthState();
+    if (currentRealState.status === "authenticated") {
+      setAuthState(currentRealState);
+      return;
+    }
+
     clearAuthSession(AUTH_SCOPES.admin);
     router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
   }, [authState.status, isAuthPage, pathname, router]);

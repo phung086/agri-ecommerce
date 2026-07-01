@@ -20,6 +20,13 @@ export const marketplaceService = {
     return unwrapApiData(response);
   },
 
+  getSearchSuggestions: async (keyword, limit = 8) => {
+    const response = await axiosClient.get("/public/products/search/suggestions", {
+      params: { keyword, limit },
+    });
+    return unwrapApiData(response);
+  },
+
   createContact: async (payload) => {
     const response = await axiosClient.post("/public/contacts", payload);
     return unwrapApiData(response);

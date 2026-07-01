@@ -1,6 +1,13 @@
 import axiosClient from "@/lib/axios-client";
 
-const unwrapApiData = (response) => response?.data ?? response;
+const unwrapApiData = (response) => {
+  // axios interceptor đã unwrap HTTP response.data → response là ApiResponse object
+  // { success, message, data, errors, statusCode, timestamp }
+  if (response && typeof response === "object" && "success" in response) {
+    return response.data ?? null;
+  }
+  return response;
+};
 
 export const adminService = {
   getUsers: async () => {

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -53,10 +53,21 @@ import {
   getVietnamPhoneError,
   normalizeVietnamPhone,
 } from "@/lib/profile-validation";
+import {
+  buildProfileAddress,
+  createVietnamAddressForm,
+  getVietnamAddressError,
+  buildDetailedAddress,
+  buildFullVietnamAddress,
+  isVietnamAddressComplete,
+  addressFormToShippingPayload,
+  VIETNAM_PROVINCES,
+} from "@/lib/vietnam-addresses";
 import { authService } from "@/services/auth.service";
 import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
 import { reviewService } from "@/services/review.service";
+import { shippingAddressService } from "@/services/shipping-address.service";
 
 const blankLoginForm = {
   email: "",
@@ -857,10 +868,105 @@ function PurchaseHistorySection({
   );
 }
 
+function mapShippingAddressToForm(shippingAddress) {
+  const form = createVietnamAddressForm({
+    fullName: shippingAddress.fullName || "",
+    phone: shippingAddress.phone || "",
+    defaultAddress: Boolean(shippingAddress.defaultAddress),
+  });
+
+  if (!shippingAddress.city) {
+    form.address = shippingAddress.address || "";
+    return form;
+  }
+
+  // 1. Tìm tỉnh/thành phố khớp tên
+  const cityNameNorm = String(shippingAddress.city).trim().toLowerCase();
+  const province = VIETNAM_PROVINCES.find((p) => {
+    const pName = String(p.name).toLowerCase();
+    return pName.includes(cityNameNorm) || cityNameNorm.includes(pName);
+  });
+
+  if (!province) {
+    form.address = [shippingAddress.address, shippingAddress.city].filter(Boolean).join(", ");
+    return form;
+  }
+
+  form.provinceCode = String(province.code);
+  form.provinceName = province.name;
+
+  // 2. Tìm quận/huyện, phường/xã trong địa chỉ cụ thể
+  const rawAddr = shippingAddress.address || "";
+  const parts = rawAddr.split(",").map((p) => p.trim());
+
+  let foundDistrict = null;
+  let districtIndex = -1;
+
+  if (Array.isArray(province.districts)) {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const partNorm = parts[i].toLowerCase();
+      const dist = province.districts.find((d) => {
+        const dName = String(d.name).toLowerCase();
+        return dName.includes(partNorm) || partNorm.includes(dName);
+      });
+      if (dist) {
+        foundDistrict = dist;
+        districtIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (foundDistrict) {
+    form.districtCode = String(foundDistrict.code);
+    form.districtName = foundDistrict.name;
+
+    let foundWard = null;
+    let wardIndex = -1;
+
+    if (Array.isArray(foundDistrict.wards)) {
+      for (let i = districtIndex - 1; i >= 0; i--) {
+        const partNorm = parts[i].toLowerCase();
+        const ward = foundDistrict.wards.find((w) => {
+          const wName = String(w.name).toLowerCase();
+          return wName.includes(partNorm) || partNorm.includes(wName);
+        });
+        if (ward) {
+          foundWard = ward;
+          wardIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (foundWard) {
+      form.wardCode = String(foundWard.code);
+      form.wardName = foundWard.name;
+      form.address = parts.slice(0, wardIndex).join(", ");
+    } else {
+      form.address = parts.slice(0, districtIndex).join(", ");
+    }
+  } else {
+    form.address = rawAddr;
+  }
+
+  return form;
+}
+
 export default function CustomerProfilePage() {
   const [authStatus, setAuthStatus] = useState("checking");
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(blankProfileForm);
+  const [profileAddressForm, setProfileAddressForm] = useState(() =>
+    createVietnamAddressForm()
+  );
+  const [addresses, setAddresses] = useState([]);
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  const [editingAddress, setEditingAddress] = useState(null);
+  const [addressForm, setAddressForm] = useState(() =>
+    createVietnamAddressForm({ fullName: "", phone: "", defaultAddress: false })
+  );
+  const [savingAddress, setSavingAddress] = useState(false);
   const [passwordForm, setPasswordForm] = useState(blankPasswordForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -928,7 +1034,49 @@ export default function CustomerProfilePage() {
 
     try {
       const response = await profileService.getProfile();
-      applyProfile(unwrapApiData(response));
+      const profileData = unwrapApiData(response);
+      setProfile(profileData);
+      setForm({
+        name: profileData?.name || "",
+        phoneNumber: profileData?.phoneNumber || "",
+        address: profileData?.address || "",
+        avatar: profileData?.avatar || "",
+      });
+
+      // Tải danh sách địa chỉ giao hàng của khách hàng
+      let nextAddresses = [];
+      try {
+        const addrResponse = await shippingAddressService.getAddresses();
+        nextAddresses = Array.isArray(addrResponse) ? addrResponse : [];
+        setAddresses(nextAddresses);
+      } catch (addrErr) {
+        console.warn("Failed to load shipping addresses on profile mount:", addrErr);
+      }
+
+      // Tự động đồng bộ hóa nếu trường address của profile rỗng mà có địa chỉ mặc định
+      const defaultAddr = nextAddresses.find((a) => a.defaultAddress) || nextAddresses[0];
+      if (profileData && !profileData.address && defaultAddr) {
+        const fullAddr = [defaultAddr.address, defaultAddr.city].filter(Boolean).join(", ");
+        try {
+          const syncResponse = await profileService.updateProfile({
+            name: profileData.name || "",
+            phoneNumber: profileData.phoneNumber || defaultAddr.phone || "",
+            address: fullAddr,
+            avatar: profileData.avatar || "",
+          });
+          const updatedProfile = unwrapApiData(syncResponse);
+          setProfile(updatedProfile);
+          setForm({
+            name: updatedProfile?.name || "",
+            phoneNumber: updatedProfile?.phoneNumber || "",
+            address: updatedProfile?.address || "",
+            avatar: updatedProfile?.avatar || "",
+          });
+        } catch (syncErr) {
+          console.warn("Auto-sync profile address failed:", syncErr);
+        }
+      }
+
       setAuthStatus("authenticated");
     } catch (err) {
       setError(err?.message || "Không thể tải hồ sơ khách hàng.");
@@ -937,7 +1085,7 @@ export default function CustomerProfilePage() {
     } finally {
       setLoading(false);
     }
-  }, [applyProfile]);
+  }, []);
 
   const loadOrderHistory = useCallback(async () => {
     setOrdersLoading(true);
@@ -1023,13 +1171,19 @@ export default function CustomerProfilePage() {
       const response = await profileService.updateProfile({
         name: form.name.trim(),
         phoneNumber: normalizeVietnamPhone(form.phoneNumber),
-        address: form.address.trim(),
+        address: profile?.address || "", // Giữ nguyên địa chỉ hiện tại
         avatar: form.avatar.trim(),
       });
       const nextProfile = unwrapApiData(response);
-      applyProfile(nextProfile);
-      const session = getAuthSession(AUTH_SCOPES.customer);
+      setProfile(nextProfile);
+      setForm({
+        name: nextProfile?.name || "",
+        phoneNumber: nextProfile?.phoneNumber || "",
+        address: nextProfile?.address || "",
+        avatar: nextProfile?.avatar || "",
+      });
 
+      const session = getAuthSession(AUTH_SCOPES.customer);
       if (session?.accessToken) {
         saveAuthSession(
           {
@@ -1047,13 +1201,245 @@ export default function CustomerProfilePage() {
         );
       }
 
-      setNotice("Đã cập nhật hồ sơ khách hàng.");
-      toast.success("Đã cập nhật hồ sơ khách hàng.");
+      setNotice("Đã cập nhật hồ sơ cá nhân thành công.");
     } catch (err) {
-      setError(err?.message || "Không thể cập nhật hồ sơ.");
-      toast.error(err?.message || "Không thể cập nhật hồ sơ.");
+      setError(err?.message || "Không thể cập nhật hồ sơ cá nhân.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openAddressForm(addr = null) {
+    if (addr) {
+      setEditingAddress(addr);
+      setAddressForm(mapShippingAddressToForm(addr));
+    } else {
+      setEditingAddress(null);
+      setAddressForm(createVietnamAddressForm({
+        fullName: "",
+        phone: "",
+        defaultAddress: addresses.length === 0,
+      }));
+    }
+    setShowAddressForm(true);
+  }
+
+  function closeAddressForm() {
+    setEditingAddress(null);
+    setAddressForm(createVietnamAddressForm({
+      fullName: "",
+      phone: "",
+      defaultAddress: false,
+    }));
+    setShowAddressForm(false);
+  }
+
+  async function handleSaveAddress(event) {
+    event.preventDefault();
+    setSavingAddress(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const payload = addressFormToShippingPayload(addressForm, addresses.length);
+      if (
+        !payload.fullName ||
+        !payload.phone ||
+        !payload.city ||
+        !isVietnamAddressComplete(addressForm) ||
+        !payload.address
+      ) {
+        throw new Error("Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng.");
+      }
+
+      // Nếu đang sửa địa chỉ và nó là mặc định, hoặc đây là địa chỉ duy nhất
+      // payload.defaultAddress sẽ là true
+      if (editingAddress) {
+        payload.defaultAddress = Boolean(addressForm.defaultAddress) || editingAddress.defaultAddress || addresses.length === 1;
+      } else {
+        payload.defaultAddress = Boolean(addressForm.defaultAddress) || addresses.length === 0;
+      }
+
+      let savedAddress;
+      if (editingAddress) {
+        savedAddress = await shippingAddressService.updateAddress(editingAddress.id, payload);
+      } else {
+        savedAddress = await shippingAddressService.createAddress(payload);
+      }
+
+      // Tải lại danh sách địa chỉ mới nhất
+      const nextAddresses = await shippingAddressService.getAddresses();
+      const normalizedAddresses = Array.isArray(nextAddresses) ? nextAddresses : [];
+      setAddresses(normalizedAddresses);
+
+      // Nếu là mặc định, đồng bộ lên profile user.address
+      const isDefault = savedAddress?.defaultAddress || normalizedAddresses.length === 1;
+      if (isDefault) {
+        const fullAddr = [savedAddress.address, savedAddress.city].filter(Boolean).join(", ");
+        const syncResponse = await profileService.updateProfile({
+          name: profile?.name || form.name.trim(),
+          phoneNumber: profile?.phoneNumber || savedAddress.phone || form.phoneNumber.trim(),
+          address: fullAddr,
+          avatar: profile?.avatar || form.avatar.trim(),
+        });
+        const nextProfile = unwrapApiData(syncResponse);
+        setProfile(nextProfile);
+        setForm({
+          name: nextProfile?.name || "",
+          phoneNumber: nextProfile?.phoneNumber || "",
+          address: nextProfile?.address || "",
+          avatar: nextProfile?.avatar || "",
+        });
+
+        // Đồng bộ storage session
+        const session = getAuthSession(AUTH_SCOPES.customer);
+        if (session?.accessToken) {
+          saveAuthSession(
+            {
+              accessToken: session.accessToken,
+              tokenType: session.tokenType,
+              user: nextProfile,
+              expiresIn: session.tokenExpiresAt
+                ? Math.max(session.tokenExpiresAt - Date.now(), 0)
+                : undefined,
+            },
+            {
+              remember: isAuthSessionRemembered(AUTH_SCOPES.customer),
+              scope: AUTH_SCOPES.customer,
+            }
+          );
+        }
+      }
+
+      setAddressForm(createVietnamAddressForm({ fullName: "", phone: "", defaultAddress: false }));
+      setShowAddressForm(false);
+      setEditingAddress(null);
+      setNotice(editingAddress ? "Đã cập nhật địa chỉ thành công." : "Đã thêm địa chỉ giao hàng mới.");
+    } catch (err) {
+      setError(err?.message || "Không thể lưu địa chỉ giao hàng.");
+    } finally {
+      setSavingAddress(false);
+    }
+  }
+
+  async function handleSetDefault(addressId) {
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await shippingAddressService.setDefaultAddress(addressId);
+      const nextAddresses = await shippingAddressService.getAddresses();
+      const normalizedAddresses = Array.isArray(nextAddresses) ? nextAddresses : [];
+      setAddresses(normalizedAddresses);
+
+      // Đồng bộ địa chỉ mặc định mới với profile user
+      const defaultAddr = normalizedAddresses.find((a) => a.defaultAddress) || response;
+      if (defaultAddr) {
+        const fullAddr = [defaultAddr.address, defaultAddr.city].filter(Boolean).join(", ");
+        const syncResponse = await profileService.updateProfile({
+          name: profile?.name || form.name.trim(),
+          phoneNumber: profile?.phoneNumber || defaultAddr.phone || form.phoneNumber.trim(),
+          address: fullAddr,
+          avatar: profile?.avatar || form.avatar.trim(),
+        });
+        const nextProfile = unwrapApiData(syncResponse);
+        setProfile(nextProfile);
+        setForm({
+          name: nextProfile?.name || "",
+          phoneNumber: nextProfile?.phoneNumber || "",
+          address: nextProfile?.address || "",
+          avatar: nextProfile?.avatar || "",
+        });
+
+        // Đồng bộ storage session
+        const session = getAuthSession(AUTH_SCOPES.customer);
+        if (session?.accessToken) {
+          saveAuthSession(
+            {
+              accessToken: session.accessToken,
+              tokenType: session.tokenType,
+              user: nextProfile,
+              expiresIn: session.tokenExpiresAt
+                ? Math.max(session.tokenExpiresAt - Date.now(), 0)
+                : undefined,
+            },
+            {
+              remember: isAuthSessionRemembered(AUTH_SCOPES.customer),
+              scope: AUTH_SCOPES.customer,
+            }
+          );
+        }
+      }
+
+      setNotice("Đã đặt làm địa chỉ mặc định thành công.");
+    } catch (err) {
+      setError(err?.message || "Không thể đặt địa chỉ mặc định.");
+    }
+  }
+
+  async function handleDeleteAddress(addressId) {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa địa chỉ này?")) {
+      return;
+    }
+    setError("");
+    setNotice("");
+
+    try {
+      const addressToDelete = addresses.find((a) => a.id === addressId);
+      await shippingAddressService.deleteAddress(addressId);
+
+      const nextAddresses = await shippingAddressService.getAddresses();
+      const normalizedAddresses = Array.isArray(nextAddresses) ? nextAddresses : [];
+      setAddresses(normalizedAddresses);
+
+      // Nếu xóa địa chỉ mặc định, set địa chỉ còn lại làm mặc định mới
+      if (addressToDelete?.defaultAddress && normalizedAddresses.length > 0) {
+        const newDefaultId = normalizedAddresses[0].id;
+        await shippingAddressService.setDefaultAddress(newDefaultId);
+
+        const finalAddresses = await shippingAddressService.getAddresses();
+        const finalNormalized = Array.isArray(finalAddresses) ? finalAddresses : [];
+        setAddresses(finalNormalized);
+
+        const newDefaultAddr = finalNormalized.find((a) => a.defaultAddress) || finalNormalized[0];
+        if (newDefaultAddr) {
+          const fullAddr = [newDefaultAddr.address, newDefaultAddr.city].filter(Boolean).join(", ");
+          const syncResponse = await profileService.updateProfile({
+            name: profile?.name || form.name.trim(),
+            phoneNumber: profile?.phoneNumber || newDefaultAddr.phone || form.phoneNumber.trim(),
+            address: fullAddr,
+            avatar: profile?.avatar || form.avatar.trim(),
+          });
+          const nextProfile = unwrapApiData(syncResponse);
+          setProfile(nextProfile);
+          setForm({
+            name: nextProfile?.name || "",
+            phoneNumber: nextProfile?.phoneNumber || "",
+            address: nextProfile?.address || "",
+            avatar: nextProfile?.avatar || "",
+          });
+        }
+      } else if (normalizedAddresses.length === 0) {
+        // Hết địa chỉ, xóa trắng trong profile user
+        const syncResponse = await profileService.updateProfile({
+          name: profile?.name || form.name.trim(),
+          phoneNumber: profile?.phoneNumber || form.phoneNumber.trim(),
+          address: "",
+          avatar: profile?.avatar || form.avatar.trim(),
+        });
+        const nextProfile = unwrapApiData(syncResponse);
+        setProfile(nextProfile);
+        setForm({
+          name: nextProfile?.name || "",
+          phoneNumber: nextProfile?.phoneNumber || "",
+          address: nextProfile?.address || "",
+          avatar: nextProfile?.avatar || "",
+        });
+      }
+
+      setNotice("Đã xóa địa chỉ thành công.");
+    } catch (err) {
+      setError(err?.message || "Không thể xóa địa chỉ giao hàng.");
     }
   }
 
@@ -1318,7 +1704,9 @@ export default function CustomerProfilePage() {
                     <div className="rounded-[8px] border border-emerald-100 bg-emerald-50/70 p-3">
                       <p className="font-black text-emerald-950">Địa chỉ</p>
                       <p className="mt-1 leading-6 text-muted-foreground">
-                        {profile?.address || "Chưa có địa chỉ nhận hàng."}
+                        {addresses.find(a => a.defaultAddress) 
+                          ? [addresses.find(a => a.defaultAddress).address, addresses.find(a => a.defaultAddress).city].filter(Boolean).join(", ")
+                          : (profile?.address || "Chưa có địa chỉ nhận hàng.")}
                       </p>
                     </div>
                     <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3">
@@ -1410,103 +1798,58 @@ export default function CustomerProfilePage() {
                 </form>
               </div>
 
-              <form
-                onSubmit={handleSave}
-                className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]"
-              >
-                <div className="mb-5 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-black uppercase text-emerald-700">
-                      Cập nhật hồ sơ
-                    </p>
-                    <h2 className="mt-1 text-2xl font-black tracking-normal text-emerald-950">
-                      Thông tin nhận hàng
-                    </h2>
-                  </div>
-                  <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-                    <UserRound className="size-5" />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="profile-name">Họ tên</Label>
-                    <Input
-                      id="profile-name"
-                      value={form.name}
-                      onChange={(event) => updateForm("name", event.target.value)}
-                      className="h-11"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="profile-phone">Số điện thoại</Label>
-                    <Input
-                      id="profile-phone"
-                      value={form.phoneNumber}
-                      onChange={(event) => {
-                        updateForm("phoneNumber", event.target.value);
-                        setPhoneError(getVietnamPhoneError(event.target.value));
-                      }}
-                      className={`h-11 ${phoneError ? "border-red-500" : ""}`}
-                      placeholder="090..."
-                    />
-                    {phoneError && (
-                      <p className="text-xs font-semibold text-red-600">
-                        {phoneError}
+              <div className="space-y-5">
+                {/* Form thông tin cá nhân cơ bản */}
+                <form
+                  onSubmit={handleSave}
+                  className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]"
+                >
+                  <div className="mb-5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-black uppercase text-emerald-700">
+                        Cập nhật hồ sơ
                       </p>
-                    )}
+                      <h2 className="mt-1 text-2xl font-black tracking-normal text-emerald-950">
+                        Thông tin cá nhân
+                      </h2>
+                    </div>
+                    <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                      <UserRound className="size-5" />
+                    </div>
                   </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="profile-avatar">Avatar</Label>
-                    <AvatarUploadField
-                      id="profile-avatar"
-                      value={form.avatar}
-                      disabled={saving || loading}
-                      uploading={uploadingAvatar}
-                      onChange={(value) => updateForm("avatar", value)}
-                      onUpload={(file) => profileService.uploadAvatar(file)}
-                      onUploadStart={() => {
-                        setUploadingAvatar(true);
-                        setError("");
-                        setNotice("");
-                      }}
-                      onUploadEnd={() => setUploadingAvatar(false)}
-                      onUploadSuccess={(message) => {
-                        setNotice(message);
-                        toast.success(message);
-                      }}
-                      onUploadError={(message) => {
-                        setError(message);
-                        toast.error(message);
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="profile-address">Địa chỉ nhận hàng</Label>
-                    <Textarea
-                      id="profile-address"
-                      value={form.address}
-                      onChange={(event) =>
-                        updateForm("address", event.target.value)
-                      }
-                      rows={4}
-                      placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành..."
-                    />
-                  </div>
-                </div>
 
-                {notice && (
-                  <div className="mt-4 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-                    {notice}
-                  </div>
-                )}
-                {error && (
-                  <div className="mt-4 rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-                    {error}
-                  </div>
-                )}
-
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="profile-name">Họ tên</Label>
+                      <Input
+                        id="profile-name"
+                        value={form.name}
+                        onChange={(event) => updateForm("name", event.target.value)}
+                        className="h-11"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="profile-phone">Số điện thoại</Label>
+                      <Input
+                        id="profile-phone"
+                        value={form.phoneNumber}
+                        onChange={(event) => {
+                          updateForm("phoneNumber", event.target.value);
+                          setPhoneError(getVietnamPhoneError(event.target.value));
+                        }}
+                        className={`h-11 ${phoneError ? "border-red-500" : ""}`}
+                        placeholder="090..."
+                      />
+                      {phoneError && (
+                        <p className="text-xs font-semibold text-red-600">
+                          {phoneError}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="profile-avatar">Avatar</Label>
+                      <AvatarUploadField
                 <div className="mt-5 flex flex-wrap gap-2">
                   <Button
                     type="submit"
@@ -1525,8 +1868,202 @@ export default function CustomerProfilePage() {
                   >
                     Tải lại
                   </Button>
+=======
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Button
+                      type="submit"
+                      className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
+                      disabled={saving || loading}
+                    >
+                      <Save className="size-4" />
+                      {saving ? "Đang lưu..." : "Lưu hồ sơ"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 border-emerald-100 bg-white text-emerald-800"
+                      onClick={loadProfile}
+                      disabled={loading}
+                    >
+                      Tải lại
+                    </Button>
+                  </div>
+                </form>
+
+                {/* Phần Sổ địa chỉ (Address Book) */}
+                <div className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
+                  <div className="mb-5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-black uppercase text-emerald-700">
+                        Sổ địa chỉ
+                      </p>
+                      <h2 className="mt-1 text-2xl font-black tracking-normal text-emerald-950">
+                        Địa chỉ nhận hàng
+                      </h2>
+                    </div>
+                    {!showAddressForm && (
+                      <Button
+                        type="button"
+                        className="h-9 bg-emerald-600 px-3 font-bold hover:bg-emerald-700 text-xs"
+                        onClick={() => openAddressForm(null)}
+                      >
+                        + Thêm địa chỉ mới
+                      </Button>
+                    )}
+                  </div>
+
+                  {showAddressForm ? (
+                    <form onSubmit={handleSaveAddress} className="space-y-4 rounded-xl border border-emerald-100 bg-emerald-50/20 p-4">
+                      <h3 className="font-black text-emerald-950 text-base">
+                        {editingAddress ? "Chỉnh sửa địa chỉ nhận hàng" : "Thêm địa chỉ giao hàng mới"}
+                      </h3>
+                      
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="address-fullname">Họ tên người nhận</Label>
+                          <Input
+                            id="address-fullname"
+                            value={addressForm.fullName || ""}
+                            onChange={(e) => setAddressForm(prev => ({ ...prev, fullName: e.target.value }))}
+                            className="h-11 bg-white"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="address-phone">Số điện thoại nhận hàng</Label>
+                          <Input
+                            id="address-phone"
+                            value={addressForm.phone || ""}
+                            onChange={(e) => setAddressForm(prev => ({ ...prev, phone: e.target.value }))}
+                            className="h-11 bg-white"
+                            required
+                          />
+                        </div>
+                        
+                        <VietnamAddressFields
+                          value={addressForm}
+                          onChange={setAddressForm}
+                          idPrefix="address-book"
+                          className="sm:col-span-2"
+                          detailLabel="Địa chỉ nhận cụ thể"
+                          detailPlaceholder="Số nhà, tên đường, tên toà nhà..."
+                          detailRows={3}
+                        />
+
+                        <div className="flex items-center gap-2 sm:col-span-2 py-2">
+                          <input
+                            type="checkbox"
+                            id="address-default"
+                            checked={Boolean(addressForm.defaultAddress)}
+                            onChange={(e) => setAddressForm(prev => ({ ...prev, defaultAddress: e.target.checked }))}
+                            disabled={editingAddress?.defaultAddress || addresses.length === 0}
+                            className="size-4 rounded border-emerald-200 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <label htmlFor="address-default" className="text-sm font-semibold text-emerald-900 cursor-pointer">
+                            Đặt làm địa chỉ nhận mặc định
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          type="submit"
+                          className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
+                          disabled={savingAddress}
+                        >
+                          {savingAddress ? "Đang lưu..." : "Lưu địa chỉ"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 border-emerald-100 bg-white text-emerald-800"
+                          onClick={closeAddressForm}
+                          disabled={savingAddress}
+                        >
+                          Hủy bỏ
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="space-y-4">
+                      {addresses.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground border border-dashed border-emerald-100 rounded-xl bg-emerald-50/5">
+                          <MapPin className="size-8 text-emerald-600 mb-2 animate-bounce" />
+                          <p className="font-semibold text-sm">Bạn chưa thêm địa chỉ nhận hàng nào.</p>
+                          <p className="text-xs mt-1">Vui lòng bấm "+ Thêm địa chỉ mới" để cập nhật thông tin.</p>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3">
+                          {addresses.map((addr) => (
+                            <div
+                              key={addr.id}
+                              className={`rounded-xl border p-4 transition-all duration-300 ${
+                                addr.defaultAddress
+                                  ? "border-emerald-500 bg-emerald-50/30 shadow-sm"
+                                  : "border-emerald-100 bg-white hover:border-emerald-300"
+                              }`}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-black text-emerald-950 text-base">
+                                      {addr.fullName}
+                                    </span>
+                                    <span className="text-sm text-muted-foreground">
+                                      | {addr.phone}
+                                    </span>
+                                    {addr.defaultAddress && (
+                                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-black text-emerald-800">
+                                        Mặc định
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-emerald-900 leading-relaxed pt-1">
+                                    {[addr.address, addr.city].filter(Boolean).join(", ")}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="h-8 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 text-xs px-2"
+                                    onClick={() => openAddressForm(addr)}
+                                  >
+                                    Sửa
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs px-2"
+                                    onClick={() => handleDeleteAddress(addr.id)}
+                                  >
+                                    Xóa
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {!addr.defaultAddress && (
+                                <div className="mt-3 pt-3 border-t border-emerald-100/50 flex justify-end">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-8 text-xs border-emerald-100 text-emerald-800 bg-white hover:bg-emerald-50"
+                                    onClick={() => handleSetDefault(addr.id)}
+                                  >
+                                    Thiết lập làm mặc định
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+>>>>>>> Stashed changes
                 </div>
-              </form>
+              </div>
             </section>
 
             <PurchaseHistorySection
