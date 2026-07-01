@@ -30,6 +30,8 @@ import {
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
 import { cartService } from "@/services/cart.service";
+import { useLanguage } from "@/i18n/language-provider";
+import { localizeProduct } from "@/i18n/localized-fields";
 import { marketplaceService } from "@/services/marketplace.service";
 import { reviewService } from "@/services/review.service";
 import { wishlistService } from "@/services/wishlist.service";
@@ -65,7 +67,8 @@ function getCartQuantity(cartResponse) {
   );
 }
 
-function normalizeProduct(product) {
+function normalizeProduct(product, locale = "vi") {
+  const localizedProduct = localizeProduct(product, locale) || product;
   const price = Number(product?.price || 0);
   const stock = Number(product?.stock ?? 0);
   const images = Array.isArray(product?.images)
@@ -77,6 +80,7 @@ function normalizeProduct(product) {
   );
 
   return {
+    ...product,
     id: String(product?.id || product?.slug || ""),
     slug: product?.slug || String(product?.id || ""),
     name: product?.name || "Sản phẩm nông sản",
@@ -93,6 +97,11 @@ function normalizeProduct(product) {
     status: product?.status || "",
     gallery: gallery.length > 0 ? gallery : [""],
     imageBackground: getImageBackground(thumbnail),
+    name: localizedProduct?.name || product?.name || "Product",
+    description: localizedProduct?.description || product?.description || "",
+    categoryName: localizedProduct?.categoryName || product?.categoryName || "Product",
+    origin: localizedProduct?.origin || localizedProduct?.categoryName || product?.origin || "Farm",
+    unit: localizedProduct?.unit || product?.unit || "item",
     disabled: product?.stock !== undefined && product?.stock !== null && stock <= 0,
   };
 }
@@ -100,6 +109,7 @@ function normalizeProduct(product) {
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { locale } = useLanguage();
   const slug = Array.isArray(params?.slug) ? params.slug[0] : params?.slug;
 
   const [product, setProduct] = useState(null);
@@ -119,8 +129,8 @@ export default function ProductDetailPage() {
   const cartFeedbackTimerRef = useRef(null);
 
   const normalizedProduct = useMemo(
-    () => (product ? normalizeProduct(product) : null),
-    [product]
+    () => (product ? normalizeProduct(product, locale) : null),
+    [product, locale]
   );
 
   const productId = Number(normalizedProduct?.id);
@@ -169,7 +179,7 @@ export default function ProductDetailPage() {
         }
 
         setProduct(response);
-        const nextProduct = normalizeProduct(response);
+        const nextProduct = normalizeProduct(response, locale);
         setSelectedImage(nextProduct.gallery[0] || "");
       } catch (err) {
         if (!cancelled) {
@@ -189,7 +199,7 @@ export default function ProductDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, locale]);
 
   useEffect(() => {
     let cancelled = false;

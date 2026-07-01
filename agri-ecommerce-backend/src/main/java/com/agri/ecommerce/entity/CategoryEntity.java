@@ -21,11 +21,17 @@ public class CategoryEntity {
     @Column(nullable = false, unique = true, length = 255)
     private String name;
 
+    @Column(name = "name_en", length = 255)
+    private String nameEn;
+
     @Column(nullable = false, unique = true, length = 255)
     private String slug;
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "description_en", columnDefinition = "TEXT")
+    private String descriptionEn;
 
     @Column(length = 255)
     private String image;

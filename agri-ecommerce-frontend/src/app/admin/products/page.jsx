@@ -39,6 +39,8 @@ import {
   getImageBackground,
   slugify,
 } from "@/lib/admin-utils";
+import { useLanguage } from "@/i18n/language-provider";
+import { localizeCategory, localizeProduct } from "@/i18n/localized-fields";
 import { adminService } from "@/services/admin.service";
 
 const PRODUCT_FETCH_PARAMS = {
@@ -106,6 +108,7 @@ function buildProductPayload(form) {
 }
 
 export default function AdminProductsPage() {
+  const { locale } = useLanguage();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -168,7 +171,15 @@ export default function AdminProductsPage() {
     return products.filter((product) => {
       const matchesKeyword =
         !keyword ||
-        [product.name, product.slug, product.description, product.categoryName]
+        [
+          product.name,
+          product.nameEn,
+          product.slug,
+          product.description,
+          product.descriptionEn,
+          product.categoryName,
+          product.categoryNameEn,
+        ]
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(keyword));
       const matchesCategory =
@@ -399,7 +410,7 @@ export default function AdminProductsPage() {
           <option value="all">Tất cả danh mục</option>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
-              {category.name}
+              {(localizeCategory(category, locale) || category).name}
             </option>
           ))}
         </select>
@@ -453,7 +464,10 @@ export default function AdminProductsPage() {
         loading={loading}
         error={loading || products.length === 0 ? error : ""}
         emptyText="Không tìm thấy sản phẩm"
-        renderRow={(product) => (
+        renderRow={(product) => {
+          const displayProduct = localizeProduct(product, locale) || product;
+
+          return (
           <TableRow key={product.id}>
             <TableCell className="px-4">
               <div className="flex items-center gap-3">
@@ -461,7 +475,7 @@ export default function AdminProductsPage() {
                   <div
                     className="size-12 rounded-lg bg-cover bg-center ring-1 ring-border"
                     role="img"
-                    aria-label={product.name}
+                    aria-label={displayProduct.name}
                     style={{
                       backgroundImage: getImageBackground(product.thumbnail),
                     }}
@@ -472,7 +486,7 @@ export default function AdminProductsPage() {
                   </div>
                 )}
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{product.name}</p>
+                  <p className="truncate font-medium">{displayProduct.name}</p>
                   <p className="truncate text-xs text-muted-foreground">
                     {product.slug}
                   </p>
@@ -480,13 +494,13 @@ export default function AdminProductsPage() {
               </div>
             </TableCell>
             <TableCell className="px-4">
-              {product.categoryName || "N/A"}
+              {displayProduct.categoryName || "N/A"}
             </TableCell>
             <TableCell className="px-4 font-medium">
               {formatCurrency(product.price)}
             </TableCell>
             <TableCell className="px-4">
-              {formatNumber(product.stock)} {product.unit || ""}
+              {formatNumber(product.stock)} {displayProduct.unit || ""}
             </TableCell>
             <TableCell className="px-4">
               <StatusBadge status={product.status} />
@@ -521,7 +535,8 @@ export default function AdminProductsPage() {
               </div>
             </TableCell>
           </TableRow>
-        )}
+          );
+        }}
       />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -571,7 +586,7 @@ export default function AdminProductsPage() {
                   <option value="">Chọn danh mục</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}
+                      {(localizeCategory(category, locale) || category).name}
                     </option>
                   ))}
                 </select>

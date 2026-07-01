@@ -37,6 +37,12 @@ import {
   getAuthSession,
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
+import { useLanguage } from "@/i18n/language-provider";
+import {
+  localizeCartItem,
+  localizeCategory,
+  localizeProduct,
+} from "@/i18n/localized-fields";
 import { cartService } from "@/services/cart.service";
 import { marketplaceService } from "@/services/marketplace.service";
 import { reviewService } from "@/services/review.service";
@@ -267,12 +273,13 @@ function applyFallbackFilters(products, filters) {
     });
 }
 
-function normalizeProduct(product, index = 0) {
+function normalizeProduct(product, index = 0, locale = "vi") {
+  const localizedProduct = localizeProduct(product, locale) || product;
   const price = Number(product.price || 0);
   const stock = Number(product.stock ?? 0);
   const imageBackground = getImageBackground(product.thumbnail);
 
-  return {
+  const baseProduct = {
     id: String(product.id || product.slug || product.name),
     slug: product.slug || String(product.id || product.name),
     name: product.name || "Sản phẩm nông sản",
@@ -300,6 +307,19 @@ function normalizeProduct(product, index = 0) {
       ["76% 32%", "51% 82%", "82% 74%", "94% 74%", "64% 82%"][index % 5],
     disabled: product.stock !== undefined && product.stock !== null && stock <= 0,
   };
+
+  return {
+    ...baseProduct,
+    name: localizedProduct.name || baseProduct.name,
+    description: localizedProduct.description || baseProduct.description,
+    categoryName: localizedProduct.categoryName || baseProduct.categoryName,
+    origin: localizedProduct.origin || localizedProduct.categoryName || baseProduct.origin,
+    unit: localizedProduct.unit || baseProduct.unit,
+    nameEn: product.nameEn,
+    descriptionEn: product.descriptionEn,
+    categoryNameEn: product.categoryNameEn,
+    unitEn: product.unitEn,
+  };
 }
 
 function getActiveCustomerSession() {
@@ -325,6 +345,8 @@ function mapCartResponseToItems(cartResponse) {
     return {
       id: String(item.productId),
       cartItemId: item.id,
+      nameEn: item.productNameEn || "",
+      unitEn: item.unitEn || "",
       slug: item.productSlug || String(item.productId),
       name: item.productName || "Sản phẩm trong giỏ",
       price,
@@ -349,6 +371,8 @@ function mapWishlistResponseToItems(wishlistResponse) {
       id: String(item.productId || item.id || index),
       wishlistItemId: item.id,
       productId: String(item.productId || item.id || index),
+      nameEn: item.productNameEn || "",
+      unitEn: item.unitEn || "",
       slug: item.productSlug || String(item.productId || item.id || index),
       name: item.productName || "Sản phẩm yêu thích",
       price,
@@ -367,6 +391,9 @@ function mapProductToWishlistItem(product) {
     id: String(product.id),
     productId: String(product.id),
     slug: product.slug || String(product.id),
+    nameEn: product.nameEn || "",
+    unitEn: product.unitEn || "",
+    categoryNameEn: product.categoryNameEn || "",
     name: product.name || "Sản phẩm yêu thích",
     price: Number(product.price || 0),
     unit: product.unit || "sản phẩm",
@@ -879,6 +906,7 @@ function WishlistDrawer({
 
 export default function Home() {
   const router = useRouter();
+  const { locale } = useLanguage();
   const [filters, setFilters] = useState({
     keyword: "",
     categorySlug: ALL_CATEGORY,
@@ -1142,20 +1170,27 @@ export default function Home() {
         image: "",
         description: "Tất cả sản phẩm đang mở bán.",
       },
-      ...categories.map((category) => ({
-        id: category.id || category.slug,
-        name: category.name,
-        slug: category.slug,
-        image: category.image || "",
-        description: category.description || "Nông sản được cập nhật theo mùa.",
-      })),
+      ...categories.map((category) => {
+        const localizedCategory = localizeCategory(category, locale) || category;
+
+        return {
+          id: category.id || category.slug,
+          name: localizedCategory.name || category.name,
+          slug: category.slug,
+          image: category.image || "",
+          description:
+            localizedCategory.description ||
+            category.description ||
+            "Nông sản được cập nhật theo mùa.",
+        };
+      }),
     ],
-    [categories]
+    [categories, locale]
   );
 
   const productCards = useMemo(
-    () => products.map((product, index) => normalizeProduct(product, index)),
-    [products]
+    () => products.map((product, index) => normalizeProduct(product, index, locale)),
+    [products, locale]
   );
 
   useEffect(() => {
@@ -1230,9 +1265,19 @@ export default function Home() {
   const previewProductCards = useMemo(
     () =>
       catalogPreviewProducts.map((product, index) =>
-        normalizeProduct(product, index)
+        normalizeProduct(product, index, locale)
       ),
-    [catalogPreviewProducts]
+    [catalogPreviewProducts, locale]
+  );
+
+  const displayCart = useMemo(
+    () => cart.map((item) => localizeCartItem(item, locale)),
+    [cart, locale]
+  );
+
+  const displayWishlistItems = useMemo(
+    () => wishlistItems.map((item) => localizeCartItem(item, locale)),
+    [wishlistItems, locale]
   );
 
   const cartCount = useMemo(
@@ -2235,7 +2280,7 @@ export default function Home() {
       </footer>
 
       <CartDrawer
-        cart={cart}
+        cart={displayCart}
         cartOpen={cartOpen}
         subtotal={subtotal}
         shippingFee={shippingFee}
@@ -2251,7 +2296,7 @@ export default function Home() {
         onCheckout={handleCheckout}
       />
       <WishlistDrawer
-        items={wishlistItems}
+        items={displayWishlistItems}
         wishlistOpen={wishlistOpen}
         wishlistNotice={wishlistNotice}
         wishlistError={wishlistError}

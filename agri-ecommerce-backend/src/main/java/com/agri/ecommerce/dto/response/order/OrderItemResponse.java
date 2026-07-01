@@ -17,9 +17,13 @@ public class OrderItemResponse {
 
     private String productName;
 
+    private String productNameEn;
+
     private String productSlug;
 
     private String unit;
+
+    private String unitEn;
 
     private Integer quantity;
 

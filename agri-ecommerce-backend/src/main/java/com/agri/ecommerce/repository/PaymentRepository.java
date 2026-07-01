@@ -48,6 +48,9 @@ public interface PaymentRepository extends JpaRepository<PaymentEntity, Long>, J
     @EntityGraph(attributePaths = {"order", "order.user"})
     List<PaymentEntity> findByOrder_IdInOrderByCreatedAtDesc(Collection<Long> orderIds);
 
+    @EntityGraph(attributePaths = {"order", "order.user"})
+    List<PaymentEntity> findByStatusInOrderByCreatedAtDesc(Collection<String> statuses, Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select payment

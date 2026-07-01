@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { VietnamAddressFields } from "@/components/address/VietnamAddressFields";
 import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,11 @@ import {
   isAuthSessionRemembered,
   saveAuthSession,
 } from "@/lib/auth-storage";
+import {
+  buildProfileAddress,
+  createVietnamAddressForm,
+  getVietnamAddressError,
+} from "@/lib/vietnam-addresses";
 import { authService } from "@/services/auth.service";
 import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
@@ -62,7 +68,6 @@ const blankRegisterForm = {
   email: "",
   password: "",
   phoneNumber: "",
-  address: "",
 };
 
 const blankProfileForm = {
@@ -155,6 +160,9 @@ function AuthPanel({ onAuthenticated }) {
   const [mode, setMode] = useState("login");
   const [loginForm, setLoginForm] = useState(blankLoginForm);
   const [registerForm, setRegisterForm] = useState(blankRegisterForm);
+  const [registerAddressForm, setRegisterAddressForm] = useState(() =>
+    createVietnamAddressForm()
+  );
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -179,12 +187,20 @@ function AuthPanel({ onAuthenticated }) {
 
     try {
       if (!isLogin) {
+        const addressError = getVietnamAddressError(registerAddressForm, {
+          allowDetailOnly: false,
+        });
+
+        if (addressError) {
+          throw new Error(addressError);
+        }
+
         await authService.register({
           name: registerForm.name.trim(),
           email: registerForm.email.trim(),
           password: registerForm.password,
           phoneNumber: registerForm.phoneNumber.trim(),
-          address: registerForm.address.trim(),
+          address: buildProfileAddress(registerAddressForm),
         });
 
         setLoginForm({
@@ -192,6 +208,7 @@ function AuthPanel({ onAuthenticated }) {
           password: "",
         });
         setRegisterForm(blankRegisterForm);
+        setRegisterAddressForm(createVietnamAddressForm());
         setShowPassword(false);
         setMode("login");
         setNotice("Đăng ký thành công. Vui lòng đăng nhập để vào hồ sơ.");
@@ -342,7 +359,7 @@ function AuthPanel({ onAuthenticated }) {
         </div>
 
         {!isLogin && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="register-phone">Số điện thoại</Label>
               <div className="relative">
@@ -358,20 +375,19 @@ function AuthPanel({ onAuthenticated }) {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="register-address">Địa chỉ</Label>
-              <div className="relative">
-                <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  id="register-address"
-                  value={registerForm.address}
-                  onChange={(event) =>
-                    updateRegister("address", event.target.value)
-                  }
-                  className="h-11 pl-9"
-                  placeholder="Địa chỉ nhận hàng"
-                />
+
+            <div className="rounded-[8px] border border-emerald-100 bg-emerald-50/40 p-3">
+              <div className="mb-3 flex items-center gap-2 text-sm font-black text-emerald-950">
+                <MapPin className="size-4 text-emerald-700" />
+                Địa chỉ nhận hàng
               </div>
+              <VietnamAddressFields
+                value={registerAddressForm}
+                onChange={setRegisterAddressForm}
+                idPrefix="register-address"
+                detailLabel="Địa chỉ cụ thể"
+                detailPlaceholder="Số nhà, tên đường, tên toà nhà..."
+              />
             </div>
           </div>
         )}
@@ -818,6 +834,9 @@ export default function CustomerProfilePage() {
   const [authStatus, setAuthStatus] = useState("checking");
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(blankProfileForm);
+  const [profileAddressForm, setProfileAddressForm] = useState(() =>
+    createVietnamAddressForm()
+  );
   const [passwordForm, setPasswordForm] = useState(blankPasswordForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -874,6 +893,9 @@ export default function CustomerProfilePage() {
       address: nextProfile?.address || "",
       avatar: nextProfile?.avatar || "",
     });
+    setProfileAddressForm(
+      createVietnamAddressForm({ address: nextProfile?.address || "" })
+    );
   }, []);
 
   const loadProfile = useCallback(async () => {
@@ -966,10 +988,16 @@ export default function CustomerProfilePage() {
     setNotice("");
 
     try {
+      const addressError = getVietnamAddressError(profileAddressForm);
+
+      if (addressError) {
+        throw new Error(addressError);
+      }
+
       const response = await profileService.updateProfile({
         name: form.name.trim(),
         phoneNumber: form.phoneNumber.trim(),
-        address: form.address.trim(),
+        address: buildProfileAddress(profileAddressForm),
         avatar: form.avatar.trim(),
       });
       const nextProfile = unwrapApiData(response);
@@ -1125,6 +1153,7 @@ export default function CustomerProfilePage() {
     clearAuthSession(AUTH_SCOPES.customer);
     setProfile(null);
     setForm(blankProfileForm);
+    setProfileAddressForm(createVietnamAddressForm());
     setPasswordForm(blankPasswordForm);
     setOrders([]);
     setOrdersMeta({ totalElements: 0, totalPages: 0 });
@@ -1407,18 +1436,15 @@ export default function CustomerProfilePage() {
                       placeholder="uploads/avatars/customer.jpg"
                     />
                   </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="profile-address">Địa chỉ nhận hàng</Label>
-                    <Textarea
-                      id="profile-address"
-                      value={form.address}
-                      onChange={(event) =>
-                        updateForm("address", event.target.value)
-                      }
-                      rows={4}
-                      placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành..."
-                    />
-                  </div>
+                  <VietnamAddressFields
+                    value={profileAddressForm}
+                    onChange={setProfileAddressForm}
+                    idPrefix="profile-address"
+                    className="sm:col-span-2"
+                    detailLabel="Địa chỉ nhận hàng"
+                    detailPlaceholder="Số nhà, tên đường, tên toà nhà..."
+                    detailRows={4}
+                  />
                 </div>
 
                 {notice && (
