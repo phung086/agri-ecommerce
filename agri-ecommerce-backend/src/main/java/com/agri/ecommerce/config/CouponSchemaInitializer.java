@@ -16,6 +16,10 @@ public class CouponSchemaInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        if (!couponsTableExists()) {
+            return;
+        }
+
         addColumnIfMissing(
                 "coupon_type",
                 "ALTER TABLE coupons ADD COLUMN coupon_type varchar(50) NOT NULL DEFAULT 'ORDER_DISCOUNT' AFTER code"
@@ -50,5 +54,19 @@ public class CouponSchemaInitializer implements ApplicationRunner {
         if (existingColumns == null || existingColumns == 0) {
             jdbcTemplate.execute(alterSql);
         }
+    }
+
+    private boolean couponsTableExists() {
+        Integer existingTables = jdbcTemplate.queryForObject(
+                """
+                        select count(*)
+                        from information_schema.tables
+                        where table_schema = database()
+                          and table_name = 'coupons'
+                        """,
+                Integer.class
+        );
+
+        return existingTables != null && existingTables > 0;
     }
 }

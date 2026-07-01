@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   CalendarClock,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AvatarUploadField } from "@/components/profile/avatar-upload-field";
 import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
@@ -53,10 +55,9 @@ import {
   saveAuthSession,
 } from "@/lib/auth-storage";
 import {
-  PHONE_ERROR_MESSAGE,
-  PHONE_PATTERN_SOURCE,
-  isValidPhoneNumber,
-} from "@/lib/phone-utils";
+  getVietnamPhoneError,
+  normalizeVietnamPhone,
+} from "@/lib/profile-validation";
 import { authService } from "@/services/auth.service";
 import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
@@ -170,15 +171,40 @@ function AuthPanel({ onAuthenticated }) {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   const isLogin = mode === "login";
+
+  // Validate phone number: must be 0 followed by 9 digits
+  function validatePhoneNumber(phone) {
+    const phoneRegex = /^0\d{9}$/;
+    return phoneRegex.test(phone);
+  }
 
   function updateLogin(field, value) {
     setLoginForm((current) => ({ ...current, [field]: value }));
   }
 
   function updateRegister(field, value) {
-    setRegisterForm((current) => ({ ...current, [field]: value }));
+    if (field === "phoneNumber") {
+      // Only allow digits
+      const digitsOnly = value.replace(/\D/g, "");
+      // Limit to 10 digits
+      const limited = digitsOnly.slice(0, 10);
+      
+      setRegisterForm((current) => ({ ...current, [field]: limited }));
+      
+      // Validate realtime
+      if (limited === "") {
+        setPhoneError("");
+      } else if (!validatePhoneNumber(limited)) {
+        setPhoneError("Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số");
+      } else {
+        setPhoneError("");
+      }
+    } else {
+      setRegisterForm((current) => ({ ...current, [field]: value }));
+    }
   }
 
   async function handleSubmit(event) {
@@ -189,8 +215,9 @@ function AuthPanel({ onAuthenticated }) {
 
     try {
       if (!isLogin) {
-        if (!isValidPhoneNumber(registerForm.phoneNumber)) {
-          setError(PHONE_ERROR_MESSAGE);
+        // Validate phone number before submitting
+        if (registerForm.phoneNumber && !validatePhoneNumber(registerForm.phoneNumber)) {
+          setError("Vui lòng nhập số điện thoại hợp lệ (bắt đầu bằng 0 và có 10 chữ số)");
           setLoading(false);
           return;
         }
@@ -370,14 +397,14 @@ function AuthPanel({ onAuthenticated }) {
                   onChange={(event) =>
                     updateRegister("phoneNumber", event.target.value)
                   }
-                  inputMode="tel"
-                  maxLength={12}
-                  pattern={PHONE_PATTERN_SOURCE}
-                  title={PHONE_ERROR_MESSAGE}
-                  className="h-11 pl-9"
-                  placeholder="0987654321"
+                  className={`h-11 pl-9 ${phoneError ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                  placeholder="090xxxxxxxx"
+                  maxLength="10"
                 />
               </div>
+              {phoneError && (
+                <p className="text-sm font-medium text-red-600">{phoneError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="register-address">Địa chỉ</Label>
@@ -858,6 +885,8 @@ export default function CustomerProfilePage() {
   const [reviewSubmittingId, setReviewSubmittingId] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   const profileInitial = getInitial(profile);
   const profileAvatarUrl = getAssetUrl(form.avatar || profile?.avatar);
@@ -1032,6 +1061,7 @@ export default function CustomerProfilePage() {
     setSaving(true);
     setError("");
     setNotice("");
+    setPhoneError("");
 
     if (!isValidPhoneNumber(form.phoneNumber)) {
       setError(PHONE_ERROR_MESSAGE);
@@ -1040,9 +1070,17 @@ export default function CustomerProfilePage() {
     }
 
     try {
+      const phoneValidationError = getVietnamPhoneError(form.phoneNumber);
+      if (phoneValidationError) {
+        setPhoneError(phoneValidationError);
+        setError(phoneValidationError);
+        setSaving(false);
+        return;
+      }
+
       const response = await profileService.updateProfile({
         name: form.name.trim(),
-        phoneNumber: form.phoneNumber.trim(),
+        phoneNumber: normalizeVietnamPhone(form.phoneNumber),
         address: form.address.trim(),
         avatar: form.avatar.trim(),
       });
@@ -1051,8 +1089,10 @@ export default function CustomerProfilePage() {
       updateStoredProfile(nextProfile);
 
       setNotice("Đã cập nhật hồ sơ khách hàng.");
+      toast.success("Đã cập nhật hồ sơ khách hàng.");
     } catch (err) {
       setError(err?.message || "Không thể cập nhật hồ sơ.");
+      toast.error(err?.message || "Không thể cập nhật hồ sơ.");
     } finally {
       setSaving(false);
     }
@@ -1453,29 +1493,43 @@ export default function CustomerProfilePage() {
                       id="profile-phone"
                       type="tel"
                       value={form.phoneNumber}
-                      onChange={(event) =>
-                        updateForm("phoneNumber", event.target.value)
-                      }
-                      inputMode="tel"
-                      maxLength={12}
-                      pattern={PHONE_PATTERN_SOURCE}
-                      title={PHONE_ERROR_MESSAGE}
-                      className="h-11"
-                      placeholder="0987654321"
+                      onChange={(event) => {
+                        updateForm("phoneNumber", event.target.value);
+                        setPhoneError(getVietnamPhoneError(event.target.value));
+                      }}
+                      className={`h-11 ${phoneError ? "border-red-500" : ""}`}
+                      placeholder="090..."
                     />
+                    {phoneError && (
+                      <p className="text-xs font-semibold text-red-600">
+                        {phoneError}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="profile-avatar">Anh profile</Label>
-                    <Input
+
+                    <Label htmlFor="profile-avatar">Avatar</Label>
+                    <AvatarUploadField
                       id="profile-avatar"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      onChange={(event) => {
-                        handleAvatarFile(event.target.files?.[0] || null);
-                        event.target.value = "";
+                      value={form.avatar}
+                      disabled={saving || loading}
+                      uploading={uploadingAvatar}
+                      onChange={(value) => updateForm("avatar", value)}
+                      onUpload={(file) => profileService.uploadAvatar(file)}
+                      onUploadStart={() => {
+                        setUploadingAvatar(true);
+                        setError("");
+                        setNotice("");
                       }}
-                      className="h-11 cursor-pointer file:mr-3 file:h-8 file:rounded-[8px] file:bg-slate-950 file:px-3 file:text-white"
-                      disabled={uploadingAvatar}
+                      onUploadEnd={() => setUploadingAvatar(false)}
+                      onUploadSuccess={(message) => {
+                        setNotice(message);
+                        toast.success(message);
+                      }}
+                      onUploadError={(message) => {
+                        setError(message);
+                        toast.error(message);
+                      }}
                     />
                     {uploadingAvatar && (
                       <p className="text-xs font-semibold text-emerald-700">

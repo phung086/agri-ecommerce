@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   CheckCircle2,
   KeyRound,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AvatarUploadField } from "@/components/profile/avatar-upload-field";
 import { StatCard } from "@/components/admin/stat-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,10 +29,9 @@ import {
 } from "@/lib/auth-storage";
 import { getApiErrorMessage, getAssetUrl } from "@/lib/admin-utils";
 import {
-  PHONE_ERROR_MESSAGE,
-  PHONE_PATTERN_SOURCE,
-  isValidPhoneNumber,
-} from "@/lib/phone-utils";
+  getVietnamPhoneError,
+  normalizeVietnamPhone,
+} from "@/lib/profile-validation";
 import { profileService } from "@/services/profile.service";
 
 const blankProfileForm = {
@@ -64,6 +65,7 @@ export default function AdminProfilePage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   const applyProfile = useCallback((nextProfile) => {
     setProfile(nextProfile);
@@ -183,17 +185,22 @@ export default function AdminProfilePage() {
     setSavingProfile(true);
     setNotice("");
     setError("");
+    setPhoneError("");
 
-    if (!isValidPhoneNumber(profileForm.phoneNumber)) {
-      setError(PHONE_ERROR_MESSAGE);
-      setSavingProfile(false);
-      return;
-    }
+
 
     try {
+      const phoneValidationError = getVietnamPhoneError(profileForm.phoneNumber);
+      if (phoneValidationError) {
+        setPhoneError(phoneValidationError);
+        setError(phoneValidationError);
+        setSavingProfile(false);
+        return;
+      }
+
       const response = await profileService.updateProfile({
         name: profileForm.name.trim(),
-        phoneNumber: profileForm.phoneNumber.trim(),
+        phoneNumber: normalizeVietnamPhone(profileForm.phoneNumber),
         avatar: profileForm.avatar.trim(),
         address: profileForm.address.trim(),
       });
@@ -201,8 +208,10 @@ export default function AdminProfilePage() {
 
       applyProfile(nextProfile);
       syncStoredAdminProfile(nextProfile);
+      toast.success("Đã cập nhật hồ sơ admin.");
       setNotice("Đã cập nhật hồ sơ admin.");
     } catch (err) {
+      toast.error(getApiErrorMessage(err));
       setError(getApiErrorMessage(err));
     } finally {
       setSavingProfile(false);
@@ -448,30 +457,41 @@ export default function AdminProfilePage() {
                 id="admin-phone"
                 type="tel"
                 value={profileForm.phoneNumber}
-                onChange={(event) =>
-                  updateProfileForm("phoneNumber", event.target.value)
-                }
-                inputMode="tel"
-                maxLength={12}
-                pattern={PHONE_PATTERN_SOURCE}
-                title={PHONE_ERROR_MESSAGE}
-                className="h-11"
-                placeholder="0987654321"
-                disabled={loading}
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="admin-avatar">Ảnh profile</Label>
-              <Input
-                id="admin-avatar"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={(event) => {
-                  handleAvatarFile(event.target.files?.[0] || null);
-                  event.target.value = "";
+                  const value = event.target.value;
+                  updateProfileForm("phoneNumber", value);
+                  setPhoneError(getVietnamPhoneError(value));
                 }}
-                className="h-11 cursor-pointer file:mr-3 file:h-8 file:rounded-[8px] file:bg-slate-950 file:px-3 file:text-white"
+                className={`h-11 ${phoneError ? "border-red-500" : ""}`}
+                placeholder="Nhập: 099999999 hoặc +84999999999"
                 disabled={loading || uploadingAvatar}
+              />
+              {phoneError && (
+                <p className="text-xs font-semibold text-red-600">{phoneError}</p>
+              )}
+            </div>
+              <Label htmlFor="admin-avatar">Avatar</Label>
+              <AvatarUploadField
+                id="admin-avatar"
+                value={profileForm.avatar}
+                disabled={loading || savingProfile}
+                uploading={uploadingAvatar}
+                onChange={(value) => updateProfileForm("avatar", value)}
+                onUpload={(file) => profileService.uploadAvatar(file)}
+                onUploadStart={() => {
+                  setUploadingAvatar(true);
+                  setError("");
+                  setNotice("");
+                }}
+                onUploadEnd={() => setUploadingAvatar(false)}
+                onUploadSuccess={(message) => {
+                  setNotice(message);
+                  toast.success(message);
+                }}
+                onUploadError={(message) => {
+                  setError(message);
+                  toast.error(message);
+                }}
               />
               {uploadingAvatar && (
                 <p className="text-xs font-semibold text-emerald-700">

@@ -12,21 +12,19 @@ import lombok.Setter;
 public class ContactCreateRequest {
 
     @NotBlank(message = "Họ tên không được để trống")
-    @Size(max = 255, message = "Họ tên không được vượt quá 255 ký tự")
+    @Pattern(regexp = "^[A-Za-zÀ-ỹ\\s]{2,50}$", message = "Họ tên chỉ được chứa chữ cái và khoảng trắng.")
     private String fullName;
 
-    @Size(max = 255, message = "Số điện thoại không được vượt quá 255 ký tự")
-    @Pattern(
-            regexp = "^$|^(0[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$",
-            message = "Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0987654321 hoặc +84987654321"
-    )
+    @NotBlank(message = "Số điện thoại không được để trống")
+    @Pattern(regexp = "^0\\d{9}$", message = "Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng số 0.")
     private String phoneNumber;
 
+    @NotBlank(message = "Email không được để trống")
     @Email(message = "Email không hợp lệ")
     @Size(max = 255, message = "Email không được vượt quá 255 ký tự")
     private String email;
 
     @NotBlank(message = "Nội dung liên hệ không được để trống")
-    @Size(max = 255, message = "Nội dung liên hệ không được vượt quá 255 ký tự")
+    @Size(min = 10, max = 255, message = "Nội dung phải từ 10 đến 255 ký tự.")
     private String message;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Mail, MessageCircle, Phone, Send, Truck } from "lucide-react";
 
 import { formatNumber } from "@/lib/admin-utils";
@@ -11,7 +11,60 @@ import {
 } from "@/lib/phone-utils";
 import { marketplaceService } from "@/services/marketplace.service";
 
+const NAME_REGEX = /^[A-Za-zÀ-ỹ\s]{2,50}$/;
+const PHONE_REGEX = /^0\d{9}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const CONTACT_ERRORS = {
+  fullName: "Họ tên chỉ được chứa chữ cái và khoảng trắng.",
+  phoneNumber: "Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng số 0.",
+  email: "Email không hợp lệ.",
+  message: "Nội dung phải từ 10 đến 255 ký tự.",
+};
+
+function sanitizeFullName(value) {
+  return value
+    .replace(/[^A-Za-zÀ-ỹ\s]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/^\s+/, "")
+    .slice(0, 50);
+}
+
+function sanitizePhoneNumber(value) {
+  return value.replace(/\D/g, "").slice(0, 10);
+}
+
+function validateContactField(key, value) {
+  const trimmedValue = value.trim();
+
+  if (key === "fullName") {
+    return NAME_REGEX.test(value) && value === trimmedValue
+      ? ""
+      : CONTACT_ERRORS.fullName;
+  }
+
+  if (key === "phoneNumber") {
+    return PHONE_REGEX.test(value) ? "" : CONTACT_ERRORS.phoneNumber;
+  }
+
+  if (key === "email") {
+    return EMAIL_REGEX.test(trimmedValue) ? "" : CONTACT_ERRORS.email;
+  }
+
+  if (key === "message") {
+    return trimmedValue.length >= 10 && trimmedValue.length <= 255
+      ? ""
+      : CONTACT_ERRORS.message;
+  }
+
+  return "";
+}
+
 export function ContactSection({ className = "" }) {
+  const fullNameRef = useRef(null);
+  const phoneNumberRef = useRef(null);
+  const emailRef = useRef(null);
+  const messageRef = useRef(null);
   const [contactForm, setContactForm] = useState({
     fullName: "",
     phoneNumber: "",
@@ -21,18 +74,66 @@ export function ContactSection({ className = "" }) {
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactNotice, setContactNotice] = useState("");
   const [contactError, setContactError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({
+    fullName: "",
+    phoneNumber: "",
+    email: "",
+    message: "",
+  });
 
   function updateContactForm(key, value) {
+    const nextValue =
+      key === "fullName"
+        ? sanitizeFullName(value)
+        : key === "phoneNumber"
+          ? sanitizePhoneNumber(value)
+          : value;
+
     setContactForm((current) => ({
       ...current,
-      [key]: value,
+      [key]: nextValue,
     }));
+    setFieldErrors((current) => ({
+      ...current,
+      [key]: validateContactField(key, nextValue),
+    }));
+  }
+
+  function validateContactForm() {
+    const nextErrors = {
+      fullName: validateContactField("fullName", contactForm.fullName),
+      phoneNumber: validateContactField("phoneNumber", contactForm.phoneNumber),
+      email: validateContactField("email", contactForm.email),
+      message: validateContactField("message", contactForm.message),
+    };
+    setFieldErrors(nextErrors);
+
+    const firstInvalidField = [
+      "fullName",
+      "phoneNumber",
+      "email",
+      "message",
+    ].find((key) => nextErrors[key]);
+
+    if (firstInvalidField) {
+      const refs = {
+        fullName: fullNameRef,
+        phoneNumber: phoneNumberRef,
+        email: emailRef,
+        message: messageRef,
+      };
+      refs[firstInvalidField].current?.focus();
+      return false;
+    }
+
+    return true;
   }
 
   async function submitContactForm(event) {
     event.preventDefault();
     setContactNotice("");
     setContactError("");
+    if (!validateContactForm()) return;
 
     const payload = {
       fullName: contactForm.fullName.trim(),
@@ -41,15 +142,6 @@ export function ContactSection({ className = "" }) {
       message: contactForm.message.trim(),
     };
 
-    if (!payload.fullName || !payload.message) {
-      setContactError("Vui lòng nhập họ tên và nội dung cần hỗ trợ.");
-      return;
-    }
-
-    if (!isValidPhoneNumber(payload.phoneNumber)) {
-      setContactError(PHONE_ERROR_MESSAGE);
-      return;
-    }
 
     setContactSubmitting(true);
 
@@ -59,6 +151,12 @@ export function ContactSection({ className = "" }) {
         "Đã gửi liên hệ thành công. AgriMarket sẽ phản hồi bạn sớm nhất."
       );
       setContactForm({
+        fullName: "",
+        phoneNumber: "",
+        email: "",
+        message: "",
+      });
+      setFieldErrors({
         fullName: "",
         phoneNumber: "",
         email: "",
@@ -137,15 +235,25 @@ export function ContactSection({ className = "" }) {
               Họ tên
             </span>
             <input
+              ref={fullNameRef}
               value={contactForm.fullName}
               onChange={(event) =>
                 updateContactForm("fullName", event.target.value)
               }
-              maxLength={255}
+              maxLength={50}
               required
-              className="mt-2 h-11 w-full rounded-[8px] border border-emerald-100 px-3 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              className={`mt-2 h-11 w-full rounded-[8px] border px-3 text-sm font-semibold outline-none transition focus:ring-4 ${
+                fieldErrors.fullName
+                  ? "border-red-500 focus:border-red-500 focus:ring-red-100"
+                  : "border-emerald-100 focus:border-emerald-400 focus:ring-emerald-100"
+              }`}
               placeholder="Nguyễn Văn A"
             />
+            {fieldErrors.fullName && (
+              <p className="mt-1 text-xs font-semibold text-red-600">
+                {fieldErrors.fullName}
+              </p>
+            )}
           </label>
 
           <label className="block">
@@ -155,19 +263,26 @@ export function ContactSection({ className = "" }) {
             <div className="relative mt-2">
               <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
-                type="tel"
+                ref={phoneNumberRef}
                 value={contactForm.phoneNumber}
                 onChange={(event) =>
                   updateContactForm("phoneNumber", event.target.value)
                 }
-                inputMode="tel"
-                maxLength={12}
-                pattern={PHONE_PATTERN_SOURCE}
-                title={PHONE_ERROR_MESSAGE}
-                className="h-11 w-full rounded-[8px] border border-emerald-100 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                placeholder="0987654321"
+                inputMode="numeric"
+                maxLength={10}
+                className={`h-11 w-full rounded-[8px] border pl-9 pr-3 text-sm font-semibold outline-none transition focus:ring-4 ${
+                  fieldErrors.phoneNumber
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-100"
+                    : "border-emerald-100 focus:border-emerald-400 focus:ring-emerald-100"
+                }`}
+                placeholder="090..."
               />
             </div>
+            {fieldErrors.phoneNumber && (
+              <p className="mt-1 text-xs font-semibold text-red-600">
+                {fieldErrors.phoneNumber}
+              </p>
+            )}
           </label>
 
           <label className="block sm:col-span-2">
@@ -177,14 +292,24 @@ export function ContactSection({ className = "" }) {
             <div className="relative mt-2">
               <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
+                ref={emailRef}
                 value={contactForm.email}
                 onChange={(event) => updateContactForm("email", event.target.value)}
                 type="email"
                 maxLength={255}
-                className="h-11 w-full rounded-[8px] border border-emerald-100 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                className={`h-11 w-full rounded-[8px] border pl-9 pr-3 text-sm font-semibold outline-none transition focus:ring-4 ${
+                  fieldErrors.email
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-100"
+                    : "border-emerald-100 focus:border-emerald-400 focus:ring-emerald-100"
+                }`}
                 placeholder="email@example.com"
               />
             </div>
+            {fieldErrors.email && (
+              <p className="mt-1 text-xs font-semibold text-red-600">
+                {fieldErrors.email}
+              </p>
+            )}
           </label>
 
           <label className="block sm:col-span-2">
@@ -192,14 +317,24 @@ export function ContactSection({ className = "" }) {
               Nội dung
             </span>
             <textarea
+              ref={messageRef}
               value={contactForm.message}
               onChange={(event) => updateContactForm("message", event.target.value)}
               maxLength={255}
               required
               rows={5}
-              className="mt-2 w-full resize-none rounded-[8px] border border-emerald-100 px-3 py-3 text-sm font-semibold leading-6 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              className={`mt-2 w-full resize-none rounded-[8px] border px-3 py-3 text-sm font-semibold leading-6 outline-none transition focus:ring-4 ${
+                fieldErrors.message
+                  ? "border-red-500 focus:border-red-500 focus:ring-red-100"
+                  : "border-emerald-100 focus:border-emerald-400 focus:ring-emerald-100"
+              }`}
               placeholder="Tôi muốn hỏi về sản phẩm, giao hàng hoặc cửa hàng..."
             />
+            {fieldErrors.message && (
+              <p className="mt-1 text-xs font-semibold text-red-600">
+                {fieldErrors.message}
+              </p>
+            )}
           </label>
         </div>
 
