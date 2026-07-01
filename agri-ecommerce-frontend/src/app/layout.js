@@ -1,5 +1,5 @@
 import "./globals.css";
-import AiChatWidget from "@/components/AiChatWidget";
+import { I18nClientRoot } from "@/components/I18nClientRoot";
 
 export const metadata = {
   title: "AgriMarket - Sàn nông sản trực tuyến",
@@ -11,8 +11,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="vi" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
-        {children}
-        <AiChatWidget />
+        <I18nClientRoot>{children}</I18nClientRoot>
       </body>
     </html>
   );
