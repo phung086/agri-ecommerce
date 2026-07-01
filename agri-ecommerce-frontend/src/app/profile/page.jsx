@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   CalendarClock,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AvatarUploadField } from "@/components/profile/avatar-upload-field";
 import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,10 @@ import {
   isAuthSessionRemembered,
   saveAuthSession,
 } from "@/lib/auth-storage";
+import {
+  getVietnamPhoneError,
+  normalizeVietnamPhone,
+} from "@/lib/profile-validation";
 import { authService } from "@/services/auth.service";
 import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
@@ -873,6 +879,8 @@ export default function CustomerProfilePage() {
   const [reviewSubmittingId, setReviewSubmittingId] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   const profileInitial = getInitial(profile);
 
@@ -1001,11 +1009,20 @@ export default function CustomerProfilePage() {
     setSaving(true);
     setError("");
     setNotice("");
+    setPhoneError("");
 
     try {
+      const phoneValidationError = getVietnamPhoneError(form.phoneNumber);
+      if (phoneValidationError) {
+        setPhoneError(phoneValidationError);
+        setError(phoneValidationError);
+        setSaving(false);
+        return;
+      }
+
       const response = await profileService.updateProfile({
         name: form.name.trim(),
-        phoneNumber: form.phoneNumber.trim(),
+        phoneNumber: normalizeVietnamPhone(form.phoneNumber),
         address: form.address.trim(),
         avatar: form.avatar.trim(),
       });
@@ -1031,8 +1048,10 @@ export default function CustomerProfilePage() {
       }
 
       setNotice("Đã cập nhật hồ sơ khách hàng.");
+      toast.success("Đã cập nhật hồ sơ khách hàng.");
     } catch (err) {
       setError(err?.message || "Không thể cập nhật hồ sơ.");
+      toast.error(err?.message || "Không thể cập nhật hồ sơ.");
     } finally {
       setSaving(false);
     }
@@ -1425,23 +1444,42 @@ export default function CustomerProfilePage() {
                     <Input
                       id="profile-phone"
                       value={form.phoneNumber}
-                      onChange={(event) =>
-                        updateForm("phoneNumber", event.target.value)
-                      }
-                      className="h-11"
+                      onChange={(event) => {
+                        updateForm("phoneNumber", event.target.value);
+                        setPhoneError(getVietnamPhoneError(event.target.value));
+                      }}
+                      className={`h-11 ${phoneError ? "border-red-500" : ""}`}
                       placeholder="090..."
                     />
+                    {phoneError && (
+                      <p className="text-xs font-semibold text-red-600">
+                        {phoneError}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="profile-avatar">Avatar URL</Label>
-                    <Input
+                    <Label htmlFor="profile-avatar">Avatar</Label>
+                    <AvatarUploadField
                       id="profile-avatar"
                       value={form.avatar}
-                      onChange={(event) =>
-                        updateForm("avatar", event.target.value)
-                      }
-                      className="h-11"
-                      placeholder="uploads/avatars/customer.jpg"
+                      disabled={saving || loading}
+                      uploading={uploadingAvatar}
+                      onChange={(value) => updateForm("avatar", value)}
+                      onUpload={(file) => profileService.uploadAvatar(file)}
+                      onUploadStart={() => {
+                        setUploadingAvatar(true);
+                        setError("");
+                        setNotice("");
+                      }}
+                      onUploadEnd={() => setUploadingAvatar(false)}
+                      onUploadSuccess={(message) => {
+                        setNotice(message);
+                        toast.success(message);
+                      }}
+                      onUploadError={(message) => {
+                        setError(message);
+                        toast.error(message);
+                      }}
                     />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
@@ -1473,7 +1511,7 @@ export default function CustomerProfilePage() {
                   <Button
                     type="submit"
                     className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
-                    disabled={saving || loading}
+                    disabled={saving || loading || uploadingAvatar}
                   >
                     <Save className="size-4" />
                     {saving ? "Đang lưu..." : "Lưu hồ sơ"}
