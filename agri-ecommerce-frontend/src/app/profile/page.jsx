@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   CalendarClock,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AvatarUploadField } from "@/components/profile/avatar-upload-field";
 import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,10 @@ import {
   isAuthSessionRemembered,
   saveAuthSession,
 } from "@/lib/auth-storage";
+import {
+  getVietnamPhoneError,
+  normalizeVietnamPhone,
+} from "@/lib/profile-validation";
 import { authService } from "@/services/auth.service";
 import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
@@ -160,15 +166,40 @@ function AuthPanel({ onAuthenticated }) {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   const isLogin = mode === "login";
+
+  // Validate phone number: must be 0 followed by 9 digits
+  function validatePhoneNumber(phone) {
+    const phoneRegex = /^0\d{9}$/;
+    return phoneRegex.test(phone);
+  }
 
   function updateLogin(field, value) {
     setLoginForm((current) => ({ ...current, [field]: value }));
   }
 
   function updateRegister(field, value) {
-    setRegisterForm((current) => ({ ...current, [field]: value }));
+    if (field === "phoneNumber") {
+      // Only allow digits
+      const digitsOnly = value.replace(/\D/g, "");
+      // Limit to 10 digits
+      const limited = digitsOnly.slice(0, 10);
+      
+      setRegisterForm((current) => ({ ...current, [field]: limited }));
+      
+      // Validate realtime
+      if (limited === "") {
+        setPhoneError("");
+      } else if (!validatePhoneNumber(limited)) {
+        setPhoneError("Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số");
+      } else {
+        setPhoneError("");
+      }
+    } else {
+      setRegisterForm((current) => ({ ...current, [field]: value }));
+    }
   }
 
   async function handleSubmit(event) {
@@ -179,6 +210,13 @@ function AuthPanel({ onAuthenticated }) {
 
     try {
       if (!isLogin) {
+        // Validate phone number before submitting
+        if (registerForm.phoneNumber && !validatePhoneNumber(registerForm.phoneNumber)) {
+          setError("Vui lòng nhập số điện thoại hợp lệ (bắt đầu bằng 0 và có 10 chữ số)");
+          setLoading(false);
+          return;
+        }
+
         await authService.register({
           name: registerForm.name.trim(),
           email: registerForm.email.trim(),
@@ -349,14 +387,19 @@ function AuthPanel({ onAuthenticated }) {
                 <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   id="register-phone"
+                  type="tel"
                   value={registerForm.phoneNumber}
                   onChange={(event) =>
                     updateRegister("phoneNumber", event.target.value)
                   }
-                  className="h-11 pl-9"
-                  placeholder="090..."
+                  className={`h-11 pl-9 ${phoneError ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                  placeholder="090xxxxxxxx"
+                  maxLength="10"
                 />
               </div>
+              {phoneError && (
+                <p className="text-sm font-medium text-red-600">{phoneError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="register-address">Địa chỉ</Label>
@@ -836,6 +879,8 @@ export default function CustomerProfilePage() {
   const [reviewSubmittingId, setReviewSubmittingId] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   const profileInitial = getInitial(profile);
 
@@ -964,11 +1009,20 @@ export default function CustomerProfilePage() {
     setSaving(true);
     setError("");
     setNotice("");
+    setPhoneError("");
 
     try {
+      const phoneValidationError = getVietnamPhoneError(form.phoneNumber);
+      if (phoneValidationError) {
+        setPhoneError(phoneValidationError);
+        setError(phoneValidationError);
+        setSaving(false);
+        return;
+      }
+
       const response = await profileService.updateProfile({
         name: form.name.trim(),
-        phoneNumber: form.phoneNumber.trim(),
+        phoneNumber: normalizeVietnamPhone(form.phoneNumber),
         address: form.address.trim(),
         avatar: form.avatar.trim(),
       });
@@ -994,8 +1048,10 @@ export default function CustomerProfilePage() {
       }
 
       setNotice("Đã cập nhật hồ sơ khách hàng.");
+      toast.success("Đã cập nhật hồ sơ khách hàng.");
     } catch (err) {
       setError(err?.message || "Không thể cập nhật hồ sơ.");
+      toast.error(err?.message || "Không thể cập nhật hồ sơ.");
     } finally {
       setSaving(false);
     }
@@ -1388,23 +1444,42 @@ export default function CustomerProfilePage() {
                     <Input
                       id="profile-phone"
                       value={form.phoneNumber}
-                      onChange={(event) =>
-                        updateForm("phoneNumber", event.target.value)
-                      }
-                      className="h-11"
+                      onChange={(event) => {
+                        updateForm("phoneNumber", event.target.value);
+                        setPhoneError(getVietnamPhoneError(event.target.value));
+                      }}
+                      className={`h-11 ${phoneError ? "border-red-500" : ""}`}
                       placeholder="090..."
                     />
+                    {phoneError && (
+                      <p className="text-xs font-semibold text-red-600">
+                        {phoneError}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="profile-avatar">Avatar URL</Label>
-                    <Input
+                    <Label htmlFor="profile-avatar">Avatar</Label>
+                    <AvatarUploadField
                       id="profile-avatar"
                       value={form.avatar}
-                      onChange={(event) =>
-                        updateForm("avatar", event.target.value)
-                      }
-                      className="h-11"
-                      placeholder="uploads/avatars/customer.jpg"
+                      disabled={saving || loading}
+                      uploading={uploadingAvatar}
+                      onChange={(value) => updateForm("avatar", value)}
+                      onUpload={(file) => profileService.uploadAvatar(file)}
+                      onUploadStart={() => {
+                        setUploadingAvatar(true);
+                        setError("");
+                        setNotice("");
+                      }}
+                      onUploadEnd={() => setUploadingAvatar(false)}
+                      onUploadSuccess={(message) => {
+                        setNotice(message);
+                        toast.success(message);
+                      }}
+                      onUploadError={(message) => {
+                        setError(message);
+                        toast.error(message);
+                      }}
                     />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
@@ -1436,7 +1511,7 @@ export default function CustomerProfilePage() {
                   <Button
                     type="submit"
                     className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
-                    disabled={saving || loading}
+                    disabled={saving || loading || uploadingAvatar}
                   >
                     <Save className="size-4" />
                     {saving ? "Đang lưu..." : "Lưu hồ sơ"}

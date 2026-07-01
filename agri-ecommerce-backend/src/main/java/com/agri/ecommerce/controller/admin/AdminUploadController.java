@@ -103,6 +103,7 @@ public class AdminUploadController {
         return switch (cleanType) {
             case "category", "categories" -> "categories";
             case "product", "products" -> "products";
+            case "avatar", "avatars" -> "avatars";
             default -> throw new BadRequestException("Loai upload khong hop le");
         };
     }
