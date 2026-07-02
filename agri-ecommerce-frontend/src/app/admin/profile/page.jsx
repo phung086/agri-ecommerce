@@ -159,25 +159,16 @@ export default function AdminProfilePage() {
 
   async function handleAvatarFile(file) {
     if (!file) {
-      return;
+      return null;
     }
 
-    setUploadingAvatar(true);
-    setNotice("");
-    setError("");
+    const response = await profileService.uploadAvatar(file);
+    const nextProfile = unwrapApiData(response);
 
-    try {
-      const response = await profileService.uploadAvatar(file);
-      const nextProfile = unwrapApiData(response);
+    applyProfile(nextProfile);
+    syncStoredAdminProfile(nextProfile);
 
-      applyProfile(nextProfile);
-      syncStoredAdminProfile(nextProfile);
-      setNotice("Đã cập nhật ảnh admin.");
-    } catch (err) {
-      setError(getApiErrorMessage(err));
-    } finally {
-      setUploadingAvatar(false);
-    }
+    return nextProfile;
   }
 
   async function handleSaveProfile(event) {
@@ -478,7 +469,7 @@ export default function AdminProfilePage() {
                 disabled={loading || savingProfile}
                 uploading={uploadingAvatar}
                 onChange={(value) => updateProfileForm("avatar", value)}
-                onUpload={(file) => profileService.uploadAvatar(file)}
+                onUpload={handleAvatarFile}
                 onUploadStart={() => {
                   setUploadingAvatar(true);
                   setError("");
