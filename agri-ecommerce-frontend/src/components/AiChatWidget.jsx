@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Bot, Leaf, Loader2, MessageCircle, Send, X } from "lucide-react";
 import { getAssetUrl } from "@/lib/admin-utils";
+import { useLanguage } from "@/i18n/language-provider";
 
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api"
@@ -30,17 +31,18 @@ function writeGuestToken(token) {
   localStorage.setItem(GUEST_TOKEN_KEY, token);
 }
 
-function MessageText({ text }) {
+function MessageText({ text, t }) {
   return (
     <div className="whitespace-pre-wrap text-sm leading-relaxed">
-      {String(text || "")}
+      {String(t ? t(text) : (text || ""))}
     </div>
   );
 }
 
-function SuggestedProduct({ product }) {
+function SuggestedProduct({ product, locale }) {
   const imageUrl = product.imageUrl ? getAssetUrl(product.imageUrl) : "";
   const productUrl = product.productUrl || `/products/${product.slug}`;
+  const isEn = locale === "en";
 
   return (
     <a
@@ -68,11 +70,11 @@ function SuggestedProduct({ product }) {
           {product.name}
         </p>
         <p className="text-xs font-semibold text-emerald-700">
-          {Number(product.price || 0).toLocaleString("vi-VN")} đ
+          {Number(product.price || 0).toLocaleString(isEn ? "en-US" : "vi-VN")} đ
           {product.unit ? `/${product.unit}` : ""}
         </p>
         <p className="text-xs text-slate-500">
-          Tồn kho: {product.stock ?? "N/A"}
+          {isEn ? "Stock" : "Tồn kho"}: {product.stock ?? "N/A"}
         </p>
       </div>
     </a>
@@ -80,6 +82,7 @@ function SuggestedProduct({ product }) {
 }
 
 export default function AiChatWidget() {
+  const { locale, t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -134,6 +137,7 @@ export default function AiChatWidget() {
         body: JSON.stringify({
           message,
           guestToken: guestTokenRef.current || undefined,
+          locale, // MỚI
         }),
       });
 
@@ -155,7 +159,9 @@ export default function AiChatWidget() {
           role: "assistant",
           text:
             data.reply ||
-            "Tôi chưa có câu trả lời phù hợp. Bạn thử hỏi cụ thể hơn nhé.",
+            (locale === "en"
+              ? "I don't have a suitable response. Please ask more specifically."
+              : "Tôi chưa có câu trả lời phù hợp. Bạn thử hỏi cụ thể hơn nhé."),
           products: data.suggestedProducts || [],
         },
       ]);
@@ -165,7 +171,10 @@ export default function AiChatWidget() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: "Kết nối tư vấn đang gián đoạn. Bạn thử lại sau một chút nhé.",
+          text:
+            locale === "en"
+              ? "Connection is temporarily lost. Please try again in a moment."
+              : "Kết nối tư vấn đang gián đoạn. Bạn thử lại sau một chút nhé.",
           products: [],
         },
       ]);
@@ -185,7 +194,7 @@ export default function AiChatWidget() {
         type="button"
         onClick={() => setOpen((value) => !value)}
         className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-700 text-white shadow-lg shadow-emerald-950/20 transition hover:bg-emerald-800 focus:outline-none focus:ring-4 focus:ring-emerald-200"
-        aria-label={open ? "Đóng tư vấn AI" : "Mở tư vấn AI"}
+        aria-label={open ? t("Đóng tư vấn AI") : t("Mở tư vấn AI")}
       >
         {open ? <X size={22} /> : <MessageCircle size={22} />}
       </button>
@@ -193,15 +202,15 @@ export default function AiChatWidget() {
       {open && (
         <section
           className="fixed bottom-24 right-5 z-50 flex h-[560px] w-[380px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-2xl shadow-slate-950/20"
-          aria-label="Tư vấn nông sản AI"
+          aria-label={t("Tư vấn nông sản AI")}
         >
           <header className="flex items-center gap-3 border-b border-emerald-100 bg-emerald-700 px-4 py-3 text-white">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
               <Bot size={19} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-sm font-black">Tư vấn AgriMarket</h2>
-              <p className="text-xs text-emerald-50">Gợi ý theo dữ liệu sản phẩm</p>
+              <h2 className="text-sm font-black">{t("Tư vấn AgriMarket")}</h2>
+              <p className="text-xs text-emerald-50">{t("Gợi ý theo dữ liệu sản phẩm")}</p>
             </div>
           </header>
 
@@ -220,13 +229,14 @@ export default function AiChatWidget() {
                         : "border border-slate-200 bg-white text-slate-800"
                     }`}
                   >
-                    <MessageText text={message.text} />
+                    <MessageText text={message.text} t={message.id === "welcome" ? t : null} />
                     {message.products?.length > 0 && (
                       <div className="mt-2 space-y-2">
                         {message.products.slice(0, 3).map((product) => (
                           <SuggestedProduct
                             key={product.id}
                             product={product}
+                            locale={locale}
                           />
                         ))}
                       </div>
@@ -240,7 +250,7 @@ export default function AiChatWidget() {
               <div className="flex justify-start">
                 <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">
                   <Loader2 size={15} className="animate-spin" />
-                  Đang trả lời
+                  {t("Đang trả lời")}
                 </div>
               </div>
             )}
@@ -256,7 +266,7 @@ export default function AiChatWidget() {
                   onClick={() => sendMessage(prompt)}
                   className="rounded-full border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50"
                 >
-                  {prompt}
+                  {t(prompt)}
                 </button>
               ))}
             </div>
@@ -278,14 +288,14 @@ export default function AiChatWidget() {
               }}
               maxLength={1000}
               rows={1}
-              placeholder="Nhập nhu cầu của bạn"
+              placeholder={t("Nhập nhu cầu của bạn")}
               className="max-h-24 min-h-10 flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             />
             <button
               type="submit"
               disabled={!input.trim() || loading}
               className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-700 text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Gửi tin nhắn"
+              aria-label={t("Gửi tin nhắn")}
             >
               <Send size={17} />
             </button>

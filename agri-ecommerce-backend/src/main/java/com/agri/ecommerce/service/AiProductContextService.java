@@ -120,10 +120,11 @@ public class AiProductContextService {
      * Tìm sản phẩm liên quan đến message và build danh sách SuggestedProductResponse.
      *
      * @param message   tin nhắn người dùng (raw)
+     * @param locale    ngôn ngữ (vi hoặc en)
      * @return danh sách sản phẩm gợi ý (max = AI_MAX_PRODUCTS_CONTEXT)
      */
     @Transactional(readOnly = true)
-    public List<SuggestedProductResponse> findSuggestedProducts(String message) {
+    public List<SuggestedProductResponse> findSuggestedProducts(String message, String locale) {
         String keyword = null;
         BigDecimal budget = null;
         String categorySlug = null;
@@ -160,7 +161,7 @@ public class AiProductContextService {
         Map<Long, List<ProductImageEntity>> imageMap = loadImageMap(products);
 
         return products.stream()
-                .map(p -> toSuggestedProduct(p, imageMap))
+                .map(p -> toSuggestedProduct(p, imageMap, locale))
                 .toList();
     }
 
@@ -169,15 +170,17 @@ public class AiProductContextService {
      * Format: tên | danh mục | giá | đơn vị | tồn kho | trạng thái | mô tả ngắn
      *
      * @param products danh sách sản phẩm cần build context
+     * @param locale    ngôn ngữ (vi hoặc en)
      * @return chuỗi context hoặc "(không có sản phẩm phù hợp)" nếu rỗng
      */
-    public String buildProductContext(List<SuggestedProductResponse> products) {
+    public String buildProductContext(List<SuggestedProductResponse> products, String locale) {
+        boolean isEn = "en".equalsIgnoreCase(locale);
         if (products.isEmpty()) {
-            return "(Không tìm thấy sản phẩm phù hợp trong hệ thống)";
+            return isEn ? "(No matching products found in the system)" : "(Không tìm thấy sản phẩm phù hợp trong hệ thống)";
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Danh sách sản phẩm hiện có liên quan:\n");
+        sb.append(isEn ? "List of related available products:\n" : "Danh sách sản phẩm hiện có liên quan:\n");
 
         for (int i = 0; i < products.size(); i++) {
             SuggestedProductResponse p = products.get(i);
@@ -188,17 +191,17 @@ public class AiProductContextService {
                 sb.append(" (").append(p.getCategoryName()).append(")");
             }
 
-            sb.append(" — Giá: ").append(formatPrice(p.getPrice()));
+            sb.append(isEn ? " — Price: " : " — Giá: ").append(formatPrice(p.getPrice(), locale));
 
             if (p.getUnit() != null) {
                 sb.append("/").append(p.getUnit());
             }
 
-            sb.append(" — Tồn kho: ").append(p.getStock() != null ? p.getStock() : "N/A");
-            sb.append(" — Trạng thái: ").append(translateStatus(p.getStatus()));
+            sb.append(isEn ? " — Stock: " : " — Tồn kho: ").append(p.getStock() != null ? p.getStock() : "N/A");
+            sb.append(isEn ? " — Status: " : " — Trạng thái: ").append(translateStatus(p.getStatus(), locale));
 
             if (p.getProductUrl() != null) {
-                sb.append(" — [Xem sản phẩm](").append(p.getProductUrl()).append(")");
+                sb.append(isEn ? " — [View product](" : " — [Xem sản phẩm](").append(p.getProductUrl()).append(")");
             }
 
             sb.append("\n");
@@ -211,20 +214,29 @@ public class AiProductContextService {
 
     private SuggestedProductResponse toSuggestedProduct(
             ProductEntity product,
-            Map<Long, List<ProductImageEntity>> imageMap
+            Map<Long, List<ProductImageEntity>> imageMap,
+            String locale
     ) {
         String imageUrl = resolveImageUrl(product, imageMap);
         String productUrl = buildProductUrl(product.getSlug());
-        String categoryName = product.getCategory() != null
-                ? product.getCategory().getName()
-                : null;
+
+        boolean isEn = "en".equalsIgnoreCase(locale);
+        String name = isEn && product.getNameEn() != null ? product.getNameEn() : product.getName();
+        String unit = isEn && product.getUnitEn() != null ? product.getUnitEn() : product.getUnit();
+
+        String categoryName = null;
+        if (product.getCategory() != null) {
+            categoryName = isEn && product.getCategory().getNameEn() != null
+                    ? product.getCategory().getNameEn()
+                    : product.getCategory().getName();
+        }
 
         return SuggestedProductResponse.builder()
                 .id(product.getId())
-                .name(product.getName())
+                .name(name)
                 .slug(product.getSlug())
                 .price(product.getPrice())
-                .unit(product.getUnit())
+                .unit(unit)
                 .stock(product.getStock())
                 .status(product.getStatus())
                 .categoryName(categoryName)
@@ -317,8 +329,10 @@ public class AiProductContextService {
         return normalized.replaceAll("[^a-z0-9\\s]", " ").replaceAll("\\s+", " ").trim();
     }
 
-    private String formatPrice(BigDecimal price) {
-        if (price == null) return "Liên hệ";
+    private String formatPrice(BigDecimal price, String locale) {
+        if (price == null) {
+            return "en".equalsIgnoreCase(locale) ? "Contact" : "Liên hệ";
+        }
         long val = price.longValue();
         if (val >= 1000) {
             return String.format("%,.0f đ", price.doubleValue());
@@ -326,12 +340,13 @@ public class AiProductContextService {
         return price.toPlainString() + " đ";
     }
 
-    private String translateStatus(String status) {
-        if (status == null) return "Không rõ";
+    private String translateStatus(String status, String locale) {
+        if (status == null) return "en".equalsIgnoreCase(locale) ? "Unknown" : "Không rõ";
+        boolean isEn = "en".equalsIgnoreCase(locale);
         return switch (status) {
-            case "in_stock" -> "Còn hàng";
-            case "out_of_stock" -> "Hết hàng";
-            case "discontinued" -> "Ngừng kinh doanh";
+            case "in_stock" -> isEn ? "In stock" : "Còn hàng";
+            case "out_of_stock" -> isEn ? "Out of stock" : "Hết hàng";
+            case "discontinued" -> isEn ? "Discontinued" : "Ngừng kinh doanh";
             default -> status;
         };
     }

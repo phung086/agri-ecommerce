@@ -23,6 +23,14 @@ public class AiChatRequest {
     )
     private String message;
 
+    @Size(max = 10, message = "Locale không được vượt quá 10 ký tự")
+    @Schema(
+            description = "Ngôn ngữ của phiên chat (vi hoặc en). Mặc định là vi.",
+            example = "vi",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED
+    )
+    private String locale;
+
     @Size(max = 100, message = "Guest token không được vượt quá 100 ký tự")
     @Schema(
             description = "Token định danh khách vãng lai. Nếu không gửi, backend tự tạo.",

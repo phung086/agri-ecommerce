@@ -128,6 +128,12 @@ public class AiChatServiceImpl implements AiChatService {
     public AiChatResponse chat(AiChatRequest request, Long userId) {
         String message = cleanMessage(request.getMessage());
         String guestToken = resolveGuestToken(request.getGuestToken(), userId);
+        String locale = request.getLocale();
+        if (locale == null || locale.trim().isEmpty()) {
+            locale = "vi";
+        } else {
+            locale = locale.trim().toLowerCase();
+        }
 
         // Lưu tin nhắn user vào DB (luôn lưu dù AI có bật hay không)
         saveChatMessage(userId, guestToken, SENDER_USER, message);
@@ -135,23 +141,24 @@ public class AiChatServiceImpl implements AiChatService {
         // Kiểm tra điều kiện AI
         if (!aiChatProperties.isEnabled() || chatLanguageModel == null) {
             log.info("[AI Chat] Chatbot disabled hoặc chưa cấu hình — trả fallback response");
-            saveChatMessage(userId, guestToken, SENDER_BOT, FALLBACK_DISABLED);
-            return buildFallbackResponse(guestToken, FALLBACK_DISABLED);
+            String fallback = "en".equalsIgnoreCase(locale) ? FALLBACK_DISABLED_EN : FALLBACK_DISABLED;
+            saveChatMessage(userId, guestToken, SENDER_BOT, fallback);
+            return buildFallbackResponse(guestToken, fallback);
         }
 
         // Tìm sản phẩm liên quan
         List<SuggestedProductResponse> suggestedProducts = List.of();
         try {
-            suggestedProducts = productContextService.findSuggestedProducts(message);
+            suggestedProducts = productContextService.findSuggestedProducts(message, locale);
         } catch (Exception ex) {
             log.warn("[AI Chat] Lỗi khi tìm sản phẩm context: {}", ex.getMessage());
         }
 
         // Build context string
-        String productContext = productContextService.buildProductContext(suggestedProducts);
+        String productContext = productContextService.buildProductContext(suggestedProducts, locale);
 
         // Gọi LLM
-        String aiReply = callLlm(message, productContext);
+        String aiReply = callLlm(message, productContext, locale);
 
         // Lưu câu trả lời bot
         saveChatMessage(userId, guestToken, SENDER_BOT, aiReply);
@@ -166,12 +173,19 @@ public class AiChatServiceImpl implements AiChatService {
 
     // === LLM Call ===
 
-    private String callLlm(String userMessage, String productContext) {
+    private String callLlm(String userMessage, String productContext, String locale) {
         try {
-            String userPrompt = buildUserPrompt(userMessage, productContext);
+            String userPrompt = buildUserPrompt(userMessage, productContext, locale);
+
+            String responseLanguage = "Vietnamese (tiếng Việt)";
+            if ("en".equalsIgnoreCase(locale)) {
+                responseLanguage = "English";
+            }
+
+            String customSystemPrompt = SYSTEM_PROMPT.replace("RESPONSE_LANGUAGE", responseLanguage);
 
             List<ChatMessage> messages = List.of(
-                    SystemMessage.from(SYSTEM_PROMPT),
+                    SystemMessage.from(customSystemPrompt),
                     UserMessage.from(userPrompt)
             );
 
@@ -179,13 +193,13 @@ public class AiChatServiceImpl implements AiChatService {
 
             if (response == null || response.aiMessage() == null) {
                 log.warn("[AI Chat] LLM trả về response null");
-                return FALLBACK_ERROR;
+                return "en".equalsIgnoreCase(locale) ? FALLBACK_ERROR_EN : FALLBACK_ERROR;
             }
 
             String reply = response.aiMessage().text();
             if (reply == null || reply.isBlank()) {
                 log.warn("[AI Chat] LLM trả về text rỗng");
-                return FALLBACK_ERROR;
+                return "en".equalsIgnoreCase(locale) ? FALLBACK_ERROR_EN : FALLBACK_ERROR;
             }
 
             return reply.trim();
@@ -193,11 +207,24 @@ public class AiChatServiceImpl implements AiChatService {
         } catch (Exception ex) {
             // Log lỗi kỹ thuật nhưng KHÔNG log API key hay stacktrace thô
             log.error("[AI Chat] Lỗi khi gọi LLM: {}", ex.getClass().getSimpleName() + " — " + ex.getMessage());
-            return FALLBACK_ERROR;
+            return "en".equalsIgnoreCase(locale) ? FALLBACK_ERROR_EN : FALLBACK_ERROR;
         }
     }
 
-    private String buildUserPrompt(String userMessage, String productContext) {
+    private String buildUserPrompt(String userMessage, String productContext, String locale) {
+        if ("en".equalsIgnoreCase(locale)) {
+            return """
+                    CURRENT PRODUCT CONTEXT:
+                    %s
+                    
+                    ---
+                    
+                    CUSTOMER QUESTION:
+                    %s
+                    
+                    Please reply based on the product context above. Only suggest products present in the list.
+                    """.formatted(productContext, userMessage);
+        }
         return """
                 CONTEXT SẢN PHẨM HIỆN TẠI:
                 %s
