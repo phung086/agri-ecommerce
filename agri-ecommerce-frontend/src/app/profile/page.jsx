@@ -1188,24 +1188,16 @@ export default function CustomerProfilePage() {
 
   async function handleAvatarFile(file) {
     if (!file) {
-      return;
+      return null;
     }
 
-    setUploadingAvatar(true);
-    setError("");
-    setNotice("");
+    const response = await profileService.uploadAvatar(file);
+    const nextProfile = unwrapApiData(response);
 
-    try {
-      const response = await profileService.uploadAvatar(file);
-      const nextProfile = unwrapApiData(response);
-      applyProfile(nextProfile);
-      updateStoredProfile(nextProfile);
-      setNotice("Da cap nhat anh profile.");
-    } catch (err) {
-      setError(err?.message || "Khong the tai anh profile.");
-    } finally {
-      setUploadingAvatar(false);
-    }
+    applyProfile(nextProfile);
+    updateStoredProfile(nextProfile);
+
+    return nextProfile;
   }
 
   async function handleSave(event) {
@@ -1901,7 +1893,7 @@ export default function CustomerProfilePage() {
                         disabled={saving || loading}
                         uploading={uploadingAvatar}
                         onChange={(value) => updateForm("avatar", value)}
-                        onUpload={(file) => profileService.uploadAvatar(file)}
+                        onUpload={handleAvatarFile}
                         onUploadStart={() => {
                           setUploadingAvatar(true);
                           setError("");

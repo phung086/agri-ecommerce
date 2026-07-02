@@ -9,6 +9,15 @@ const axiosClient = axios.create({
 });
 
 axiosClient.interceptors.request.use((config) => {
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    if (typeof config.headers?.delete === "function") {
+      config.headers.delete("Content-Type");
+    } else if (config.headers) {
+      delete config.headers["Content-Type"];
+      delete config.headers["content-type"];
+    }
+  }
+
   if (typeof window !== "undefined") {
     const token = getAuthToken();
 
@@ -54,15 +63,19 @@ axiosClient.interceptors.response.use(
       }
     }
 
+    const apiError = error?.response?.data;
+    const errorDetail =
+      typeof apiError?.errors === "string" ? apiError.errors : null;
     const message =
-      error?.response?.data?.message ||
+      errorDetail ||
+      apiError?.message ||
       error?.message ||
       "Có lỗi xảy ra, vui lòng thử lại.";
 
     return Promise.reject({
       status: error?.response?.status,
       message,
-      errors: error?.response?.data?.errors || null,
+      errors: apiError?.errors || null,
     });
   }
 );

@@ -1,41 +1,33 @@
 import axiosClient from "@/lib/axios-client";
 
+const unwrapApiData = (response) => response?.data ?? response;
+
 export const profileService = {
   getProfile: async () => {
-    return axiosClient.get("/customer/profile");
+    const response = await axiosClient.get("/customer/profile");
+    return unwrapApiData(response);
   },
 
   updateProfile: async (payload) => {
-    return axiosClient.put("/customer/profile", payload);
-  },
-
-  uploadAvatar: async (file) => {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    return axiosClient.post("/customer/profile/avatar", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
+    const response = await axiosClient.put("/customer/profile", payload);
+    return unwrapApiData(response);
   },
 
   changePassword: async (payload) => {
-    return axiosClient.patch("/customer/profile/change-password", payload);
+    const response = await axiosClient.patch(
+      "/customer/profile/change-password",
+      payload
+    );
+    return unwrapApiData(response);
   },
 
   uploadAvatar: async (file) => {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("type", "avatar");
-    
-    const response = await axiosClient.post("/customer/profile/avatar", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
 
-    return response?.data ?? response;
+    const response = await axiosClient.post("/customer/profile/avatar", formData);
+
+    return unwrapApiData(response);
   },
 };
 

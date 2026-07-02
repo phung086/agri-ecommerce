@@ -93,8 +93,12 @@ export function AvatarUploadField({
     onUploadStart?.();
     try {
       const uploaded = await onUpload(file);
-      const nextAvatar = uploaded?.path || uploaded?.url || "";
-      onChange(nextAvatar);
+      const nextAvatar =
+        uploaded?.avatar || uploaded?.path || uploaded?.url || value || "";
+
+      if (nextAvatar) {
+        onChange(nextAvatar);
+      }
       onUploadSuccess?.("Đã upload ảnh đại diện.");
     } catch (error) {
       const errorMessage =
