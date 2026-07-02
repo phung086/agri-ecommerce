@@ -34,6 +34,7 @@ import {
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AvatarUploadField } from "@/components/profile/avatar-upload-field";
+import { VietnamAddressFields } from "@/components/profile/vietnam-address-fields";
 import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,10 @@ import {
   getVietnamPhoneError,
   normalizeVietnamPhone,
 } from "@/lib/profile-validation";
+import {
+  PHONE_ERROR_MESSAGE,
+  isValidPhoneNumber,
+} from "@/lib/phone-utils";
 import {
   buildProfileAddress,
   createVietnamAddressForm,
@@ -2045,7 +2050,7 @@ export default function CustomerProfilePage() {
                         <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground border border-dashed border-emerald-100 rounded-xl bg-emerald-50/5">
                           <MapPin className="size-8 text-emerald-600 mb-2 animate-bounce" />
                           <p className="font-semibold text-sm">Bạn chưa thêm địa chỉ nhận hàng nào.</p>
-                          <p className="text-xs mt-1">Vui lòng bấm "+ Thêm địa chỉ mới" để cập nhật thông tin.</p>
+                          <p className="text-xs mt-1">Vui lòng bấm &quot;+ Thêm địa chỉ mới&quot; để cập nhật thông tin.</p>
                         </div>
                       ) : (
                         <div className="grid gap-3">
