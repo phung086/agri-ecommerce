@@ -55,6 +55,12 @@ public class OrderResponse {
 
     private LocalDateTime deliveredAt;
 
+    private String deliveryProofImage;
+
+    private String deliverySignature;
+
+    private String deliveryFailureReason;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

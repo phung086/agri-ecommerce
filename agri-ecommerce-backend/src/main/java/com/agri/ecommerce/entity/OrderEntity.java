@@ -55,6 +55,15 @@ public class OrderEntity {
     @Column(name = "delivered_at")
     private LocalDateTime deliveredAt;
 
+    @Column(name = "delivery_proof_image")
+    private String deliveryProofImage;
+
+    @Column(name = "delivery_signature", columnDefinition = "TEXT")
+    private String deliverySignature;
+
+    @Column(name = "delivery_failure_reason")
+    private String deliveryFailureReason;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shipping_address_id", nullable = false)
     private ShippingAddressEntity shippingAddress;

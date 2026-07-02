@@ -35,4 +35,23 @@ export const deliveryService = {
     );
     return unwrapApiData(response);
   },
+
+  markFailedAttempt: async (orderId, payload = {}) => {
+    const response = await axiosClient.patch(
+      `/delivery/orders/${orderId}/failed-attempt`,
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  uploadProofImage: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await axiosClient.post("/delivery/uploads/images", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return unwrapApiData(response);
+  },
 };

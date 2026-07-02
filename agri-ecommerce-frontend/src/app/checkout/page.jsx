@@ -1378,8 +1378,6 @@ export default function CheckoutPage() {
                             ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                             : undefined
                         }
-                        inputMode="tel"
-                        maxLength={12}
                         pattern={PHONE_PATTERN_SOURCE}
                         title={PHONE_ERROR_MESSAGE}
                         placeholder="0987654321"

@@ -1,5 +1,7 @@
 package com.agri.ecommerce.controller.delivery;
 
+import com.agri.ecommerce.dto.request.order.DeliveryConfirmRequest;
+import com.agri.ecommerce.dto.request.order.DeliveryFailureRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
@@ -117,12 +119,27 @@ public class DeliveryOrderController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Parameter(description = "ID đơn hàng", example = "1")
             @PathVariable Long orderId,
-            @Valid @RequestBody(required = false) OrderStatusNoteRequest request
+            @Valid @RequestBody(required = false) DeliveryConfirmRequest request
     ) {
         OrderResponse response = deliveryOrderService.markDelivered(principal.getId(), orderId, request);
 
         return ResponseEntity.ok(
                 ApiResponse.success("Xác nhận đã giao đơn hàng thành công", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Báo cáo đơn giao hàng thất bại (khách hẹn lại, không liên lạc được, hủy đơn)")
+    @PatchMapping("/{orderId}/failed-attempt")
+    public ResponseEntity<ApiResponse<OrderResponse>> markFailedAttempt(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID đơn hàng", example = "1")
+            @PathVariable Long orderId,
+            @Valid @RequestBody DeliveryFailureRequest request
+    ) {
+        OrderResponse response = deliveryOrderService.markFailedAttempt(principal.getId(), orderId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Cập nhật kết quả giao hàng thất bại thành công", response, HttpStatus.OK.value())
         );
     }
 }

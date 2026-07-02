@@ -45,6 +45,9 @@ public class OrderMapper {
                 .statusHistory(toStatusHistoryResponses(statusHistory))
                 .dispatchedAt(order.getDispatchedAt())
                 .deliveredAt(order.getDeliveredAt())
+                .deliveryProofImage(order.getDeliveryProofImage())
+                .deliverySignature(order.getDeliverySignature())
+                .deliveryFailureReason(order.getDeliveryFailureReason())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();

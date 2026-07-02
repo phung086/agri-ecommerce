@@ -1,5 +1,7 @@
 package com.agri.ecommerce.service.impl;
 
+import com.agri.ecommerce.dto.request.order.DeliveryConfirmRequest;
+import com.agri.ecommerce.dto.request.order.DeliveryFailureRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
@@ -142,7 +144,7 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
 
     @Override
     @Transactional
-    public OrderResponse markDelivered(Long deliveryStaffId, Long orderId, OrderStatusNoteRequest request) {
+    public OrderResponse markDelivered(Long deliveryStaffId, Long orderId, DeliveryConfirmRequest request) {
         OrderEntity order = findAssignedOrderByIdForUpdate(orderId, deliveryStaffId);
 
         if (!STATUS_OUT_FOR_DELIVERY.equals(order.getStatus())) {
@@ -151,6 +153,10 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
 
         order.setStatus(STATUS_DELIVERED);
         order.setDeliveredAt(LocalDateTime.now());
+        if (request != null) {
+            order.setDeliveryProofImage(cleanBlank(request.getProofImage()));
+            order.setDeliverySignature(cleanBlank(request.getSignature()));
+        }
         OrderEntity savedOrder = orderRepository.save(order);
         paymentService.completeCashPaymentIfPending(savedOrder.getId());
 
@@ -162,6 +168,64 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
         notifyCustomer(
                 savedOrder,
                 "Đơn hàng #" + savedOrder.getId() + " đã được giao thành công",
+                buildOrderLink(savedOrder.getId())
+        );
+
+        return toOrderResponse(savedOrder, true);
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse markFailedAttempt(Long deliveryStaffId, Long orderId, DeliveryFailureRequest request) {
+        OrderEntity order = findAssignedOrderByIdForUpdate(orderId, deliveryStaffId);
+
+        if (!STATUS_OUT_FOR_DELIVERY.equals(order.getStatus())) {
+            throw new BadRequestException("Chỉ có thể cập nhật kết quả giao hàng cho đơn hàng đang trong quá trình giao");
+        }
+
+        String reason = request.getReason();
+        String note = request.getNote();
+
+        String nextStatus;
+        String historyStatus;
+        String notifyMessage;
+
+        if ("canceled".equalsIgnoreCase(reason)) {
+            nextStatus = "canceled";
+            historyStatus = "canceled";
+            order.setDeliveryFailureReason("Khách từ chối nhận/Hủy đơn");
+            notifyMessage = "Đơn hàng #" + order.getId() + " đã bị hủy do khách từ chối nhận";
+        } else if ("rescheduled".equalsIgnoreCase(reason)) {
+            nextStatus = STATUS_READY_FOR_DELIVERY; // Reset về sẵn sàng giao để shipper giao lại
+            historyStatus = "failed_delivery_attempt";
+            order.setDeliveryFailureReason("Khách hẹn giao lại");
+            notifyMessage = "Đơn hàng #" + order.getId() + " giao thất bại: Khách hẹn giao lại";
+        } else if ("cannot_contact".equalsIgnoreCase(reason)) {
+            nextStatus = STATUS_READY_FOR_DELIVERY;
+            historyStatus = "failed_delivery_attempt";
+            order.setDeliveryFailureReason("Không liên lạc được");
+            notifyMessage = "Đơn hàng #" + order.getId() + " giao thất bại: Không liên lạc được với khách";
+        } else {
+            throw new BadRequestException("Lý do giao hàng thất bại không hợp lệ");
+        }
+
+        order.setStatus(nextStatus);
+        OrderEntity savedOrder = orderRepository.save(order);
+
+        String historyNote = "Lý do: " + order.getDeliveryFailureReason();
+        if (cleanBlank(note) != null) {
+            historyNote += " | Ghi chú: " + note.trim();
+        }
+
+        orderStatusHistoryRepository.save(createStatusHistory(
+                savedOrder,
+                historyStatus,
+                historyNote
+        ));
+
+        notifyCustomer(
+                savedOrder,
+                notifyMessage,
                 buildOrderLink(savedOrder.getId())
         );
 

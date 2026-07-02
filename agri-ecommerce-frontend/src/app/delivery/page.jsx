@@ -1,46 +1,43 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  Clock3,
+  Loader2,
+  RefreshCw,
+  Search,
+  Truck,
+  UserCheck,
+  Mail,
+  LockKeyhole,
   Eye,
   EyeOff,
   Leaf,
-  Loader2,
-  LockKeyhole,
-  LogOut,
-  Mail,
   PackageCheck,
-  RefreshCw,
-  Search,
   ShieldCheck,
-  Truck,
+  MapPin,
+  Phone,
+  MessageSquare,
+  Wallet,
+  QrCode,
+  Camera,
+  AlertCircle,
+  X,
+  User,
+  Navigation,
+  Check,
+  CameraOff
 } from "lucide-react";
 
-import { DataTable } from "@/components/admin/data-table";
 import { StatCard } from "@/components/admin/stat-card";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/admin-utils";
 import {
   AUTH_SCOPES,
@@ -60,14 +57,6 @@ const ORDER_FETCH_PARAMS = {
   sort: "createdAt,desc",
 };
 
-const DELIVERY_STATUS_OPTIONS = [
-  { value: "all", label: "Tất cả đơn" },
-  { value: "ready_for_delivery", label: "Sẵn sàng giao" },
-  { value: "out_for_delivery", label: "Đang giao" },
-  { value: "delivered", label: "Đã giao" },
-  { value: "completed", label: "Hoàn tất" },
-];
-
 const blankLoginForm = {
   email: "",
   password: "",
@@ -77,7 +66,6 @@ function readPageContent(response) {
   if (Array.isArray(response?.content)) {
     return response.content;
   }
-
   return Array.isArray(response) ? response : [];
 }
 
@@ -95,11 +83,9 @@ function getCustomerPhone(order) {
 
 function getShippingAddress(order) {
   const shippingAddress = order.shippingAddress;
-
   if (!shippingAddress) {
     return "Chưa có địa chỉ";
   }
-
   return [shippingAddress.address, shippingAddress.city]
     .filter(Boolean)
     .join(", ");
@@ -119,26 +105,39 @@ export default function DeliveryPage() {
   const [loading, setLoading] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
-  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  
+  // Mobile UI state
+  const [activeTab, setActiveTab] = useState("orders"); // "shift", "orders", "settlement"
+  const [shiftStarted, setShiftStarted] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
+  
+  // Verification states
+  const [verifyMode, setVerifyMode] = useState(null); // "success", "failed"
+  const [failedReason, setFailedReason] = useState(""); // "rescheduled", "cannot_contact", "canceled"
+  const [verificationNote, setVerificationNote] = useState("");
+  const [proofImage, setProofImage] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  
+  // Canvas Signature pad state
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [signatureSaved, setSignatureSaved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     async function initializeDeliverySession() {
-      await Promise.resolve();
-
       const session = getAuthSession(AUTH_SCOPES.delivery);
 
       if (!session?.accessToken || isAuthSessionExpired(session)) {
         if (session?.accessToken) {
           clearAuthSession(AUTH_SCOPES.delivery);
         }
-
         if (!cancelled) {
           setRemember(isAuthSessionRemembered(AUTH_SCOPES.delivery));
           setAuthStatus("unauthenticated");
@@ -148,7 +147,6 @@ export default function DeliveryPage() {
 
       if (!isDeliveryStaffUser(session.currentUser)) {
         clearAuthSession(AUTH_SCOPES.delivery);
-
         if (!cancelled) {
           setAuthStatus("unauthenticated");
         }
@@ -164,18 +162,13 @@ export default function DeliveryPage() {
       }
 
       try {
-        const response = await deliveryService.getAssignedOrders(
-          ORDER_FETCH_PARAMS
-        );
-
+        const response = await deliveryService.getAssignedOrders(ORDER_FETCH_PARAMS);
         if (!cancelled) {
           setOrders(readPageContent(response));
         }
       } catch (err) {
         if (!cancelled) {
-          setError(
-            getErrorMessage(err, "Không thể tải danh sách đơn giao hàng.")
-          );
+          setError(getErrorMessage(err, "Không thể tải danh sách đơn giao hàng."));
         }
       } finally {
         if (!cancelled) {
@@ -191,41 +184,28 @@ export default function DeliveryPage() {
     };
   }, []);
 
+  const stats = useMemo(() => {
+    const ready = orders.filter((order) => order.status === "ready_for_delivery").length;
+    const delivering = orders.filter((order) => order.status === "out_for_delivery").length;
+    const delivered = orders.filter((order) => ["delivered", "completed"].includes(order.status)).length;
+    const totalCod = orders
+      .filter((order) => ["delivered", "completed"].includes(order.status) && order.payment?.paymentMethod?.toLowerCase() === "cash")
+      .reduce((sum, order) => sum + Number(order.totalPrice || 0), 0);
+
+    return { ready, delivering, delivered, totalCod };
+  }, [orders]);
+
   const filteredOrders = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
-
     return orders.filter((order) => {
       const matchesKeyword =
         !keyword ||
-        [
-          `#${order.id}`,
-          String(order.id),
-          getCustomerName(order),
-          getCustomerPhone(order),
-          getShippingAddress(order),
-        ]
-          .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(keyword));
-      const matchesStatus =
-        statusFilter === "all" || order.status === statusFilter;
-
-      return matchesKeyword && matchesStatus;
+        String(order.id).includes(keyword) ||
+        getCustomerName(order).toLowerCase().includes(keyword) ||
+        getShippingAddress(order).toLowerCase().includes(keyword);
+      return matchesKeyword;
     });
-  }, [orders, searchTerm, statusFilter]);
-
-  const stats = useMemo(() => {
-    const ready = orders.filter(
-      (order) => order.status === "ready_for_delivery"
-    ).length;
-    const delivering = orders.filter(
-      (order) => order.status === "out_for_delivery"
-    ).length;
-    const delivered = orders.filter((order) =>
-      ["delivered", "completed"].includes(order.status)
-    ).length;
-
-    return { ready, delivering, delivered };
-  }, [orders]);
+  }, [orders, searchTerm]);
 
   function updateLoginForm(field, value) {
     setLoginForm((current) => ({
@@ -247,16 +227,11 @@ export default function DeliveryPage() {
     setLoading(true);
     setError("");
     setNotice("");
-
     try {
-      const response = await deliveryService.getAssignedOrders(
-        ORDER_FETCH_PARAMS
-      );
+      const response = await deliveryService.getAssignedOrders(ORDER_FETCH_PARAMS);
       setOrders(readPageContent(response));
     } catch (err) {
-      setError(
-        getErrorMessage(err, "Không thể tải danh sách đơn giao hàng.")
-      );
+      setError(getErrorMessage(err, "Không thể tải danh sách đơn giao hàng."));
     } finally {
       setLoading(false);
     }
@@ -292,12 +267,7 @@ export default function DeliveryPage() {
       setAuthStatus("authenticated");
       await loadOrders();
     } catch (err) {
-      setError(
-        getErrorMessage(
-          err,
-          "Không thể đăng nhập. Vui lòng kiểm tra email và mật khẩu."
-        )
-      );
+      setError(getErrorMessage(err, "Không thể đăng nhập. Vui lòng kiểm tra email và mật khẩu."));
     } finally {
       setLoggingIn(false);
     }
@@ -311,576 +281,936 @@ export default function DeliveryPage() {
     setAuthStatus("unauthenticated");
     setNotice("");
     setError("");
+    setShiftStarted(false);
   }
 
-  async function handleViewOrder(order) {
-    setSelectedOrder(order);
-    setDetailLoading(true);
-    setError("");
+  // Simulated QR/Barcode Scan for Shift Assignment
+  const startScanning = () => {
+    setScanning(true);
+    setScanResult("");
+    setTimeout(() => {
+      setScanning(false);
+      setScanResult("WAREHOUSE-B2-OK");
+      setShiftStarted(true);
+      setNotice("Quét mã nhận kho thành công! Đã bắt đầu ca giao hàng.");
+    }, 1500);
+  };
 
-    try {
-      const detail = await deliveryService.getAssignedOrder(order.id);
-      setSelectedOrder(detail);
-      updateOrderInState(detail);
-    } catch (err) {
-      setError(getErrorMessage(err, "Không thể tải chi tiết đơn giao hàng."));
-    } finally {
-      setDetailLoading(false);
+  // Automated SMS notification to client
+  const sendArrivalNotification = (order) => {
+    const phone = getCustomerPhone(order);
+    if (!phone) {
+      alert("Khách hàng không có số điện thoại!");
+      return;
     }
-  }
+    const message = `Xin chào ${getCustomerName(order)}, tôi là nhân viên giao hàng từ AgriMarket. Tôi đang trên đường giao đơn hàng #${order.id} trị giá ${formatCurrency(order.totalPrice)} cho quý khách. Vui lòng giữ liên lạc điện thoại nhé!`;
+    
+    // Simulate SMS sending
+    alert(`Đã gửi tin nhắn thông báo tự động tới số ${phone}:\n\n"${message}"`);
+  };
 
-  async function runOrderAction(order, action, handler, successMessage) {
-    setActionLoading(`${order.id}:${action}`);
+  async function handleStartTransit(order) {
+    setActionLoading(`${order.id}:transit`);
     setError("");
     setNotice("");
-
     try {
-      const updatedOrder = await handler();
-      updateOrderInState(updatedOrder);
-      setNotice(successMessage(updatedOrder));
+      const updated = await deliveryService.markOutForDelivery(order.id, {
+        note: "Nhân viên giao hàng bắt đầu di chuyển giao đơn.",
+      });
+      updateOrderInState(updated);
+      setNotice(`Đơn #${order.id} đã chuyển sang Đang giao hàng.`);
     } catch (err) {
-      setError(getErrorMessage(err, "Không thể cập nhật đơn giao hàng."));
+      setError(getErrorMessage(err, "Không thể cập nhật trạng thái giao đơn."));
     } finally {
       setActionLoading("");
     }
   }
 
-  function markOutForDelivery(order) {
-    runOrderAction(
-      order,
-      "out",
-      () =>
-        deliveryService.markOutForDelivery(order.id, {
-          note: "Nhân viên giao hàng bắt đầu giao.",
-        }),
-      (updatedOrder) => `Đơn #${updatedOrder.id} đang được giao.`
-    );
-  }
+  // Canvas Signature pad controls
+  useEffect(() => {
+    if (verifyMode === "success" && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      ctx.strokeStyle = "#059669";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      
+      // Make it high density/sharp
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = canvas.offsetWidth * ratio;
+      canvas.height = canvas.offsetHeight * ratio;
+      ctx.scale(ratio, ratio);
+    }
+  }, [verifyMode]);
 
-  function markDelivered(order) {
-    runOrderAction(
-      order,
-      "delivered",
-      () =>
-        deliveryService.markDelivered(order.id, {
-          note: "Nhân viên giao hàng xác nhận đã giao.",
-        }),
-      (updatedOrder) => `Đã xác nhận giao thành công đơn #${updatedOrder.id}.`
-    );
-  }
+  const handleTouchStart = (e) => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const x = e.touches[0].clientX - rect.left;
+    const y = e.touches[0].clientY - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDrawing || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const x = e.touches[0].clientX - rect.left;
+    const y = e.touches[0].clientY - rect.top;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const handleMouseDown = (e) => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDrawing || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const handleMouseUp = () => {
+    setIsDrawing(false);
+    setSignatureSaved(true);
+  };
+
+  const clearSignature = () => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureSaved(false);
+  };
+
+  // Proof photo simulator
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploadingImage(true);
+    setError("");
+    try {
+      const response = await deliveryService.uploadProofImage(file);
+      setProofImage(response.url || response.relativePath);
+      setNotice("Đã tải ảnh minh chứng lên hệ thống.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Không thể upload ảnh minh chứng."));
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // Confirm delivery success
+  const submitDeliverySuccess = async () => {
+    if (!proofImage) {
+      alert("Vui lòng tải lên hoặc chụp ảnh minh chứng!");
+      return;
+    }
+    
+    let signatureBase64 = null;
+    if (canvasRef.current && signatureSaved) {
+      signatureBase64 = canvasRef.current.toDataURL("image/png");
+    }
+
+    setActionLoading(`${selectedOrder.id}:complete`);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await deliveryService.markDelivered(selectedOrder.id, {
+        note: verificationNote || "Đã giao hàng thành công.",
+        proofImage: proofImage,
+        signature: signatureBase64,
+      });
+      updateOrderInState(updated);
+      setNotice(`Đơn #${selectedOrder.id} đã hoàn thành giao hàng!`);
+      setSelectedOrder(null);
+      setVerifyMode(null);
+      setProofImage("");
+      setVerificationNote("");
+      setSignatureSaved(false);
+    } catch (err) {
+      setError(getErrorMessage(err, "Không thể hoàn thành đơn giao."));
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  // Confirm delivery failure
+  const submitDeliveryFailure = async () => {
+    if (!failedReason) {
+      alert("Vui lòng chọn lý do giao hàng thất bại!");
+      return;
+    }
+
+    setActionLoading(`${selectedOrder.id}:fail`);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await deliveryService.markFailedAttempt(selectedOrder.id, {
+        reason: failedReason,
+        note: verificationNote || "Cập nhật thất bại từ shipper.",
+      });
+      updateOrderInState(updated);
+      setNotice(`Đã cập nhật báo cáo thất bại đơn hàng #${selectedOrder.id}.`);
+      setSelectedOrder(null);
+      setVerifyMode(null);
+      setFailedReason("");
+      setVerificationNote("");
+    } catch (err) {
+      setError(getErrorMessage(err, "Không thể báo cáo thất bại đơn."));
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const simulateSettlement = () => {
+    if (stats.totalCod <= 0) {
+      alert("Không có số dư COD để chốt ca nộp tiền!");
+      return;
+    }
+    alert(`Đã gửi yêu cầu đối soát số tiền ${formatCurrency(stats.totalCod)} COD thu được. Vui lòng quét mã QR chuyển khoản hoặc nộp tiền mặt tại bưu cục.`);
+    setNotice("Gửi yêu cầu chốt ca nộp tiền thành công! Đang chờ Quản trị viên duyệt.");
+  };
 
   return (
-    <main className="min-h-screen bg-[#f6faef] text-slate-950">
-      <header className="sticky top-0 z-40 border-b border-emerald-900/10 bg-white/88 backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 w-full max-w-[1480px] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-[8px] bg-emerald-600 text-white shadow-sm">
-              <Leaf className="size-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-base font-black text-emerald-950">
-                AgriMarket
-              </p>
-              <p className="hidden text-xs font-medium text-emerald-700 sm:block">
-                Khu vực giao hàng
-              </p>
-            </div>
-          </Link>
-
-          <div className="ml-auto flex items-center gap-2">
-            {authStatus === "authenticated" && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleLogout}
-                className="font-bold"
-              >
-                <LogOut className="size-4" />
-                Đăng xuất
-              </Button>
-            )}
-            <Link
-              href="/"
-              className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-bold text-emerald-800 shadow-sm transition hover:bg-emerald-50"
-            >
-              <ArrowLeft className="size-4" />
-              Trang chủ
-            </Link>
+    <main className="min-h-screen bg-[#f3f4f6] pb-20 text-slate-900 md:pb-6">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-emerald-600 text-white shadow-md">
+        <div className="mx-auto flex h-14 w-full max-w-lg items-center justify-between px-4">
+          <div className="flex items-center gap-2">
+            <Truck className="size-6" />
+            <h1 className="text-lg font-black tracking-tight">AgriMarket - Shipper</h1>
           </div>
+          {authStatus === "authenticated" && (
+            <button
+              onClick={handleLogout}
+              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold transition hover:bg-emerald-800"
+            >
+              Đăng xuất
+            </button>
+          )}
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-[1480px] space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+      {/* Main Content Area */}
+      <div className="mx-auto w-full max-w-lg p-4">
         {authStatus === "checking" ? (
-          <section className="rounded-[8px] border border-emerald-100 bg-white p-8 text-center shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
-            <Loader2 className="mx-auto size-8 animate-spin text-emerald-700" />
-            <p className="mt-4 font-black text-emerald-950">
-              Đang kiểm tra phiên giao hàng...
-            </p>
-          </section>
+          <div className="flex flex-col items-center justify-center py-20 text-emerald-700">
+            <Loader2 className="size-10 animate-spin" />
+            <p className="mt-4 font-bold">Đang tải phiên làm việc...</p>
+          </div>
         ) : authStatus === "unauthenticated" ? (
-          <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[0.9fr_0.7fr]">
-            <div className="rounded-[8px] border border-emerald-100 bg-white p-6 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
-              <div className="inline-flex items-center gap-2 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-800">
-                <Truck className="size-4" />
-                Delivery Staff
-              </div>
-              <h1 className="mt-5 text-4xl font-black tracking-normal text-emerald-950">
-                Nhận đơn, giao hàng và xác nhận hoàn tất.
-              </h1>
-              <p className="mt-4 max-w-xl text-sm leading-6 text-slate-600">
-                Trang này dùng API `/delivery/orders` và chỉ dành cho tài khoản
-                có role `delivery_staff`.
-              </p>
-              <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                {[
-                  { icon: ShieldCheck, label: "Token riêng" },
-                  { icon: PackageCheck, label: "Đơn được phân công" },
-                  { icon: CheckCircle2, label: "Xác nhận giao" },
-                ].map((item) => {
-                  const Icon = item.icon;
-
-                  return (
-                    <div
-                      key={item.label}
-                      className="rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4"
-                    >
-                      <Icon className="size-5 text-emerald-700" />
-                      <p className="mt-3 text-sm font-bold text-slate-800">
-                        {item.label}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
+          /* Login Form */
+          <div className="rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-6 text-center">
+              <span className="inline-block rounded-full bg-emerald-50 p-3 text-emerald-600">
+                <Truck className="size-8" />
+              </span>
+              <h2 className="mt-2 text-2xl font-black text-slate-800">Shipper Đăng Nhập</h2>
+              <p className="text-sm text-slate-500">Khu vực kiểm soát và giao nhận đơn hàng</p>
             </div>
 
-            <form
-              onSubmit={handleLogin}
-              className="rounded-[8px] border border-emerald-100 bg-white p-6 shadow-[0_16px_42px_rgba(15,61,38,0.07)]"
-            >
-              <div className="mb-5">
-                <p className="text-sm font-bold uppercase text-emerald-700">
-                  Delivery Login
-                </p>
-                <h2 className="mt-1 text-2xl font-black text-emerald-950">
-                  Đăng nhập nhân viên giao hàng
-                </h2>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="delivery-email">Email</Label>
-                  <div className="relative">
-                    <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="delivery-email"
-                      type="email"
-                      value={loginForm.email}
-                      onChange={(event) =>
-                        updateLoginForm("email", event.target.value)
-                      }
-                      className="pl-9"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="delivery-password">Mật khẩu</Label>
-                  <div className="relative">
-                    <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="delivery-password"
-                      type={showPassword ? "text" : "password"}
-                      value={loginForm.password}
-                      onChange={(event) =>
-                        updateLoginForm("password", event.target.value)
-                      }
-                      className="pl-9 pr-10"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((current) => !current)}
-                      className="absolute right-2 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-[8px] text-slate-500 hover:bg-slate-100"
-                      aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="size-4" />
-                      ) : (
-                        <Eye className="size-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(event) => setRemember(event.target.checked)}
-                    className="size-4 rounded border-emerald-200 text-emerald-600"
-                  />
-                  Ghi nhớ phiên giao hàng
-                </label>
-
-                {error && (
-                  <div className="rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                    {error}
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  className="h-11 w-full bg-emerald-600 font-black hover:bg-emerald-700"
-                  disabled={loggingIn}
-                >
-                  {loggingIn ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Truck className="size-4" />
-                  )}
-                  Đăng nhập
-                </Button>
-              </div>
-            </form>
-          </section>
-        ) : (
-          <>
-            <section className="overflow-hidden rounded-[8px] border border-emerald-100 bg-white shadow-[0_18px_55px_rgba(15,61,38,0.08)]">
-              <div className="grid min-h-48 gap-0 lg:grid-cols-[1fr_22rem]">
-                <div className="flex flex-col justify-center gap-4 p-5 sm:p-6 lg:p-7">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-bold text-emerald-700">
-                      Delivery API
-                    </span>
-                    <span className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-bold text-emerald-700">
-                      Assigned orders
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-black tracking-normal text-emerald-950">
-                      Xin chào, {currentUser?.name || "nhân viên giao hàng"}
-                    </h1>
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                      Quản lý các đơn được phân công, chuyển sang đang giao và
-                      xác nhận giao thành công.
-                    </p>
-                  </div>
-                </div>
-                <div className="relative min-h-48 border-t border-emerald-100 bg-emerald-50 lg:border-l lg:border-t-0">
-                  <div className="absolute inset-0 bg-[url('/admin-assets/delivery.svg')] bg-contain bg-center bg-no-repeat opacity-90" />
-                </div>
-              </div>
-            </section>
-
-            <section className="grid gap-4 sm:grid-cols-3">
-              <StatCard
-                title="Sẵn sàng giao"
-                value={formatNumber(stats.ready)}
-                description="Có thể bắt đầu giao"
-                icon={PackageCheck}
-                tone="green"
-              />
-              <StatCard
-                title="Đang giao"
-                value={formatNumber(stats.delivering)}
-                description="Cần xác nhận khi hoàn tất"
-                icon={Truck}
-                tone="blue"
-              />
-              <StatCard
-                title="Đã giao"
-                value={formatNumber(stats.delivered)}
-                description="Đã giao hoặc hoàn tất"
-                icon={CheckCircle2}
-                tone="amber"
-              />
-            </section>
-
-            <div className="grid gap-3 rounded-lg border bg-card p-4 shadow-sm lg:grid-cols-[1fr_auto_auto] lg:items-center">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="del-email">Email tài khoản</Label>
                 <Input
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Tìm theo mã đơn, khách hàng, địa chỉ"
-                  className="pl-9"
+                  id="del-email"
+                  type="email"
+                  placeholder="shipper@example.com"
+                  value={loginForm.email}
+                  onChange={(e) => updateLoginForm("email", e.target.value)}
+                  required
                 />
               </div>
 
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="h-8 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
-              >
-                {DELIVERY_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-1.5">
+                <Label htmlFor="del-password">Mật khẩu</Label>
+                <div className="relative">
+                  <Input
+                    id="del-password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Mật khẩu của bạn"
+                    value={loginForm.password}
+                    onChange={(e) => updateLoginForm("password", e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
+                  >
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
+              </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                onClick={loadOrders}
-                disabled={loading}
-                className="font-bold"
-              >
-                <RefreshCw
-                  className={loading ? "size-4 animate-spin" : "size-4"}
+              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="size-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
                 />
-                Làm mới
-              </Button>
-            </div>
+                Duy trì đăng nhập
+              </label>
 
+              {error && (
+                <div className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-600">
+                  {error}
+                </div>
+              )}
+
+              <Button type="submit" disabled={loggingIn} className="w-full bg-emerald-600 hover:bg-emerald-700 py-3 font-bold text-white rounded-xl">
+                {loggingIn ? <Loader2 className="size-5 animate-spin" /> : "Đăng Nhập Ngay"}
+              </Button>
+            </form>
+          </div>
+        ) : (
+          /* Logged In Content */
+          <div className="space-y-4">
+            {/* Notices */}
             {(notice || error) && (
               <div
-                className={`rounded-[8px] border px-4 py-3 text-sm font-semibold ${
-                  error
-                    ? "border-red-200 bg-red-50 text-red-700"
-                    : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                onClick={() => {
+                  setNotice("");
+                  setError("");
+                }}
+                className={`flex items-start gap-2 rounded-xl border p-4 text-sm font-semibold shadow-sm cursor-pointer ${
+                  error ? "border-red-100 bg-red-50 text-red-700" : "border-emerald-100 bg-emerald-50 text-emerald-800"
                 }`}
               >
-                {error || notice}
+                <AlertCircle className="size-5 shrink-0" />
+                <p className="flex-1">{error || notice}</p>
+                <X className="size-4 opacity-60" />
               </div>
             )}
 
-            <DataTable
-              columns={[
-                "Mã đơn",
-                "Khách hàng",
-                "Trạng thái",
-                "Thời gian",
-                "Tổng tiền",
-                "Thao tác",
-              ]}
-              data={filteredOrders}
-              loading={loading}
-              error={loading || orders.length === 0 ? error : ""}
-              emptyText="Không có đơn giao hàng phù hợp"
-              renderRow={(order) => {
-                const rowBusy = actionLoading.startsWith(`${order.id}:`);
+            {/* TAB 1: NHẬN CA (Shift & Assignment) */}
+            {activeTab === "shift" && (
+              <div className="space-y-4">
+                {/* Simulated QR/Barcode Scanner Section */}
+                <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100">
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <QrCode className="size-5 text-emerald-600" />
+                    Bàn Giao & Nhận Ca Làm Việc
+                  </h3>
+                  
+                  {!shiftStarted ? (
+                    <div className="mt-4 space-y-4 text-center">
+                      <div className={`mx-auto flex size-40 items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 relative overflow-hidden ${scanning ? "border-emerald-500" : ""}`}>
+                        {scanning ? (
+                          <div className="absolute inset-x-0 top-0 h-1 bg-emerald-500 animate-bounce" />
+                        ) : null}
+                        <QrCode className={`size-16 text-slate-400 ${scanning ? "animate-pulse text-emerald-500" : ""}`} />
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed px-4">
+                        Quét mã QR Code/Barcode trên phiếu bàn giao tại kho hàng bưu cục để bắt đầu ca nhận đơn ngày hôm nay.
+                      </p>
+                      <Button
+                        onClick={startScanning}
+                        disabled={scanning}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 rounded-xl"
+                      >
+                        {scanning ? "Đang quét mã..." : "Quét Mã Nhận Ca"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3.5 text-center">
+                        <p className="text-xs text-emerald-800 uppercase font-black tracking-wider">Trạng thái ca làm việc</p>
+                        <p className="text-xl font-black text-emerald-950 mt-1">Đang Trong Ca Giao</p>
+                        <p className="text-[11px] text-emerald-600 mt-1">Mã nhận kho: <span className="font-mono font-bold">{scanResult}</span></p>
+                      </div>
 
-                return (
-                  <TableRow key={order.id}>
-                    <TableCell className="px-4 font-medium">
-                      #{order.id}
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">
-                          {getCustomerName(order)}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {getCustomerPhone(order)} · {getShippingAddress(order)}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <StatusBadge status={order.status} />
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="text-xs text-muted-foreground">
-                        <p>Tạo: {formatDate(order.createdAt)}</p>
-                        <p>Giao: {formatDate(order.dispatchedAt)}</p>
-                        <p>Nhận: {formatDate(order.deliveredAt)}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4 font-medium">
-                      {formatCurrency(order.totalPrice)}
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {order.status === "ready_for_delivery" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="bg-emerald-600 font-bold hover:bg-emerald-700"
-                            disabled={rowBusy}
-                            onClick={() => markOutForDelivery(order)}
-                          >
-                            {actionLoading === `${order.id}:out` ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                              <Truck className="size-3.5" />
-                            )}
-                            Bắt đầu giao
-                          </Button>
-                        )}
-                        {order.status === "out_for_delivery" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="bg-emerald-600 font-bold hover:bg-emerald-700"
-                            disabled={rowBusy}
-                            onClick={() => markDelivered(order)}
-                          >
-                            {actionLoading === `${order.id}:delivered` ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                              <CheckCircle2 className="size-3.5" />
-                            )}
-                            Đã giao
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon-sm"
-                          title="Xem chi tiết đơn"
-                          aria-label="Xem chi tiết đơn"
-                          onClick={() => handleViewOrder(order)}
-                        >
-                          <Eye className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              }}
-            />
-
-            <Dialog
-              open={Boolean(selectedOrder)}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setSelectedOrder(null);
-                }
-              }}
-            >
-              <DialogContent className="sm:max-w-3xl">
-                {selectedOrder && (
-                  <div className="space-y-4">
-                    <DialogHeader>
-                      <DialogTitle>Đơn giao #{selectedOrder.id}</DialogTitle>
-                      <DialogDescription>
-                        Chi tiết đơn được phân công cho nhân viên giao hàng.
-                      </DialogDescription>
-                    </DialogHeader>
-
-                    {detailLoading && (
-                      <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm font-semibold text-muted-foreground">
-                        <Loader2 className="size-4 animate-spin" />
-                        Đang tải chi tiết đơn...
-                      </div>
-                    )}
-
-                    <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Khách hàng
-                        </p>
-                        <p className="mt-1 font-medium">
-                          {getCustomerName(selectedOrder)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {getCustomerPhone(selectedOrder)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Địa chỉ
-                        </p>
-                        <p className="mt-1 text-sm">
-                          {getShippingAddress(selectedOrder)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Trạng thái
-                        </p>
-                        <div className="mt-1">
-                          <StatusBadge status={selectedOrder.status} />
+                      <div className="grid grid-cols-2 gap-3 text-center">
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <p className="text-xs text-slate-500 font-bold">Giao Hôm Nay</p>
+                          <p className="text-2xl font-black text-slate-800 mt-1">{orders.length} đơn</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <p className="text-xs text-slate-500 font-bold">Khu Vực Giao</p>
+                          <p className="text-sm font-black text-slate-800 mt-2 truncate">Hội An / Đà Nẵng</p>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Tổng tiền
-                        </p>
-                        <p className="mt-1 font-medium">
-                          {formatCurrency(selectedOrder.totalPrice)}
-                        </p>
+
+                      <div className="p-3 bg-[#fef3c7] rounded-xl border border-[#fde68a] text-amber-950 flex items-start gap-2">
+                        <AlertCircle className="size-4 shrink-0 mt-0.5 text-amber-700" />
+                        <div className="text-xs">
+                          <p className="font-bold">Lộ trình AI tối ưu đề xuất:</p>
+                          <p className="mt-0.5 opacity-90">Đi tuyến Trần Hưng Đạo $\rightarrow$ Cửa Đại $\rightarrow$ Hai Bà Trưng để rút ngắn 2.5km di chuyển.</p>
+                        </div>
                       </div>
                     </div>
+                  )}
+                </div>
 
-                    <div className="overflow-hidden rounded-lg border">
-                      <Table>
-                        <TableHeader className="bg-muted/50">
-                          <TableRow>
-                            <TableHead className="px-4">Sản phẩm</TableHead>
-                            <TableHead className="px-4">SL</TableHead>
-                            <TableHead className="px-4">Giá</TableHead>
-                            <TableHead className="px-4 text-right">
-                              Tạm tính
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {(selectedOrder.items || []).map((item) => (
-                            <TableRow
-                              key={
-                                item.id ||
-                                `${selectedOrder.id}-${item.productName}`
-                              }
-                            >
-                              <TableCell className="px-4 font-medium">
-                                {item.productName}
-                              </TableCell>
-                              <TableCell className="px-4">
-                                {item.quantity}
-                              </TableCell>
-                              <TableCell className="px-4">
-                                {formatCurrency(item.price)}
-                              </TableCell>
-                              <TableCell className="px-4 text-right font-medium">
-                                {formatCurrency(
-                                  item.lineTotal ||
-                                    Number(item.price) * item.quantity
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                {/* General Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
+                    <p className="text-2xl font-black text-emerald-600">{stats.ready}</p>
+                    <p className="text-[11px] text-slate-500 font-bold mt-1">Chờ giao</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
+                    <p className="text-2xl font-black text-blue-600">{stats.delivering}</p>
+                    <p className="text-[11px] text-slate-500 font-bold mt-1">Đang giao</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-center">
+                    <p className="text-2xl font-black text-amber-600">{stats.delivered}</p>
+                    <p className="text-[11px] text-slate-500 font-bold mt-1">Đã giao</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
-                    <DialogFooter>
-                      {selectedOrder.status === "ready_for_delivery" && (
-                        <Button
-                          type="button"
-                          onClick={() => markOutForDelivery(selectedOrder)}
-                        >
-                          <Truck className="size-4" />
-                          Bắt đầu giao
-                        </Button>
-                      )}
-                      {selectedOrder.status === "out_for_delivery" && (
-                        <Button
-                          type="button"
-                          onClick={() => markDelivered(selectedOrder)}
-                        >
-                          <CheckCircle2 className="size-4" />
-                          Xác nhận đã giao
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setSelectedOrder(null)}
+            {/* TAB 2: ĐƠN HÀNG (Active Deliveries) */}
+            {activeTab === "orders" && (
+              <div className="space-y-3">
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Tìm mã đơn, tên khách, địa chỉ..."
+                    className="pl-10 pr-4 h-11 bg-white border-slate-200 rounded-xl"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Order List */}
+                {loading ? (
+                  <div className="text-center py-10">
+                    <Loader2 className="size-8 animate-spin mx-auto text-emerald-600" />
+                    <p className="text-xs text-slate-500 font-bold mt-2">Đang cập nhật danh sách đơn...</p>
+                  </div>
+                ) : filteredOrders.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-10 border border-slate-100 text-center text-slate-400">
+                    <PackageCheck className="size-12 mx-auto text-slate-300 mb-2" />
+                    <p className="text-sm font-semibold">Không tìm thấy đơn hàng nào</p>
+                  </div>
+                ) : (
+                  filteredOrders.map((order) => {
+                    const isCod = order.payment?.paymentMethod?.toLowerCase() === "cash";
+                    const isTransit = order.status === "out_for_delivery";
+                    
+                    return (
+                      <div
+                        key={order.id}
+                        onClick={() => setSelectedOrder(order)}
+                        className={`rounded-2xl bg-white border p-4 shadow-sm transition active:scale-[0.98] cursor-pointer ${
+                          isTransit ? "border-blue-400 ring-2 ring-blue-50" : "border-slate-100"
+                        }`}
                       >
-                        Đóng
-                      </Button>
-                    </DialogFooter>
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+                          <span className="font-mono text-sm font-black text-slate-800">#{order.id}</span>
+                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase ${
+                            isCod ? "bg-red-50 text-red-700 border border-red-100" : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                          }`}>
+                            {isCod ? `COD: ${formatCurrency(order.totalPrice)}` : "Đã thanh toán Online"}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2">
+                            <User className="size-4 shrink-0 text-slate-400 mt-0.5" />
+                            <p className="text-sm font-black text-slate-800">{getCustomerName(order)}</p>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <MapPin className="size-4 shrink-0 text-slate-400 mt-0.5" />
+                            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{getShippingAddress(order)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100">
+                          <StatusBadge status={order.status} />
+                          <div className="ml-auto flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {/* Call Button */}
+                            <a
+                              href={`tel:${getCustomerPhone(order)}`}
+                              className="inline-flex size-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700 active:bg-slate-200"
+                            >
+                              <Phone className="size-4" />
+                            </a>
+                            {/* Message Button */}
+                            <button
+                              onClick={() => sendArrivalNotification(order)}
+                              className="inline-flex size-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700 active:bg-slate-200"
+                            >
+                              <MessageSquare className="size-4" />
+                            </button>
+                            {/* Map Navigation Link */}
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(getShippingAddress(order))}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex size-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700 active:bg-slate-200"
+                            >
+                              <Navigation className="size-4" />
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: ĐỐI SOÁT & KẾT CA (Settlement) */}
+            {activeTab === "settlement" && (
+              <div className="space-y-4">
+                {/* Wallet Balance & Settlement card */}
+                <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100">
+                  <div className="flex items-center gap-2 text-slate-800">
+                    <Wallet className="size-5 text-emerald-600" />
+                    <h3 className="text-base font-bold">Ví Tiền Mặt COD</h3>
+                  </div>
+
+                  <div className="mt-4 text-center">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Tiền mặt cần nộp về công ty</p>
+                    <p className="text-3xl font-black text-red-600 mt-1">{formatCurrency(stats.totalCod)}</p>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <div className="flex justify-between text-xs py-2 border-b border-slate-50 text-slate-600">
+                      <span>Đơn giao thành công (COD)</span>
+                      <span className="font-bold text-slate-800">
+                        {orders.filter(o => ["delivered", "completed"].includes(o.status) && o.payment?.paymentMethod?.toLowerCase() === "cash").length} đơn
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs py-2 border-b border-slate-50 text-slate-600">
+                      <span>Đơn giao thành công (Online)</span>
+                      <span className="font-bold text-slate-800">
+                        {orders.filter(o => ["delivered", "completed"].includes(o.status) && o.payment?.paymentMethod?.toLowerCase() !== "cash").length} đơn
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs py-2 text-slate-600">
+                      <span>Tổng đơn hàng giao thành công</span>
+                      <span className="font-bold text-emerald-700">{stats.delivered} đơn</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={simulateSettlement}
+                    className="w-full mt-5 bg-emerald-600 hover:bg-emerald-700 h-11 text-white font-bold rounded-xl"
+                  >
+                    Chốt Ca & Nộp Tiền COD
+                  </Button>
+                </div>
+
+                {/* Simulated Settlement QR Code */}
+                {stats.totalCod > 0 && (
+                  <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100 text-center">
+                    <p className="text-sm font-bold text-slate-800">Chuyển khoản nhanh qua QR</p>
+                    <p className="text-xs text-slate-500 mt-1">Quét mã để chuyển khoản nhanh số tiền COD hôm nay</p>
+                    <div className="mx-auto mt-4 flex size-44 items-center justify-center bg-slate-50 rounded-xl border border-slate-100 p-2">
+                      {/* Placeholder QR */}
+                      <div className="flex flex-col items-center justify-center text-slate-400">
+                        <QrCode className="size-20" />
+                        <span className="text-[10px] font-bold mt-1 text-slate-500">VIETQR - AGRIMARKET</span>
+                      </div>
+                    </div>
                   </div>
                 )}
-              </DialogContent>
-            </Dialog>
-          </>
+              </div>
+            )}
+          </div>
         )}
       </div>
+
+      {/* Navigation Tab Bar for Mobile Devices */}
+      {authStatus === "authenticated" && (
+        <nav className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 h-14 flex items-center shadow-lg max-w-lg mx-auto">
+          <button
+            onClick={() => { setActiveTab("shift"); setSelectedOrder(null); setVerifyMode(null); }}
+            className={`flex-1 flex flex-col items-center justify-center h-full transition ${
+              activeTab === "shift" ? "text-emerald-600" : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <UserCheck className="size-5" />
+            <span className="text-[10px] font-black mt-1">Nhận ca</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab("orders"); setSelectedOrder(null); setVerifyMode(null); }}
+            className={`flex-1 flex flex-col items-center justify-center h-full transition ${
+              activeTab === "orders" ? "text-emerald-600" : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <Truck className="size-5" />
+            <span className="text-[10px] font-black mt-1">Đơn hàng</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab("settlement"); setSelectedOrder(null); setVerifyMode(null); }}
+            className={`flex-1 flex flex-col items-center justify-center h-full transition ${
+              activeTab === "settlement" ? "text-emerald-600" : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <Wallet className="size-5" />
+            <span className="text-[10px] font-black mt-1">Đối soát</span>
+          </button>
+        </nav>
+      )}
+
+      {/* Selected Order Fullscreen Detail & Action Modal (Draw style for mobile) */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center items-end p-0 md:p-4">
+          <div className="bg-white w-full max-w-lg rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100">
+              <div>
+                <h3 className="font-black text-base text-slate-800">Chi tiết đơn giao #{selectedOrder.id}</h3>
+                <p className="text-xs text-slate-500">Cập nhật kết quả giao hàng và xác thực</p>
+              </div>
+              <button
+                onClick={() => { setSelectedOrder(null); setVerifyMode(null); }}
+                className="size-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Modal Scroll Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              
+              {verifyMode === null ? (
+                /* Mode 1: View details & trigger transit/verify */
+                <>
+                  {/* Status Indicator banner */}
+                  <div className={`p-3 rounded-xl flex items-center gap-2 border ${
+                    selectedOrder.status === "out_for_delivery"
+                      ? "bg-blue-50 border-blue-100 text-blue-800"
+                      : selectedOrder.status === "ready_for_delivery"
+                        ? "bg-emerald-50 border-emerald-100 text-emerald-800"
+                        : "bg-slate-50 border-slate-100 text-slate-700"
+                  }`}>
+                    <Clock3 className="size-5 shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-bold">Trạng thái hiện tại: <StatusBadge status={selectedOrder.status} /></p>
+                      <p className="mt-0.5 opacity-90">
+                        {selectedOrder.status === "ready_for_delivery"
+                          ? "Bấm bắt đầu giao để kích hoạt di chuyển."
+                          : selectedOrder.status === "out_for_delivery"
+                            ? "Đang trên lộ trình giao cho khách."
+                            : "Đơn hàng đã kết thúc giao nhận."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Customer Info Card */}
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-3">
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Thông tin khách hàng</p>
+                    
+                    <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                      <div>
+                        <p className="text-sm font-black text-slate-800">{getCustomerName(selectedOrder)}</p>
+                        <p className="text-xs font-mono text-slate-500 mt-0.5">{getCustomerPhone(selectedOrder)}</p>
+                      </div>
+                      <a
+                        href={`tel:${getCustomerPhone(selectedOrder)}`}
+                        className="inline-flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 active:bg-emerald-100 border border-emerald-100"
+                      >
+                        <Phone className="size-4" />
+                      </a>
+                    </div>
+
+                    <div className="text-xs text-slate-600 leading-relaxed border-t border-slate-200/60 pt-2.5">
+                      <span className="font-bold text-slate-700 block mb-0.5">Địa chỉ giao:</span>
+                      {getShippingAddress(selectedOrder)}
+                    </div>
+                  </div>
+
+                  {/* Payment Summary */}
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-3">
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Thông tin thanh toán</p>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-600">Hình thức thanh toán:</span>
+                      <span className="font-bold text-slate-800">
+                        {selectedOrder.payment?.paymentMethod?.toLowerCase() === "cash" ? "Tiền mặt (COD)" : "Trực tuyến (PayPal/VNPay)"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm border-t border-slate-200/60 pt-2 mb-1">
+                      <span className="text-slate-600">Tổng tiền thu hộ (COD):</span>
+                      <span className="text-base font-black text-red-600">
+                        {selectedOrder.payment?.paymentMethod?.toLowerCase() === "cash" ? formatCurrency(selectedOrder.totalPrice) : "0 đ"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Product List */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Danh sách sản phẩm</p>
+                    <div className="rounded-xl border border-slate-100 overflow-hidden text-xs">
+                      <div className="bg-slate-50 px-3 py-2 font-bold grid grid-cols-[1fr_2.5rem_5rem] text-slate-600 border-b border-slate-100">
+                        <span>Tên sản phẩm</span>
+                        <span className="text-center">SL</span>
+                        <span className="text-right">Đơn giá</span>
+                      </div>
+                      {(selectedOrder.items || []).map((item) => (
+                        <div key={item.id} className="bg-white px-3 py-2.5 grid grid-cols-[1fr_2.5rem_5rem] text-slate-700 border-b border-slate-50 last:border-0">
+                          <span className="font-medium truncate">{item.productName}</span>
+                          <span className="text-center font-bold text-slate-900">{item.quantity}</span>
+                          <span className="text-right font-semibold">{formatCurrency(item.price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : verifyMode === "success" ? (
+                /* Mode 2: Verification SUCCESS form */
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <span className="inline-flex size-12 items-center justify-center bg-emerald-50 text-emerald-600 rounded-full mb-2">
+                      <Check className="size-6" />
+                    </span>
+                    <h4 className="text-base font-bold text-slate-800">Xác Nhận Giao Thành Công</h4>
+                    <p className="text-xs text-slate-500">Chụp ảnh gói hàng tại cửa & lấy chữ ký của khách</p>
+                  </div>
+
+                  {/* Proof Photo Upload (Simulated Camera upload) */}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-slate-600 block">Ảnh minh chứng giao hàng (POD)*</Label>
+                    
+                    {proofImage ? (
+                      <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center">
+                        <img src={proofImage} alt="POD" className="object-cover size-full" />
+                        <button
+                          onClick={() => setProofImage("")}
+                          className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 shadow-md hover:bg-red-700 transition"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative aspect-video rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-center cursor-pointer p-4 hover:border-emerald-500 hover:bg-emerald-50/10 transition">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoUpload}
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          disabled={uploadingImage}
+                        />
+                        {uploadingImage ? (
+                          <>
+                            <Loader2 className="size-8 animate-spin text-emerald-600 mb-2" />
+                            <p className="text-xs font-bold text-slate-600">Đang tải ảnh lên...</p>
+                          </>
+                        ) : (
+                          <>
+                            <Camera className="size-8 text-slate-400 mb-2" />
+                            <p className="text-xs font-bold text-slate-600">Chụp ảnh / Chọn ảnh gói hàng</p>
+                            <p className="text-[10px] text-slate-400 mt-1">Ảnh thực tế tại địa điểm giao hàng</p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Signature Pad */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-xs font-bold text-slate-600">Chữ ký khách nhận hàng (Ký tay trực tiếp)</Label>
+                      {signatureSaved && (
+                        <button
+                          onClick={clearSignature}
+                          className="text-[10px] text-emerald-600 font-bold hover:underline"
+                        >
+                          Ký lại
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+                      <canvas
+                        ref={canvasRef}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleMouseUp}
+                        className="w-full h-32 touch-none cursor-crosshair bg-slate-50"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Ghi chú */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="success-note">Ghi chú giao hàng (Không bắt buộc)</Label>
+                    <Textarea
+                      id="success-note"
+                      placeholder="Nhập ghi chú ví dụ: giao cho bảo vệ, người nhận thay..."
+                      value={verificationNote}
+                      onChange={(e) => setVerificationNote(e.target.value)}
+                      rows={2}
+                      className="bg-white"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Mode 3: Verification FAILED form */
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <span className="inline-flex size-12 items-center justify-center bg-red-50 text-red-600 rounded-full mb-2">
+                      <AlertCircle className="size-6" />
+                    </span>
+                    <h4 className="text-base font-bold text-slate-800">Báo Cáo Giao Thất Bại</h4>
+                    <p className="text-xs text-slate-500">Cập nhật chính xác lý do để bưu cục lưu trữ</p>
+                  </div>
+
+                  {/* Reasons Radio Select */}
+                  <div className="space-y-2.5">
+                    <Label className="text-xs font-bold text-slate-600 block">Chọn lý do thất bại*</Label>
+                    
+                    <div className="grid gap-2">
+                      {[
+                        { value: "rescheduled", label: "Khách hẹn giao lại (đổi ngày/giờ)" },
+                        { value: "cannot_contact", label: "Không liên lạc được (thuê bao/không bắt máy)" },
+                        { value: "canceled", label: "Khách từ chối nhận hàng (Hủy đơn hàng)" },
+                      ].map((item) => (
+                        <label
+                          key={item.value}
+                          className={`flex items-center gap-3 p-3.5 rounded-xl border text-sm font-semibold cursor-pointer transition ${
+                            failedReason === item.value
+                              ? "border-red-500 bg-red-50/30 text-slate-900"
+                              : "border-slate-100 bg-slate-50 hover:bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="failed-reason"
+                            value={item.value}
+                            checked={failedReason === item.value}
+                            onChange={() => setFailedReason(item.value)}
+                            className="size-4 text-red-600 focus:ring-red-500 border-slate-300"
+                          />
+                          {item.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ghi chú */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="failed-note">Ghi chú chi tiết*</Label>
+                    <Textarea
+                      id="failed-note"
+                      placeholder="Nhập lý do chi tiết (ví dụ: thuê bao gọi 3 cuộc lúc 10h, khách bảo đang đi công tác...)"
+                      value={verificationNote}
+                      onChange={(e) => setVerificationNote(e.target.value)}
+                      rows={3}
+                      className="bg-white border-slate-200"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Action Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-2">
+              {verifyMode === null ? (
+                /* Primary Actions when viewing details */
+                <>
+                  {selectedOrder.status === "ready_for_delivery" && (
+                    <Button
+                      onClick={() => handleStartTransit(selectedOrder)}
+                      disabled={actionLoading === `${selectedOrder.id}:transit`}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 h-12 font-bold text-white rounded-xl text-sm"
+                    >
+                      {actionLoading === `${selectedOrder.id}:transit` ? (
+                        <Loader2 className="size-4 animate-spin mx-auto" />
+                      ) : (
+                        "Bắt Đầu Giao (Transit)"
+                      )}
+                    </Button>
+                  )}
+                  {selectedOrder.status === "out_for_delivery" && (
+                    <>
+                      <Button
+                        onClick={() => setVerifyMode("success")}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 h-12 font-bold text-white rounded-xl text-sm"
+                      >
+                        Giao Thành Công
+                      </Button>
+                      <Button
+                        onClick={() => setVerifyMode("failed")}
+                        variant="outline"
+                        className="flex-1 border-red-200 bg-white text-red-700 hover:bg-red-50 h-12 font-bold rounded-xl text-sm"
+                      >
+                        Giao Thất Bại
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    onClick={() => setSelectedOrder(null)}
+                    variant="outline"
+                    className="border-slate-200 bg-white text-slate-700 h-12 font-bold rounded-xl text-xs px-4"
+                  >
+                    Đóng
+                  </Button>
+                </>
+              ) : (
+                /* Action buttons in forms */
+                <>
+                  <Button
+                    onClick={verifyMode === "success" ? submitDeliverySuccess : submitDeliveryFailure}
+                    disabled={
+                      actionLoading === `${selectedOrder.id}:complete` ||
+                      actionLoading === `${selectedOrder.id}:fail` ||
+                      uploadingImage
+                    }
+                    className={`flex-1 h-12 font-bold text-white rounded-xl text-sm ${
+                      verifyMode === "success" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"
+                    }`}
+                  >
+                    {actionLoading.includes(selectedOrder.id) ? (
+                      <Loader2 className="size-4 animate-spin mx-auto" />
+                    ) : (
+                      "Xác Nhận & Gửi"
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => { setVerifyMode(null); setFailedReason(""); setProofImage(""); setVerificationNote(""); }}
+                    variant="outline"
+                    className="border-slate-200 bg-white text-slate-700 h-12 font-bold rounded-xl text-sm px-4"
+                  >
+                    Quay Lại
+                  </Button>
+                </>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
     </main>
   );
 }

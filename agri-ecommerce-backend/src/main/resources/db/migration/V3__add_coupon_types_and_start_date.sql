@@ -1,3 +1,4 @@
+-- V3: add coupon_type, discount_type, discount_amount, starts_at
 ALTER TABLE `coupons`
     ADD COLUMN `coupon_type` varchar(50) NOT NULL DEFAULT 'ORDER_DISCOUNT' AFTER `code`,
     ADD COLUMN `discount_type` varchar(50) NOT NULL DEFAULT 'PERCENTAGE' AFTER `coupon_type`,
