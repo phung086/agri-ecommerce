@@ -46,6 +46,7 @@ export function AvatarUploadField({
   uploading,
   onChange,
   onUpload,
+  onRemove,       // async () => void — gọi API xóa avatar trên server
   onUploadStart,
   onUploadEnd,
   onUploadSuccess,
@@ -55,6 +56,18 @@ export function AvatarUploadField({
   const [previewUrl, setPreviewUrl] = useState("");
   const [fileMeta, setFileMeta] = useState(null);
   const [message, setMessage] = useState("");
+  const [removing, setRemoving] = useState(false);
+
+  // Reset preview khi value thay đổi từ bên ngoài (ví dụ sau khi xóa)
+  useEffect(() => {
+    if (!value) {
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return "";
+      });
+      setFileMeta(null);
+    }
+  }, [value]);
 
   const imageUrl = previewUrl || getAssetUrl(value);
 
@@ -86,7 +99,6 @@ export function AvatarUploadField({
     setMessage("");
 
     if (!onUpload) {
-      // TODO: Tích hợp upload API nếu backend chưa hỗ trợ upload avatar.
       return;
     }
 
@@ -105,20 +117,43 @@ export function AvatarUploadField({
         error?.message || "Không thể upload ảnh đại diện. Vui lòng thử lại.";
       setMessage(errorMessage);
       onUploadError?.(errorMessage);
+      // Xóa preview nếu upload thất bại
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return "";
+      });
+      setFileMeta(null);
     } finally {
       onUploadEnd?.();
     }
   }
 
-  function handleRemove() {
-    setPreviewUrl((current) => {
-      if (current) URL.revokeObjectURL(current);
-      return "";
-    });
-    setFileMeta(null);
+  async function handleRemove() {
     setMessage("");
-    onChange("");
+    setRemoving(true);
+
+    try {
+      // Nếu có callback xóa server-side, gọi trước
+      if (onRemove) {
+        await onRemove();
+      }
+
+      // Xóa preview local sau khi server xác nhận
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return "";
+      });
+      setFileMeta(null);
+      onChange("");
+    } catch (error) {
+      const errorMessage = error?.message || "Không thể xóa ảnh. Vui lòng thử lại.";
+      setMessage(errorMessage);
+    } finally {
+      setRemoving(false);
+    }
   }
+
+  const isBusy = disabled || uploading || removing;
 
   return (
     <div className="space-y-3">
@@ -155,14 +190,14 @@ export function AvatarUploadField({
           accept="image/jpeg,image/png,image/webp"
           className="sr-only"
           onChange={handleFileChange}
-          disabled={disabled || uploading}
+          disabled={isBusy}
         />
         <Button
           type="button"
           variant="outline"
           className="h-10 border-emerald-100 bg-white text-emerald-800"
           onClick={() => inputRef.current?.click()}
-          disabled={disabled || uploading}
+          disabled={isBusy}
         >
           {uploading ? (
             <Loader2 className="size-4 animate-spin" />
@@ -179,10 +214,14 @@ export function AvatarUploadField({
             variant="outline"
             className="h-10 border-red-100 bg-white text-red-700 hover:bg-red-50"
             onClick={handleRemove}
-            disabled={disabled || uploading}
+            disabled={isBusy}
           >
-            <Trash2 className="size-4" />
-            Xóa ảnh
+            {removing ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}
+            {removing ? "Đang xóa..." : "Xóa ảnh"}
           </Button>
         )}
       </div>

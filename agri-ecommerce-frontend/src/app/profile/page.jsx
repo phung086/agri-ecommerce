@@ -1200,6 +1200,14 @@ export default function CustomerProfilePage() {
     return nextProfile;
   }
 
+  async function handleAvatarRemove() {
+    const response = await profileService.deleteAvatar();
+    const nextProfile = unwrapApiData(response);
+    applyProfile(nextProfile);
+    updateStoredProfile(nextProfile);
+    setNotice("Đã xóa ảnh đại diện.");
+  }
+
   async function handleSave(event) {
     event.preventDefault();
     setSaving(true);
@@ -1894,6 +1902,7 @@ export default function CustomerProfilePage() {
                         uploading={uploadingAvatar}
                         onChange={(value) => updateForm("avatar", value)}
                         onUpload={handleAvatarFile}
+                        onRemove={handleAvatarRemove}
                         onUploadStart={() => {
                           setUploadingAvatar(true);
                           setError("");

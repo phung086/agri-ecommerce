@@ -113,6 +113,37 @@ public class ProfileController {
                 .body(ApiResponse.success("Upload anh dai dien thanh cong", response, HttpStatus.CREATED.value()));
     }
 
+    @Operation(summary = "Xóa ảnh đại diện cá nhân")
+    @DeleteMapping("/avatar")
+    public ResponseEntity<ApiResponse<UserResponse>> deleteAvatar(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        // Lấy avatar hiện tại để xóa file vật lý nếu có
+        UserResponse currentProfile = userService.getCurrentProfile(principal.getId());
+        String currentAvatar = currentProfile.getAvatar();
+
+        // Xóa record avatar trong DB trước
+        UserResponse response = userService.updateCurrentProfileAvatar(principal.getId(), null);
+
+        // Xóa file vật lý nếu là file local (không xóa URL bên ngoài)
+        if (currentAvatar != null && !currentAvatar.isBlank()
+                && currentAvatar.startsWith("uploads/")) {
+            try {
+                Path filePath = Path.of(currentAvatar).toAbsolutePath().normalize();
+                Path uploadsRoot = Path.of("uploads").toAbsolutePath().normalize();
+                if (filePath.startsWith(uploadsRoot)) {
+                    Files.deleteIfExists(filePath);
+                }
+            } catch (IOException ex) {
+                // Không thất bại nếu file đã bị xóa rồi
+            }
+        }
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Đã xóa ảnh đại diện thành công", response, HttpStatus.OK.value())
+        );
+    }
+
     private void validateAvatar(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Vui long chon file anh");

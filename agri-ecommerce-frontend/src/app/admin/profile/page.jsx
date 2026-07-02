@@ -171,6 +171,14 @@ export default function AdminProfilePage() {
     return nextProfile;
   }
 
+  async function handleAvatarRemove() {
+    const response = await profileService.deleteAvatar();
+    const nextProfile = unwrapApiData(response);
+    applyProfile(nextProfile);
+    syncStoredAdminProfile(nextProfile);
+    setNotice("Đã xóa ảnh đại diện admin.");
+  }
+
   async function handleSaveProfile(event) {
     event.preventDefault();
     setSavingProfile(true);
@@ -470,6 +478,7 @@ export default function AdminProfilePage() {
                 uploading={uploadingAvatar}
                 onChange={(value) => updateProfileForm("avatar", value)}
                 onUpload={handleAvatarFile}
+                onRemove={handleAvatarRemove}
                 onUploadStart={() => {
                   setUploadingAvatar(true);
                   setError("");

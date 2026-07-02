@@ -29,5 +29,10 @@ export const profileService = {
 
     return unwrapApiData(response);
   },
+
+  deleteAvatar: async () => {
+    const response = await axiosClient.delete("/customer/profile/avatar");
+    return unwrapApiData(response);
+  },
 };
 
