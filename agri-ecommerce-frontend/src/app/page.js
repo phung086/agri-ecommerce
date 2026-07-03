@@ -944,14 +944,15 @@ export default function Home() {
 
   useEffect(() => {
     const cleanKeyword = filters.keyword.trim();
-    if (!cleanKeyword) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return undefined;
-    }
-
-    setSuggestionsLoading(true);
     const handler = setTimeout(async () => {
+      if (!cleanKeyword) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        setSuggestionsLoading(false);
+        return;
+      }
+
+      setSuggestionsLoading(true);
       try {
         const response = await marketplaceService.getSearchSuggestions(cleanKeyword, 8);
         setSuggestions(Array.isArray(response) ? response : []);
@@ -963,7 +964,7 @@ export default function Home() {
       } finally {
         setSuggestionsLoading(false);
       }
-    }, 250);
+    }, cleanKeyword ? 250 : 0);
 
     return () => {
       clearTimeout(handler);
@@ -1850,7 +1851,7 @@ export default function Home() {
                           onClick={() => setShowSuggestions(false)}
                           className="text-[10px] font-black text-emerald-700 hover:text-emerald-800 transition"
                         >
-                          Xem tất cả gợi ý cho "{filters.keyword}" →
+                          Xem tất cả gợi ý cho &quot;{filters.keyword}&quot; →
                         </a>
                       </div>
                     </>

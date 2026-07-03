@@ -22,6 +22,8 @@ public class CheckoutPreviewResponse {
 
     private String couponMessage;
 
+    private ShippingAddressResponse shippingAddress;
+
     private Integer totalQuantity;
 
     private BigDecimal subtotal;

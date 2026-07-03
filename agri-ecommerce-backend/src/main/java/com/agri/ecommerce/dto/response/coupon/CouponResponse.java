@@ -24,6 +24,8 @@ public class CouponResponse {
 
     private BigDecimal discountAmount;
 
+    private BigDecimal minOrderValue;
+
     private LocalDateTime startsAt;
 
     private LocalDateTime expiresAt;

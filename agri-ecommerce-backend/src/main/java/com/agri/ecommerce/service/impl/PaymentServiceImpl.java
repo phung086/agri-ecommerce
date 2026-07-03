@@ -9,19 +9,23 @@ import com.agri.ecommerce.dto.response.payment.PaymentDetailResponse;
 import com.agri.ecommerce.dto.response.payment.VnpayIpnResponse;
 import com.agri.ecommerce.dto.response.payment.VnpayPaymentUrlResponse;
 import com.agri.ecommerce.dto.response.payment.VnpayReturnResponse;
-import com.agri.ecommerce.entity.OrderEntity;
-import com.agri.ecommerce.entity.PaymentEntity;
+import com.agri.ecommerce.entity.*;
 import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.config.VnpayProperties;
 import com.agri.ecommerce.mapper.PaymentMapper;
-import com.agri.ecommerce.repository.PaymentRepository;
+import com.agri.ecommerce.repository.*;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.PaymentService;
+import com.agri.ecommerce.service.EmailService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.function.Function;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +46,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
@@ -84,6 +89,10 @@ public class PaymentServiceImpl implements PaymentService {
             "id", "amount", "paymentMethod", "status", "paidAt", "createdAt", "updatedAt"
     );
 
+    private static final String ORDER_PROCESSING = "processing";
+    private static final String IN_STOCK_STATUS = "in_stock";
+    private static final String OUT_OF_STOCK_STATUS = "out_of_stock";
+
     private final PaymentRepository paymentRepository;
 
     private final NotificationService notificationService;
@@ -91,6 +100,18 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentMapper paymentMapper;
 
     private final VnpayProperties vnpayProperties;
+
+    private final OrderRepository orderRepository;
+
+    private final OrderItemRepository orderItemRepository;
+
+    private final ProductRepository productRepository;
+
+    private final CouponRepository couponRepository;
+
+    private final OrderStatusHistoryRepository orderStatusHistoryRepository;
+
+    private final EmailService emailService;
 
     @Override
     @Transactional(readOnly = true)
@@ -275,6 +296,26 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setStatus(PAYMENT_COMPLETED);
             payment.setPaidAt(LocalDateTime.now());
             paymentRepository.save(payment);
+
+            OrderEntity order = payment.getOrder();
+            if (order != null && "pending".equals(order.getStatus())) {
+                order.setStatus(ORDER_PROCESSING);
+                orderRepository.save(order);
+
+                orderStatusHistoryRepository.save(OrderStatusHistoryEntity.builder()
+                        .order(order)
+                        .status(ORDER_PROCESSING)
+                        .changedAt(LocalDateTime.now())
+                        .note("Thanh toán VNPay thành công. Trạng thái đơn hàng tự động chuyển sang Processing.")
+                        .build());
+            }
+
+            try {
+                emailService.sendOrderInvoice(order);
+            } catch (Exception e) {
+                log.error("[Payment Service] Failed to send email invoice: {}", e.getMessage());
+            }
+
             notifyCustomerPaymentChange(
                     payment,
                     "Thanh toán VNPay cho đơn hàng #" + orderId + " đã thành công"
@@ -286,6 +327,24 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setStatus(PAYMENT_FAILED);
             payment.setPaidAt(null);
             paymentRepository.save(payment);
+
+            OrderEntity order = payment.getOrder();
+            if (order != null && "pending".equals(order.getStatus())) {
+                order.setStatus(ORDER_CANCELED);
+                orderRepository.save(order);
+
+                List<OrderItemEntity> orderItems = orderItemRepository.findByOrder_IdOrderByIdAsc(order.getId());
+                restoreProductStock(orderItems);
+                releaseCouponUsage(order);
+
+                orderStatusHistoryRepository.save(OrderStatusHistoryEntity.builder()
+                        .order(order)
+                        .status(ORDER_CANCELED)
+                        .changedAt(LocalDateTime.now())
+                        .note("Thanh toán VNPay thất bại. Hệ thống tự động hủy đơn hàng và hoàn lại kho/mã giảm giá.")
+                        .build());
+            }
+
             notifyCustomerPaymentChange(
                     payment,
                     "Thanh toán VNPay cho đơn hàng #" + orderId + " không thành công"
@@ -807,5 +866,52 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         return value.trim();
+    }
+
+    private void restoreProductStock(List<OrderItemEntity> orderItems) {
+        if (orderItems == null || orderItems.isEmpty()) {
+            return;
+        }
+
+        Map<Long, Integer> quantityByProductId = new LinkedHashMap<>();
+        orderItems.forEach(orderItem -> quantityByProductId.merge(
+                orderItem.getProduct().getId(),
+                orderItem.getQuantity(),
+                Integer::sum
+        ));
+
+        Map<Long, ProductEntity> productsById = productRepository.findAllByIdInForUpdate(quantityByProductId.keySet())
+                .stream()
+                .collect(Collectors.toMap(ProductEntity::getId, Function.identity()));
+
+        quantityByProductId.forEach((productId, quantity) -> {
+            ProductEntity product = productsById.get(productId);
+            if (product == null) {
+                return;
+            }
+
+            int currentStock = product.getStock() == null ? 0 : product.getStock();
+            int restoredStock = currentStock + quantity;
+            product.setStock(restoredStock);
+
+            if (restoredStock > 0 && OUT_OF_STOCK_STATUS.equals(product.getStatus())) {
+                product.setStatus(IN_STOCK_STATUS);
+            }
+        });
+
+        productRepository.saveAll(productsById.values());
+    }
+
+    private void releaseCouponUsage(OrderEntity order) {
+        CouponEntity coupon = order.getCoupon();
+        if (coupon == null) {
+            return;
+        }
+
+        int timesUsed = coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed();
+        if (timesUsed > 0) {
+            coupon.setTimesUsed(timesUsed - 1);
+            couponRepository.save(coupon);
+        }
     }
 }

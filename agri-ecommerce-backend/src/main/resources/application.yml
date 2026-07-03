@@ -71,8 +71,13 @@ app:
   ai:
     enabled: ${AI_CHATBOT_ENABLED:false}
     provider: ${AI_PROVIDER:gemini}
-    model: ${AI_MODEL:gemini-2.5-flash}
+    model: ${AI_MODEL:gemini-flash-latest}
     gemini-api-key: ${GEMINI_API_KEY:}
     openai-api-key: ${OPENAI_API_KEY:}
     max-products-context: ${AI_MAX_PRODUCTS_CONTEXT:10}
     timeout-seconds: ${AI_TIMEOUT_SECONDS:20}
+  shipping:
+    ghn:
+      api-url: ${GHN_API_URL:https://dev-online-gateway.ghn.vn/shiip/public-api}
+      token: ${GHN_TOKEN:${GHN_API_TOKEN:}}
+      shop-id: ${GHN_SHOP_ID:}

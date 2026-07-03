@@ -236,14 +236,18 @@ export function AdminShell({ children }) {
       return;
     }
 
-    const currentRealState = getAdminAuthState();
-    if (currentRealState.status === "authenticated") {
-      setAuthState(currentRealState);
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      const currentRealState = getAdminAuthState();
+      if (currentRealState.status === "authenticated") {
+        setAuthState(currentRealState);
+        return;
+      }
 
-    clearAuthSession(AUTH_SCOPES.admin);
-    router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
+      clearAuthSession(AUTH_SCOPES.admin);
+      router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [authState.status, isAuthPage, pathname, router]);
 
   function handleLogout() {

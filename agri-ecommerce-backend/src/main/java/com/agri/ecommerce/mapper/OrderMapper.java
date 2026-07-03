@@ -39,7 +39,7 @@ public class OrderMapper {
                 .shippingFee(order.getShippingFee())
                 .couponCode(order.getCouponCode())
                 .totalPrice(order.getTotalPrice())
-                .shippingAddress(shippingAddressMapper.toShippingAddressResponse(order.getShippingAddress()))
+                .shippingAddress(toShippingAddressResponse(order))
                 .payment(toPaymentResponse(payment))
                 .items(toOrderItemResponses(orderItems))
                 .statusHistory(toStatusHistoryResponses(statusHistory))
@@ -86,6 +86,34 @@ public class OrderMapper {
                 .createdAt(payment.getCreatedAt())
                 .updatedAt(payment.getUpdatedAt())
                 .build();
+    }
+
+    private ShippingAddressResponse toShippingAddressResponse(OrderEntity order) {
+        if (!hasShippingSnapshot(order)) {
+            return shippingAddressMapper.toShippingAddressResponse(order.getShippingAddress());
+        }
+
+        ShippingAddressEntity originalAddress = order.getShippingAddress();
+
+        return ShippingAddressResponse.builder()
+                .id(originalAddress == null ? null : originalAddress.getId())
+                .fullName(order.getShippingName())
+                .phone(order.getShippingPhone())
+                .address(order.getShippingAddressDetail())
+                .city(order.getShippingCity())
+                .defaultAddress(false)
+                .build();
+    }
+
+    private boolean hasShippingSnapshot(OrderEntity order) {
+        return hasText(order.getShippingName())
+                || hasText(order.getShippingPhone())
+                || hasText(order.getShippingAddressDetail())
+                || hasText(order.getShippingCity());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     public OrderStatusHistoryResponse toStatusHistoryResponse(OrderStatusHistoryEntity history) {

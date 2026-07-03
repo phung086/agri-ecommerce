@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BadgePercent,
@@ -53,7 +53,7 @@ import vietnamAddresses from "@/data/vietnam-addresses.json";
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const VIETNAM_PROVINCES = vietnamAddresses;
 
-function createBlankAddressForm(defaultAddress = true) {
+function createBlankAddressForm(defaultAddress = false) {
   return {
     fullName: "",
     phone: "",
@@ -452,6 +452,11 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
                                 Giảm {formatCurrency(discountAmt)}
                               </span>
                             )}
+                            {coupon.minOrderValue && (
+                              <span className="flex items-center gap-1">
+                                Đơn tối thiểu {formatCurrency(coupon.minOrderValue)}
+                              </span>
+                            )}
                             {coupon.expiresAt && (
                               <span className="flex items-center gap-1">
                                 <CalendarClock className="size-3" />
@@ -498,10 +503,12 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
 export default function CheckoutPage() {
   const router = useRouter();
   const phoneInputRef = useRef(null);
+  const previewRequestSeqRef = useRef(0);
   const [authStatus, setAuthStatus] = useState("checking");
   const [cart, setCart] = useState(null);
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [addressBookVersion, setAddressBookVersion] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [appliedCoupon, setAppliedCoupon] = useState(null); // CouponResponse | null
   const [addressForm, setAddressForm] = useState(() =>
@@ -531,10 +538,7 @@ export default function CheckoutPage() {
   const cartItems = cart?.items || [];
   const cartTotal = Number(cart?.totalAmount || 0);
   const cartQuantity = Number(cart?.totalQuantity || 0);
-  const fallbackShippingFee = cartItems.length > 0 ? 25000 : 0;
-  const selectedAddress = addresses.find(
-    (address) => String(address.id) === String(selectedAddressId)
-  );
+  const previewShippingAddress = preview?.shippingAddress || null;
 
   const selectedProvinceForForm = useMemo(
     () => findAddressOption(VIETNAM_PROVINCES, addressForm.provinceCode),
@@ -571,24 +575,17 @@ export default function CheckoutPage() {
     [selectedDistrictForEditForm]
   );
 
-  /* Live discount calculation — from preview if available, else compute locally */
+  /* Totals are server-authoritative; before preview returns, only cart subtotal is known. */
   const summary = useMemo(() => {
     const subtotal = Number(preview?.subtotal ?? cartTotal);
-    const shippingFee = isFreeshipCoupon(appliedCoupon)
-      ? 0
-      : Number(preview?.shippingFee ?? fallbackShippingFee);
-
-    let discountAmount = Number(preview?.discountAmount ?? 0);
-
-    // If we have an applied coupon but no preview yet, show a live estimate
-    if (!preview && appliedCoupon) {
-      discountAmount = getEstimatedDiscountAmount(appliedCoupon, subtotal);
-    }
-
-    const totalPrice = subtotal - discountAmount + shippingFee;
+    const discountAmount = Number(preview?.discountAmount ?? 0);
+    const shippingFee = Number(preview?.shippingFee ?? 0);
+    const totalPrice = Number(
+      preview?.totalPrice ?? subtotal - discountAmount + shippingFee
+    );
 
     return { subtotal, discountAmount, shippingFee, totalPrice };
-  }, [cartTotal, fallbackShippingFee, preview, appliedCoupon]);
+  }, [cartTotal, preview]);
 
   const couponCode = appliedCoupon?.code ?? "";
 
@@ -599,6 +596,76 @@ export default function CheckoutPage() {
       couponCode: couponCode.trim() || undefined,
     }),
     [couponCode, paymentMethod, selectedAddressId]
+  );
+  const checkoutQuoteReady =
+    Boolean(preview) &&
+    String(previewShippingAddress?.id || "") ===
+      String(checkoutPayload.shippingAddressId || "");
+  const hasServerDiscount = checkoutQuoteReady && summary.discountAmount > 0;
+  const hasServerFreeShipping =
+    checkoutQuoteReady && cartItems.length > 0 && summary.shippingFee === 0;
+  const pendingAmountLabel = previewing ? "Đang tính..." : "Chờ API";
+  const totalAmountLabel = checkoutQuoteReady
+    ? formatCurrency(summary.totalPrice)
+    : pendingAmountLabel;
+
+  const requestCheckoutPreview = useCallback(
+    async ({ showErrors = true, clearMessages = false } = {}) => {
+      if (!checkoutPayload.shippingAddressId) {
+        setPreview(null);
+        if (showErrors) {
+          setError("Vui lòng chọn hoặc thêm địa chỉ giao hàng.");
+        }
+        return null;
+      }
+
+      if (cartItems.length === 0) {
+        setPreview(null);
+        if (showErrors) {
+          setError("Giỏ hàng đang trống.");
+        }
+        return null;
+      }
+
+      const requestSeq = previewRequestSeqRef.current + 1;
+      previewRequestSeqRef.current = requestSeq;
+
+      setPreviewing(true);
+      if (clearMessages) {
+        setError("");
+        setNotice("");
+      }
+
+      try {
+        const response = await orderService.previewCheckout(checkoutPayload);
+
+        if (previewRequestSeqRef.current !== requestSeq) {
+          return null;
+        }
+
+        setPreview(response);
+        setError("");
+
+        if (response?.couponMessage && couponCode.trim()) {
+          setNotice(response.couponMessage);
+        }
+
+        return response;
+      } catch (err) {
+        if (previewRequestSeqRef.current === requestSeq) {
+          setPreview(null);
+          if (showErrors) {
+            setError(getErrorMessage(err, "Không thể kiểm tra đơn hàng."));
+          }
+        }
+        return null;
+      } finally {
+        if (previewRequestSeqRef.current === requestSeq) {
+          setPreviewing(false);
+        }
+      }
+    },
+    [cartItems.length, checkoutPayload, couponCode]
   );
 
   /* Load cart + addresses on mount */
@@ -642,7 +709,7 @@ export default function CheckoutPage() {
             defaultAddress?.id ? String(defaultAddress.id) : ""
           );
           setShowAddressForm(nextAddresses.length === 0);
-          setAddressForm(createBlankAddressForm(nextAddresses.length === 0));
+          setAddressForm(createBlankAddressForm());
           setPreview(null);
         }
       } catch (err) {
@@ -660,6 +727,30 @@ export default function CheckoutPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      authStatus !== "authenticated" ||
+      loading ||
+      !checkoutPayload.shippingAddressId ||
+      cartItems.length === 0
+    ) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      requestCheckoutPreview({ showErrors: true });
+    }, 120);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    addressBookVersion,
+    authStatus,
+    cartItems.length,
+    checkoutPayload,
+    loading,
+    requestCheckoutPreview,
+  ]);
 
 
   function updateAddressForm(field, value) {
@@ -719,7 +810,7 @@ export default function CheckoutPage() {
 
   function openAddressForm() {
     setPhoneError("");
-    setAddressForm(createBlankAddressForm(addresses.length === 0));
+    setAddressForm(createBlankAddressForm());
     setShowAddressForm(true);
   }
 
@@ -744,8 +835,7 @@ export default function CheckoutPage() {
         phone: addressForm.phone.trim(),
         city: addressForm.provinceName.trim(),
         address: buildDetailedAddress(addressForm),
-        defaultAddress:
-          Boolean(addressForm.defaultAddress) || addresses.length === 0,
+        defaultAddress: Boolean(addressForm.defaultAddress),
       };
       if (
         !payload.fullName ||
@@ -769,6 +859,7 @@ export default function CheckoutPage() {
         : [];
 
       setAddresses(normalizedAddresses);
+      setAddressBookVersion((version) => version + 1);
       setSelectedAddressId(
         String(savedAddress?.id ?? normalizedAddresses[0]?.id ?? "")
       );
@@ -876,6 +967,7 @@ export default function CheckoutPage() {
         : [];
 
       setAddresses(normalizedAddresses);
+      setAddressBookVersion((version) => version + 1);
       setNotice("Cập nhật địa chỉ thành công!");
       closeEditDialog();
       setPreview(null);
@@ -910,6 +1002,7 @@ export default function CheckoutPage() {
         : [];
 
       setAddresses(normalizedAddresses);
+      setAddressBookVersion((version) => version + 1);
 
       // If deleted address was selected, select another address
       if (String(deletingAddressId) === String(selectedAddressId)) {
@@ -975,37 +1068,7 @@ export default function CheckoutPage() {
   }
 
   async function handlePreview() {
-    setPreviewing(true);
-    setError("");
-    setNotice("");
-
-    if (!checkoutPayload.shippingAddressId) {
-      setError("Vui lòng chọn hoặc thêm địa chỉ giao hàng.");
-      setPreviewing(false);
-      return null;
-    }
-
-    if (cartItems.length === 0) {
-      setError("Giỏ hàng đang trống.");
-      setPreviewing(false);
-      return null;
-    }
-
-    try {
-      const response = await orderService.previewCheckout(checkoutPayload);
-      setPreview(response);
-
-      if (response?.couponMessage && couponCode.trim()) {
-        setNotice(response.couponMessage);
-      }
-
-      return response;
-    } catch (err) {
-      setError(getErrorMessage(err, "Không thể kiểm tra đơn hàng."));
-      return null;
-    } finally {
-      setPreviewing(false);
-    }
+    return requestCheckoutPreview({ showErrors: true, clearMessages: true });
   }
 
   async function handleSubmitOrder(event) {
@@ -1018,6 +1081,14 @@ export default function CheckoutPage() {
       const currentPreview = await handlePreview();
 
       if (!currentPreview) {
+        return;
+      }
+
+      if (
+        String(currentPreview.shippingAddress?.id || "") !==
+        String(checkoutPayload.shippingAddressId || "")
+      ) {
+        setError("Địa chỉ nhận hàng chưa được đồng bộ từ API. Vui lòng thử lại.");
         return;
       }
 
@@ -1497,7 +1568,7 @@ export default function CheckoutPage() {
                       Tóm tắt thanh toán
                     </p>
                     <h2 className="mt-1 text-2xl font-black text-emerald-950">
-                      {formatCurrency(summary.totalPrice)}
+                      {totalAmountLabel}
                     </h2>
                   </div>
                   <CreditCard className="size-8 text-emerald-700" />
@@ -1549,22 +1620,18 @@ export default function CheckoutPage() {
                       {/* Discount row — highlighted only when nonzero */}
                       <div
                         className={`flex justify-between transition-all duration-300 ${
-                          summary.discountAmount > 0 || isFreeshipCoupon(appliedCoupon)
+                          hasServerDiscount
                             ? "font-black text-emerald-700"
                             : ""
                         }`}
                       >
                         <span className="flex items-center gap-1.5">
-                          {(summary.discountAmount > 0 ||
-                            isFreeshipCoupon(appliedCoupon)) && (
+                          {hasServerDiscount && (
                             <BadgePercent className="size-3.5" />
                           )}
-                          {isFreeshipCoupon(appliedCoupon)
-                            ? "Freeship"
-                            : "Giảm giá"}
+                          Giảm giá
                           {appliedCoupon &&
-                            summary.discountAmount > 0 &&
-                            !isFreeshipCoupon(appliedCoupon) && (
+                            hasServerDiscount && (
                             <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700">
                               {getCouponBadgeText(appliedCoupon)}
                             </span>
@@ -1572,22 +1639,23 @@ export default function CheckoutPage() {
                         </span>
                         <span
                           className={
-                            summary.discountAmount > 0 ||
-                            isFreeshipCoupon(appliedCoupon)
+                            hasServerDiscount
                               ? "text-emerald-700"
                               : ""
                           }
                         >
-                          {isFreeshipCoupon(appliedCoupon)
-                            ? "Miễn phí vận chuyển"
-                            : `-${formatCurrency(summary.discountAmount)}`}
+                          {checkoutQuoteReady
+                            ? `-${formatCurrency(summary.discountAmount)}`
+                            : pendingAmountLabel}
                         </span>
                       </div>
 
                       <div className="flex justify-between">
                         <span>Phí giao hàng</span>
                         <span>
-                          {summary.shippingFee === 0 && cartItems.length > 0
+                          {!checkoutQuoteReady
+                            ? pendingAmountLabel
+                            : summary.shippingFee === 0 && cartItems.length > 0
                             ? "Miễn phí"
                             : formatCurrency(summary.shippingFee)}
                         </span>
@@ -1597,30 +1665,35 @@ export default function CheckoutPage() {
                         <span>Tổng thanh toán</span>
                         <span
                           className={
-                            summary.discountAmount > 0 ||
-                            isFreeshipCoupon(appliedCoupon)
+                            hasServerDiscount || hasServerFreeShipping
                               ? "text-emerald-700"
                               : ""
                           }
                         >
-                          {formatCurrency(summary.totalPrice)}
+                          {totalAmountLabel}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Delivery address summary */}
-                  {selectedAddress && (
+                  {previewShippingAddress ? (
                     <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3 text-sm text-sky-900">
                       <p className="font-black">Giao đến</p>
                       <p className="mt-1 font-semibold">
-                        {selectedAddress.fullName} - {selectedAddress.phone}
+                        {previewShippingAddress.fullName} - {previewShippingAddress.phone}
                       </p>
                       <p className="mt-1 leading-6">
-                        {selectedAddress.address}, {selectedAddress.city}
+                        {previewShippingAddress.address}, {previewShippingAddress.city}
                       </p>
                     </div>
-                  )}
+                  ) : selectedAddressId ? (
+                    <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3 text-sm font-semibold text-sky-900">
+                      {previewing
+                        ? "Đang đồng bộ địa chỉ nhận hàng từ API..."
+                        : "Chọn địa chỉ để hệ thống kiểm tra lại từ API."}
+                    </div>
+                  ) : null}
 
                   {/* Warnings from preview */}
                   {preview?.warnings?.length > 0 && (
@@ -1664,7 +1737,13 @@ export default function CheckoutPage() {
                     <Button
                       type="submit"
                       className="h-11 bg-emerald-600 font-black hover:bg-emerald-700"
-                      disabled={submitting || cartItems.length === 0}
+                      disabled={
+                        submitting ||
+                        previewing ||
+                        cartItems.length === 0 ||
+                        !checkoutQuoteReady ||
+                        !preview?.canCheckout
+                      }
                     >
                       {submitting ? (
                         <Loader2 className="size-4 animate-spin" />

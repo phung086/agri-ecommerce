@@ -1,5 +1,5 @@
 import axios from "axios";
-import { AUTH_SCOPES, clearAuthSession, getAuthToken } from "@/lib/auth-storage";
+import { AUTH_SCOPES, clearAuthSession, getAuthToken, getCurrentAuthScope } from "@/lib/auth-storage";
 
 const axiosClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
@@ -19,7 +19,19 @@ axiosClient.interceptors.request.use((config) => {
   }
 
   if (typeof window !== "undefined") {
-    const token = getAuthToken();
+    // Determine scope based on the API request URL
+    const url = config.url || "";
+    let scope = getCurrentAuthScope(); // fallback to current page scope
+
+    if (url.includes("/api/admin/") || url.includes("/admin/")) {
+      scope = AUTH_SCOPES.admin;
+    } else if (url.includes("/api/delivery/") || url.includes("/delivery/")) {
+      scope = AUTH_SCOPES.delivery;
+    } else if (url.includes("/api/customer/") || url.includes("/customer/")) {
+      scope = AUTH_SCOPES.customer;
+    }
+
+    const token = getAuthToken(scope);
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -33,33 +45,35 @@ axiosClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error?.response?.status === 401) {
-      const pathname =
-        typeof window !== "undefined" ? window.location.pathname : "";
-      const isAdminRoute = pathname.startsWith("/admin");
-      const isDeliveryRoute = pathname.startsWith("/delivery");
-      const scope = isAdminRoute
-        ? AUTH_SCOPES.admin
-        : isDeliveryRoute
-          ? AUTH_SCOPES.delivery
-          : AUTH_SCOPES.customer;
+      const requestUrl = error.config?.url || "";
+      let scope = AUTH_SCOPES.customer;
+
+      if (requestUrl.includes("/api/admin/") || requestUrl.includes("/admin/")) {
+        scope = AUTH_SCOPES.admin;
+      } else if (requestUrl.includes("/api/delivery/") || requestUrl.includes("/delivery/")) {
+        scope = AUTH_SCOPES.delivery;
+      } else if (requestUrl.includes("/api/customer/") || requestUrl.includes("/customer/")) {
+        scope = AUTH_SCOPES.customer;
+      } else {
+        // Fallback to page pathname if url is not specific
+        const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+        if (pathname.startsWith("/admin")) {
+          scope = AUTH_SCOPES.admin;
+        } else if (pathname.startsWith("/delivery")) {
+          scope = AUTH_SCOPES.delivery;
+        }
+      }
 
       clearAuthSession(scope);
 
-      if (
-        typeof window !== "undefined" &&
-        isAdminRoute &&
-        pathname !== "/admin/login"
-      ) {
-        const next = encodeURIComponent(pathname);
-        window.location.assign(`/admin/login?next=${next}`);
-      }
-
-      if (
-        typeof window !== "undefined" &&
-        isDeliveryRoute &&
-        pathname !== "/delivery"
-      ) {
-        window.location.assign("/delivery");
+      if (typeof window !== "undefined") {
+        const pathname = window.location.pathname;
+        if (scope === AUTH_SCOPES.admin && pathname !== "/admin/login") {
+          const next = encodeURIComponent(pathname);
+          window.location.assign(`/admin/login?next=${next}`);
+        } else if (scope === AUTH_SCOPES.delivery && pathname !== "/delivery") {
+          window.location.assign("/delivery");
+        }
       }
     }
 

@@ -28,6 +28,9 @@ public class CouponEntity {
     @Column(name = "discount_amount", precision = 10, scale = 2)
     private BigDecimal discountAmount;
 
+    @Column(name = "min_order_value", precision = 10, scale = 2)
+    private BigDecimal minOrderValue;
+
     @Column(name = "coupon_type", nullable = false, length = 50)
     private String couponType;
 

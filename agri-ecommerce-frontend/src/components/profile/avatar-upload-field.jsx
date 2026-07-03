@@ -61,12 +61,18 @@ export function AvatarUploadField({
   // Reset preview khi value thay đổi từ bên ngoài (ví dụ sau khi xóa)
   useEffect(() => {
     if (!value) {
-      setPreviewUrl((current) => {
-        if (current) URL.revokeObjectURL(current);
-        return "";
-      });
-      setFileMeta(null);
+      const timeoutId = window.setTimeout(() => {
+        setPreviewUrl((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return "";
+        });
+        setFileMeta(null);
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
     }
+
+    return undefined;
   }, [value]);
 
   const imageUrl = previewUrl || getAssetUrl(value);
