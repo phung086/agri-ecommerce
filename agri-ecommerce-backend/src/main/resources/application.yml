@@ -66,9 +66,6 @@ app:
     from: ${MAIL_FROM:${SPRING_MAIL_USERNAME:}}
     from-name: ${MAIL_FROM_NAME:AgriMarket}
     reply-to: ${MAIL_REPLY_TO:${SPRING_MAIL_USERNAME:}}
-    resend:
-      api-key: ${RESEND_API_KEY:}
-      api-url: ${RESEND_API_URL:https://api.resend.com/emails}
     google-script:
       url: ${GOOGLE_SCRIPT_MAIL_URL:}
       secret: ${GOOGLE_SCRIPT_MAIL_SECRET:}

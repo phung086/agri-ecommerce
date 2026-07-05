@@ -47,7 +47,19 @@ Trạng thái mong muốn:
 
 ## 3. Giải pháp production đã chọn
 
-Chuyển production sang gửi email qua Resend HTTPS API.
+Ban đầu đã thử chuyển production sang Resend HTTPS API để tránh lỗi SMTP timeout. Tuy nhiên vì demo chưa có domain riêng để verify DNS, Resend không phù hợp làm phương án cuối cùng cho kỳ thực tập.
+
+Giải pháp cuối cùng đã chọn cho demo là Google Apps Script mail relay qua HTTPS:
+
+- Backend Railway gọi Apps Script Web App bằng HTTPS `443`.
+- Apps Script gửi email thật bằng Gmail đã đăng nhập/deploy script.
+- Không cần mua domain riêng.
+- Tránh lỗi Railway timeout tới Gmail SMTP port `465/587`.
+- Có `MAIL_SECRET` để chặn request không hợp lệ.
+
+Resend hiện đã được loại khỏi code/config/test/env mẫu. Các ghi chú Resend bên dưới chỉ giữ lại như lịch sử phân tích và bài học triển khai.
+
+### Lý do từng cân nhắc Resend
 
 Lý do:
 
@@ -259,6 +271,24 @@ GOOGLE_SCRIPT_MAIL_SECRET=<secret giống MAIL_SECRET trong Apps Script>
      8. Copy Web app URL kết thúc bằng `/exec` đưa vào `GOOGLE_SCRIPT_MAIL_URL`.
      9. Set cùng secret vào Railway `GOOGLE_SCRIPT_MAIL_SECRET`.
      10. Redeploy backend và tạo đơn COD mới để test.
+
+   - Mapping giao diện tiếng Việt Apps Script:
+     1. Click tên `Dự án không có tiêu đề` -> đổi thành `AgriMarket Mail Relay`.
+     2. Click icon bánh răng `Cài đặt dự án`.
+     3. Kéo tới mục `Thuộc tính của tập lệnh`.
+     4. Click `Thêm thuộc tính của tập lệnh`.
+     5. Cột `Thuộc tính`: nhập `MAIL_SECRET`.
+     6. Cột `Giá trị`: nhập secret dài tự tạo, ví dụ chuỗi random 40-64 ký tự.
+     7. Click `Lưu thuộc tính của tập lệnh`.
+     8. Quay lại tab `Trình chỉnh sửa`.
+     9. Chọn hàm `authorizeMail` ở dropdown cạnh nút `Chạy`.
+     10. Click `Chạy`, chọn tài khoản Gmail, bấm `Nâng cao` nếu Google cảnh báo app chưa xác minh, rồi cấp quyền.
+     11. Click `Triển khai` -> `Lần triển khai mới`.
+     12. Loại triển khai chọn `Ứng dụng web`.
+     13. `Thực thi với tư cách`: chọn `Tôi`.
+     14. `Ai có quyền truy cập`: chọn `Bất kỳ ai`.
+     15. Click `Triển khai`.
+     16. Copy `URL ứng dụng web` kết thúc bằng `/exec`.
 
 2. Gmail API trực tiếp
    - Backend lấy OAuth refresh token rồi gọi Gmail API `users.messages.send`.

@@ -53,31 +53,6 @@ class EmailServiceImplTest {
     }
 
     @Test
-    void sendOrderInvoice_whenResendConfigured_shouldPostEmailPayloadToResend() throws Exception {
-        int port = startEmailRelayServer("{\"id\":\"email_123\"}");
-        ReflectionTestUtils.setField(emailService, "emailProvider", "resend");
-        ReflectionTestUtils.setField(emailService, "configuredFromEmail", "AgriMarket <no-reply@example.com>");
-        ReflectionTestUtils.setField(emailService, "resendApiKey", "re_test");
-        ReflectionTestUtils.setField(emailService, "resendApiUrl", "http://127.0.0.1:" + port + "/emails");
-
-        OrderEntity order = order();
-        when(orderRepository.findById(99L)).thenReturn(Optional.of(order));
-        when(orderItemRepository.findByOrder_IdOrderByIdAsc(99L)).thenReturn(List.of());
-
-        emailService.sendOrderInvoice(OrderEntity.builder().id(99L).build());
-
-        assertThat(recordedRequests).hasSize(1);
-        RecordedRequest request = recordedRequests.getFirst();
-        assertThat(request.method()).isEqualTo("POST");
-        assertThat(request.authorization()).isEqualTo("Bearer re_test");
-        assertThat(request.idempotencyKey()).isEqualTo("agri-order-invoice-99");
-        assertThat(request.body()).contains("\"from\":\"AgriMarket <no-reply@example.com>\"");
-        assertThat(request.body()).contains("\"to\":[\"customer@example.com\"]");
-        assertThat(request.body()).contains("\"subject\":\"[AgriMarket] Hóa đơn xác nhận đơn đặt hàng LAU789\"");
-        assertThat(request.body()).contains("\"tags\":[{\"name\":\"order_id\",\"value\":\"99\"}]");
-    }
-
-    @Test
     void sendOrderInvoice_whenGoogleScriptConfigured_shouldPostEmailPayloadToRelay() throws Exception {
         int port = startEmailRelayServer("{\"ok\":true,\"quotaRemaining\":99}");
         ReflectionTestUtils.setField(emailService, "emailProvider", "google-script");
@@ -115,7 +90,6 @@ class EmailServiceImplTest {
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         recordedRequests.add(new RecordedRequest(
                 exchange.getRequestMethod(),
-                exchange.getRequestHeaders().getFirst("Authorization"),
                 exchange.getRequestHeaders().getFirst("Idempotency-Key"),
                 body
         ));
@@ -151,6 +125,6 @@ class EmailServiceImplTest {
                 .build();
     }
 
-    private record RecordedRequest(String method, String authorization, String idempotencyKey, String body) {
+    private record RecordedRequest(String method, String idempotencyKey, String body) {
     }
 }

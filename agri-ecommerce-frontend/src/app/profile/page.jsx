@@ -557,6 +557,7 @@ function PurchaseHistorySection({
   onUpdateReviewDraft,
   onSubmitReview,
 }) {
+  const { t } = useLanguage();
   const completedOrders = orders.filter(isCompletedOrder).length;
   const totalSpent = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
 
@@ -565,13 +566,13 @@ function PurchaseHistorySection({
       <div className="flex flex-col gap-3 border-b border-emerald-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-black uppercase text-emerald-700">
-            Lịch sử mua hàng
+            {t("Lịch sử mua hàng")}
           </p>
           <h2 className="mt-1 text-2xl font-black tracking-normal text-emerald-950">
-            Chi tiết các đơn đã đặt
+            {t("Chi tiết các đơn đã đặt")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Xem trạng thái, sản phẩm, thanh toán, địa chỉ nhận hàng và tiến trình xử lý của từng đơn.
+            {t("Xem trạng thái, sản phẩm, thanh toán, địa chỉ nhận hàng và tiến trình xử lý của từng đơn.")}
           </p>
         </div>
         <Button
@@ -582,7 +583,7 @@ function PurchaseHistorySection({
           disabled={ordersLoading}
         >
           <RefreshCw className={`size-4 ${ordersLoading ? "animate-spin" : ""}`} />
-          Tải lại
+          {t("Tải lại")}
         </Button>
       </div>
 
@@ -590,7 +591,7 @@ function PurchaseHistorySection({
         <div className="rounded-[8px] border border-emerald-100 bg-emerald-50/70 p-3">
           <div className="flex items-center gap-2 text-emerald-700">
             <ReceiptText className="size-4" />
-            <span className="text-xs font-black uppercase">Tổng đơn</span>
+            <span className="text-xs font-black uppercase">{t("Tổng đơn")}</span>
           </div>
           <p className="mt-2 text-2xl font-black text-emerald-950">
             {formatNumber(ordersMeta.totalElements || orders.length)}
@@ -599,7 +600,7 @@ function PurchaseHistorySection({
         <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3">
           <div className="flex items-center gap-2 text-sky-700">
             <PackageCheck className="size-4" />
-            <span className="text-xs font-black uppercase">Đã giao/hoàn tất</span>
+            <span className="text-xs font-black uppercase">{t("Đã giao/hoàn tất")}</span>
           </div>
           <p className="mt-2 text-2xl font-black text-sky-950">
             {formatNumber(completedOrders)}
@@ -608,7 +609,7 @@ function PurchaseHistorySection({
         <div className="rounded-[8px] border border-amber-100 bg-amber-50 p-3">
           <div className="flex items-center gap-2 text-amber-700">
             <CreditCard className="size-4" />
-            <span className="text-xs font-black uppercase">Giá trị hiển thị</span>
+            <span className="text-xs font-black uppercase">{t("Giá trị hiển thị")}</span>
           </div>
           <p className="mt-2 text-2xl font-black text-amber-950">
             {formatCurrency(totalSpent)}
@@ -624,16 +625,16 @@ function PurchaseHistorySection({
 
       {ordersLoading && orders.length === 0 ? (
         <div className="mt-4 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-6 text-center text-sm font-semibold text-emerald-800">
-          Đang tải lịch sử mua hàng...
+          {t("Đang tải lịch sử mua hàng...")}
         </div>
       ) : orders.length === 0 ? (
         <div className="mt-4 rounded-[8px] border border-dashed border-emerald-200 bg-emerald-50/60 p-6 text-center">
           <ShoppingBasket className="mx-auto size-8 text-emerald-700" />
           <p className="mt-3 font-black text-emerald-950">
-            Chưa có đơn hàng nào.
+            {t("Chưa có đơn hàng nào.")}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Khi bạn checkout thành công, đơn hàng sẽ xuất hiện tại đây.
+            {t("Khi bạn checkout thành công, đơn hàng sẽ xuất hiện tại đây.")}
           </p>
         </div>
       ) : (
@@ -705,12 +706,12 @@ function PurchaseHistorySection({
                       {formatCurrency(getOrderTotal(order))}
                     </p>
                     <p className="mt-1 text-muted-foreground">
-                      Phí giao {formatCurrency(order.shippingFee)}
+                      {t("Phí giao")} {formatCurrency(order.shippingFee)}
                     </p>
                   </div>
 
                   <span className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] border border-emerald-100 px-3 text-sm font-black text-emerald-800">
-                    {detailLoading ? "Đang tải" : expanded ? "Thu gọn" : "Chi tiết"}
+                    {detailLoading ? t("Đang tải") : expanded ? t("Thu gọn") : t("Chi tiết")}
                     {expanded ? (
                       <ChevronUp className="size-4" />
                     ) : (
@@ -724,7 +725,7 @@ function PurchaseHistorySection({
                     <div className="grid gap-3 lg:grid-cols-[1.3fr_0.7fr]">
                       <div className="rounded-[8px] border border-emerald-100 bg-white p-3">
                         <p className="mb-3 text-sm font-black uppercase text-emerald-700">
-                          Sản phẩm đã mua
+                          {t("Sản phẩm đã mua")}
                         </p>
                         <div className="space-y-2">
                           {(order.items || []).map((item) => {
@@ -906,23 +907,23 @@ function PurchaseHistorySection({
                         <div className="rounded-[8px] border border-emerald-100 bg-white p-3">
                           <p className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-emerald-700">
                             <CreditCard className="size-4" />
-                            Thanh toán
+                            {t("Thanh toán")}
                           </p>
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between gap-3">
-                              <span className="text-muted-foreground">Tạm tính</span>
+                              <span className="text-muted-foreground">{t("Tạm tính")}</span>
                               <span className="font-bold">{formatCurrency(order.subtotal)}</span>
                             </div>
                             <div className="flex justify-between gap-3">
-                              <span className="text-muted-foreground">Giảm giá</span>
+                              <span className="text-muted-foreground">{t("Giảm giá")}</span>
                               <span className="font-bold">{formatCurrency(order.discountAmount)}</span>
                             </div>
                             <div className="flex justify-between gap-3">
-                              <span className="text-muted-foreground">Phí giao</span>
+                              <span className="text-muted-foreground">{t("Phí giao")}</span>
                               <span className="font-bold">{formatCurrency(order.shippingFee)}</span>
                             </div>
                             <div className="flex justify-between gap-3 border-t border-emerald-100 pt-2 text-base font-black">
-                              <span>Tổng cộng</span>
+                              <span>{t("Tổng cộng")}</span>
                               <span className="text-emerald-700">
                                 {formatCurrency(order.totalPrice)}
                               </span>
@@ -934,7 +935,7 @@ function PurchaseHistorySection({
 
                     <div className="mt-3 rounded-[8px] border border-emerald-100 bg-white p-3">
                       <p className="mb-3 text-sm font-black uppercase text-emerald-700">
-                        Tiến trình đơn hàng
+                        {t("Tiến trình đơn hàng")}
                       </p>
                       {order.statusHistory?.length > 0 ? (
                         <div className="space-y-3">
@@ -959,7 +960,7 @@ function PurchaseHistorySection({
                         </div>
                       ) : (
                         <p className="text-sm font-semibold text-muted-foreground">
-                          Chưa có lịch sử trạng thái chi tiết cho đơn này.
+                          {t("Chưa có lịch sử trạng thái chi tiết cho đơn này.")}
                         </p>
                       )}
                     </div>

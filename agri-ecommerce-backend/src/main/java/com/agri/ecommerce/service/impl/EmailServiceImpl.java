@@ -61,12 +61,6 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.email.reply-to:}")
     private String replyToEmail;
 
-    @Value("${app.email.resend.api-key:}")
-    private String resendApiKey;
-
-    @Value("${app.email.resend.api-url:https://api.resend.com/emails}")
-    private String resendApiUrl;
-
     @Value("${app.email.google-script.url:}")
     private String googleScriptUrl;
 
@@ -100,11 +94,6 @@ public class EmailServiceImpl implements EmailService {
         String subject = "[AgriMarket] Hóa đơn xác nhận đơn đặt hàng " + orderReference;
         String htmlBody = buildInvoiceHtml(invoiceOrder, items);
 
-        if (isResendProvider()) {
-            sendWithResend(invoiceOrder, recipientEmail, fromEmail, subject, htmlBody);
-            return;
-        }
-
         if (isGoogleScriptProvider()) {
             String textBody = buildInvoiceText(invoiceOrder);
             sendWithGoogleScript(invoiceOrder, recipientEmail, subject, htmlBody, textBody);
@@ -136,47 +125,6 @@ public class EmailServiceImpl implements EmailService {
             log.info("[Email Service] Invoice email sent successfully to {} for Order #{}", recipientEmail, invoiceOrder.getId());
         } catch (Exception e) {
             log.error("[Email Service] Failed to send email invoice for Order #{}: {}", invoiceOrder.getId(), e.getMessage(), e);
-        }
-    }
-
-    private void sendWithResend(OrderEntity order, String recipientEmail, String fromEmail, String subject, String htmlBody) {
-        if (!hasText(resendApiKey)) {
-            log.error("[Email Service] EMAIL_PROVIDER=resend but RESEND_API_KEY is not configured. Skipping invoice email for Order #{}.", order.getId());
-            return;
-        }
-
-        if (!hasText(fromEmail)) {
-            log.error("[Email Service] EMAIL_PROVIDER=resend but MAIL_FROM/app.email.from is not configured. Skipping invoice email for Order #{}.", order.getId());
-            return;
-        }
-
-        try {
-            String payload = buildResendPayload(fromEmail, recipientEmail, subject, htmlBody, order.getId());
-            HttpRequest request = HttpRequest.newBuilder(URI.create(resendApiUrl.trim()))
-                    .timeout(EMAIL_API_REQUEST_TIMEOUT)
-                    .header("Authorization", "Bearer " + resendApiKey.trim())
-                    .header("Content-Type", "application/json")
-                    .header("Idempotency-Key", "agri-order-invoice-" + order.getId())
-                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
-                    .build();
-
-            HttpResponse<String> response = emailApiHttpClient.send(
-                    request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
-            );
-
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                log.info("[Email Service] Invoice email sent via Resend to {} for Order #{}", recipientEmail, order.getId());
-                return;
-            }
-
-            log.error("[Email Service] Resend failed for Order #{} with HTTP {}: {}",
-                    order.getId(), response.statusCode(), truncateForLog(response.body()));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.error("[Email Service] Resend email send interrupted for Order #{}: {}", order.getId(), e.getMessage(), e);
-        } catch (Exception e) {
-            log.error("[Email Service] Failed to send email invoice via Resend for Order #{}: {}", order.getId(), e.getMessage(), e);
         }
     }
 
@@ -221,16 +169,6 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
-    private String buildResendPayload(String fromEmail, String recipientEmail, String subject, String htmlBody, Long orderId) {
-        return "{"
-                + "\"from\":" + toJsonString(fromEmail) + ","
-                + "\"to\":[" + toJsonString(recipientEmail) + "],"
-                + "\"subject\":" + toJsonString(subject) + ","
-                + "\"html\":" + toJsonString(htmlBody) + ","
-                + "\"tags\":[{\"name\":\"order_id\",\"value\":" + toJsonString(String.valueOf(orderId)) + "}]"
-                + "}";
-    }
-
     private String buildGoogleScriptPayload(OrderEntity order, String recipientEmail, String subject, String htmlBody, String textBody) {
         return "{"
                 + "\"secret\":" + toJsonString(googleScriptSecret.trim()) + ","
@@ -264,10 +202,6 @@ public class EmailServiceImpl implements EmailService {
         }
 
         return hasText(senderEmail) ? senderEmail.trim() : "";
-    }
-
-    private boolean isResendProvider() {
-        return "resend".equalsIgnoreCase(emailProvider == null ? "" : emailProvider.trim());
     }
 
     private boolean isGoogleScriptProvider() {
