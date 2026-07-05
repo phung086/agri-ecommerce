@@ -132,6 +132,16 @@ AgriMarket <no-reply@your-domain.com>
 
 Không nên dùng domain chưa verify cho production. Nếu dùng sender test của Resend thì có thể bị giới hạn người nhận.
 
+Update 2026-07-05:
+
+- API key Resend đã được tạo trong onboarding, nhưng key xuất hiện rõ trong ảnh chụp màn hình.
+- Không dùng key đã lộ này cho production.
+- Cần vào Resend `API keys`, revoke/delete key đã lộ, sau đó tạo key mới và chỉ đưa key mới vào Railway Variables.
+- Domain đang thử nhập dạng subdomain. Chỉ tiếp tục nếu có quyền quản lý DNS của domain đó; nếu không có quyền thêm DNS records, Resend sẽ không verify được và không gửi production tới khách hàng thật.
+- Domain trong Resend không phải URL frontend/backend Railway/Vercel. Đây là domain dùng làm địa chỉ gửi email, ví dụ `updates.agrimarket.vn`, để email hiển thị từ `AgriMarket <no-reply@updates.agrimarket.vn>`.
+- Nếu chỉ có URL Vercel như `agri-ecommerce-sigma.vercel.app` hoặc URL Railway như `agri-ecommerce-backend-production.up.railway.app`, không nên dùng các domain này làm sending domain vì không sở hữu DNS gốc để thêm bản ghi xác thực email.
+- Domain trường/lớp như `st.phenikaa-uni.edu.vn` chỉ dùng được nếu có quyền thêm DNS records trong hệ thống DNS của domain đó. Thông thường sinh viên không có quyền này, nên production nên dùng domain riêng mua/thuê.
+
 ## 6. Cần làm trên Railway production
 
 Trong Railway service `agri-ecommerce-backend`, environment `production`, thêm/cập nhật:
@@ -200,3 +210,43 @@ Localhost chạy trên mạng máy cá nhân, thường được phép outbound 
 Production Railway chạy trong môi trường cloud/container. Kết nối SMTP outbound tới Gmail có thể timeout hoặc bị hạn chế. Vì vậy local test OK không chứng minh SMTP production sẽ ổn.
 
 Fix bền vững là dùng email API qua HTTPS port `443`, hoặc dùng SMTP provider chuyên dụng có cấu hình production rõ ràng. Trong lần này chọn Resend HTTPS API.
+
+## 9. Ghi chú chi phí custom domain với Vercel
+
+- Thêm custom domain có sẵn vào project Vercel không phải là khoản phí riêng của thao tác cấu hình domain.
+- Chi phí chính là mua/duy trì tên miền, trả theo năm cho Vercel Domains hoặc registrar khác như Cloudflare, Namecheap, Porkbun, Mắt Bão, PA Việt Nam.
+- Vercel Hobby plan miễn phí và có giới hạn 50 custom domains mỗi project, nhưng theo tài liệu Vercel Hobby bị giới hạn cho non-commercial/personal use.
+- Nếu AgriMarket chỉ là đồ án/demo cá nhân, có thể dùng Hobby + domain mua riêng.
+- Nếu triển khai ecommerce thương mại thật, nên dùng Vercel Pro hoặc hạ tầng phù hợp điều khoản production/commercial.
+- Một domain riêng có thể dùng đồng thời cho frontend và email:
+  - `www.agrimarket.vn` cho Vercel frontend.
+  - `api.agrimarket.vn` cho backend Railway nếu cần.
+  - `updates.agrimarket.vn` cho Resend sending domain.
+
+## 10. Phương án gửi mail thật khi chưa có domain riêng
+
+Nếu chưa mua/verify domain riêng, vẫn có thể gửi mail thật bằng tài khoản Gmail hiện có, nhưng không dùng SMTP trên Railway vì port `465/587` đã timeout.
+
+Các lựa chọn:
+
+1. Google Apps Script relay qua HTTPS
+   - Tạo Apps Script bằng tài khoản Gmail gửi mail.
+   - Script dùng `MailApp.sendEmail()` để gửi email.
+   - Backend Railway gọi Apps Script Web App qua HTTPS `443`, tránh SMTP port bị timeout.
+   - Cần thêm secret để chỉ backend được gọi endpoint.
+   - Phù hợp demo/đồ án vì nhanh, miễn phí, gửi từ Gmail thật.
+   - Giới hạn theo Google Apps Script: consumer Gmail khoảng `100` recipients/day, Google Workspace khoảng `1,500` recipients/day; quota có thể thay đổi theo chính sách Google.
+
+2. Gmail API trực tiếp
+   - Backend lấy OAuth refresh token rồi gọi Gmail API `users.messages.send`.
+   - Gửi từ Gmail thật qua HTTPS.
+   - Đúng kỹ thuật hơn Apps Script relay nhưng setup OAuth phức tạp hơn và cần lưu `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`.
+
+3. Resend test domain
+   - Có thể dùng `onboarding@resend.dev` để test gửi tới email chính của tài khoản Resend.
+   - Không gửi production tới khách hàng khác được nếu chưa verify domain riêng; Resend trả lỗi `403`.
+
+Khuyến nghị hiện tại:
+
+- Nếu mục tiêu là demo sớm bằng những gì đang có: dùng Google Apps Script relay.
+- Nếu mục tiêu là production sạch và dễ mở rộng: dùng Resend với domain riêng đã verify.

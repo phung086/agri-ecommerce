@@ -835,7 +835,14 @@ const patterns = [
   [/^Tìm (.+)$/i, (_, value) => `Search ${translateTerm(value)}`],
   [/^Không tìm thấy (.+)$/i, (_, value) => `No ${translateTerm(value)} found`],
   [/^Chưa có (.+)$/i, (_, value) => `No ${translateTerm(value)}`],
-  [/^Cần (.+)$/i, (_, value) => `Needs ${translateTerm(value)}`],
+  [/^Cần (.+)$/i, (_, value) => {
+    const term = String(value).trim();
+    if (/^[A-Za-z0-9\s.,;:!?'-]+$/.test(term)) {
+      return `Need ${term}`;
+    }
+    const trans = translateTerm(term);
+    return trans && trans !== term ? `Need ${trans}` : `Need ${term}`;
+  }],
   [/^Không thể tải (.+?)\.?$/i, (_, value) => `Could not load ${translateTerm(value)}.`],
   [/^Đang tải (.+)\.\.\.$/i, (_, value) => `Loading ${translateTerm(value)}...`],
   [/^Đã tải ảnh (.+) lên server\.$/i, (_, value) => `${capitalize(translateTerm(value))} image uploaded to the server.`],

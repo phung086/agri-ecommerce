@@ -32,8 +32,8 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class EmailServiceImpl implements EmailService {
 
-    private static final Duration RESEND_CONNECT_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration RESEND_REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final Duration EMAIL_API_CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration EMAIL_API_REQUEST_TIMEOUT = Duration.ofSeconds(15);
     private static final int LOG_BODY_MAX_LENGTH = 500;
 
     @Autowired(required = false)
@@ -41,8 +41,9 @@ public class EmailServiceImpl implements EmailService {
 
     private final OrderItemRepository orderItemRepository;
     private final OrderRepository orderRepository;
-    private final HttpClient resendHttpClient = HttpClient.newBuilder()
-            .connectTimeout(RESEND_CONNECT_TIMEOUT)
+    private final HttpClient emailApiHttpClient = HttpClient.newBuilder()
+            .connectTimeout(EMAIL_API_CONNECT_TIMEOUT)
+            .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
     @Value("${spring.mail.username:}")
@@ -54,11 +55,23 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.email.from:${spring.mail.username:}}")
     private String configuredFromEmail;
 
+    @Value("${app.email.from-name:AgriMarket}")
+    private String configuredFromName;
+
+    @Value("${app.email.reply-to:}")
+    private String replyToEmail;
+
     @Value("${app.email.resend.api-key:}")
     private String resendApiKey;
 
     @Value("${app.email.resend.api-url:https://api.resend.com/emails}")
     private String resendApiUrl;
+
+    @Value("${app.email.google-script.url:}")
+    private String googleScriptUrl;
+
+    @Value("${app.email.google-script.secret:}")
+    private String googleScriptSecret;
 
     @Async
     @Override
@@ -89,6 +102,12 @@ public class EmailServiceImpl implements EmailService {
 
         if (isResendProvider()) {
             sendWithResend(invoiceOrder, recipientEmail, fromEmail, subject, htmlBody);
+            return;
+        }
+
+        if (isGoogleScriptProvider()) {
+            String textBody = buildInvoiceText(invoiceOrder);
+            sendWithGoogleScript(invoiceOrder, recipientEmail, subject, htmlBody, textBody);
             return;
         }
 
@@ -134,7 +153,7 @@ public class EmailServiceImpl implements EmailService {
         try {
             String payload = buildResendPayload(fromEmail, recipientEmail, subject, htmlBody, order.getId());
             HttpRequest request = HttpRequest.newBuilder(URI.create(resendApiUrl.trim()))
-                    .timeout(RESEND_REQUEST_TIMEOUT)
+                    .timeout(EMAIL_API_REQUEST_TIMEOUT)
                     .header("Authorization", "Bearer " + resendApiKey.trim())
                     .header("Content-Type", "application/json")
                     .header("Idempotency-Key", "agri-order-invoice-" + order.getId())
@@ -161,6 +180,47 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
+    private void sendWithGoogleScript(OrderEntity order, String recipientEmail, String subject, String htmlBody, String textBody) {
+        if (!hasText(googleScriptUrl)) {
+            log.error("[Email Service] EMAIL_PROVIDER=google-script but GOOGLE_SCRIPT_MAIL_URL is not configured. Skipping invoice email for Order #{}.", order.getId());
+            return;
+        }
+
+        if (!hasText(googleScriptSecret)) {
+            log.error("[Email Service] EMAIL_PROVIDER=google-script but GOOGLE_SCRIPT_MAIL_SECRET is not configured. Skipping invoice email for Order #{}.", order.getId());
+            return;
+        }
+
+        try {
+            String payload = buildGoogleScriptPayload(order, recipientEmail, subject, htmlBody, textBody);
+            HttpRequest request = HttpRequest.newBuilder(URI.create(googleScriptUrl.trim()))
+                    .timeout(EMAIL_API_REQUEST_TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .header("Idempotency-Key", "agri-order-invoice-" + order.getId())
+                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = emailApiHttpClient.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+            );
+
+            String responseBody = response.body();
+            if (response.statusCode() >= 200 && response.statusCode() < 300 && responseBody != null && responseBody.contains("\"ok\":true")) {
+                log.info("[Email Service] Invoice email sent via Google Apps Script to {} for Order #{}", recipientEmail, order.getId());
+                return;
+            }
+
+            log.error("[Email Service] Google Apps Script mail relay failed for Order #{} with HTTP {}: {}",
+                    order.getId(), response.statusCode(), truncateForLog(responseBody));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("[Email Service] Google Apps Script email send interrupted for Order #{}: {}", order.getId(), e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("[Email Service] Failed to send email invoice via Google Apps Script for Order #{}: {}", order.getId(), e.getMessage(), e);
+        }
+    }
+
     private String buildResendPayload(String fromEmail, String recipientEmail, String subject, String htmlBody, Long orderId) {
         return "{"
                 + "\"from\":" + toJsonString(fromEmail) + ","
@@ -168,6 +228,21 @@ public class EmailServiceImpl implements EmailService {
                 + "\"subject\":" + toJsonString(subject) + ","
                 + "\"html\":" + toJsonString(htmlBody) + ","
                 + "\"tags\":[{\"name\":\"order_id\",\"value\":" + toJsonString(String.valueOf(orderId)) + "}]"
+                + "}";
+    }
+
+    private String buildGoogleScriptPayload(OrderEntity order, String recipientEmail, String subject, String htmlBody, String textBody) {
+        return "{"
+                + "\"secret\":" + toJsonString(googleScriptSecret.trim()) + ","
+                + "\"to\":" + toJsonString(recipientEmail) + ","
+                + "\"subject\":" + toJsonString(subject) + ","
+                + "\"htmlBody\":" + toJsonString(htmlBody) + ","
+                + "\"textBody\":" + toJsonString(textBody) + ","
+                + "\"name\":" + toJsonString(resolveFromName()) + ","
+                + "\"replyTo\":" + toJsonString(resolveReplyTo()) + ","
+                + "\"orderId\":" + toJsonString(String.valueOf(order.getId())) + ","
+                + "\"trackingNumber\":" + toJsonString(order.getTrackingNumber()) + ","
+                + "\"source\":" + toJsonString("agri-ecommerce-backend")
                 + "}";
     }
 
@@ -179,8 +254,24 @@ public class EmailServiceImpl implements EmailService {
         return hasText(senderEmail) ? senderEmail.trim() : "";
     }
 
+    private String resolveFromName() {
+        return hasText(configuredFromName) ? configuredFromName.trim() : "AgriMarket";
+    }
+
+    private String resolveReplyTo() {
+        if (hasText(replyToEmail)) {
+            return replyToEmail.trim();
+        }
+
+        return hasText(senderEmail) ? senderEmail.trim() : "";
+    }
+
     private boolean isResendProvider() {
         return "resend".equalsIgnoreCase(emailProvider == null ? "" : emailProvider.trim());
+    }
+
+    private boolean isGoogleScriptProvider() {
+        return "google-script".equalsIgnoreCase(emailProvider == null ? "" : emailProvider.trim());
     }
 
     private boolean hasText(String value) {
@@ -223,6 +314,18 @@ public class EmailServiceImpl implements EmailService {
         }
 
         return value.substring(0, LOG_BODY_MAX_LENGTH) + "...";
+    }
+
+    private String buildInvoiceText(OrderEntity order) {
+        NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
+        String orderReference = order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId();
+        String recipientName = order.getShippingName() != null ? order.getShippingName() : order.getUser().getName();
+
+        return "Cam on ban da dat hang tai AgriMarket.\n"
+                + "Ma don hang: " + orderReference + "\n"
+                + "Nguoi nhan: " + recipientName + "\n"
+                + "Tong cong: " + currencyFormat.format(order.getTotalPrice()) + "\n"
+                + "Don hang cua ban dang cho xu ly va se duoc cap nhat khi giao hang.";
     }
 
     private String buildInvoiceHtml(OrderEntity order, List<OrderItemEntity> items) {
