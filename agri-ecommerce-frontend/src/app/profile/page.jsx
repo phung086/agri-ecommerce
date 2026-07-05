@@ -198,20 +198,17 @@ function AuthPanel({ onAuthenticated }) {
     return phoneRegex.test(phone);
   }
 
+  const [registerAddress, setRegisterAddress] = useState(() => createVietnamAddressForm());
+
   function updateLogin(field, value) {
     setLoginForm((current) => ({ ...current, [field]: value }));
   }
 
   function updateRegister(field, value) {
     if (field === "phoneNumber") {
-      // Only allow digits
       const digitsOnly = value.replace(/\D/g, "");
-      // Limit to 10 digits
       const limited = digitsOnly.slice(0, 10);
-      
       setRegisterForm((current) => ({ ...current, [field]: limited }));
-      
-      // Validate realtime
       if (limited === "") {
         setPhoneError("");
       } else if (!validatePhoneNumber(limited)) {
@@ -232,26 +229,64 @@ function AuthPanel({ onAuthenticated }) {
 
     try {
       if (!isLogin) {
-        // Validate phone number before submitting
         if (registerForm.phoneNumber && !validatePhoneNumber(registerForm.phoneNumber)) {
           setError("Vui lòng nhập số điện thoại hợp lệ (bắt đầu bằng 0 và có 10 chữ số)");
           setLoading(false);
           return;
         }
 
-        await authService.register({
+        // Kiểm tra xem địa chỉ Việt Nam đã được nhập đầy đủ chưa
+        if (!isVietnamAddressComplete(registerAddress)) {
+          setError("Vui lòng chọn đầy đủ Tỉnh/Thành phố, Quận/Huyện, Phường/Xã và nhập địa chỉ cụ thể.");
+          setLoading(false);
+          return;
+        }
+
+        const fullAddr = buildFullVietnamAddress(registerAddress);
+
+        // 1. Đăng ký tài khoản khách hàng
+        const registerResponse = await authService.register({
           name: registerForm.name.trim(),
           email: registerForm.email.trim(),
           password: registerForm.password,
           phoneNumber: registerForm.phoneNumber.trim(),
-          address: registerForm.address.trim(),
+          address: fullAddr,
         });
+
+        // 2. Đăng nhập ngay lập tức để lấy token lưu session
+        const loginResponse = await authService.login({
+          email: registerForm.email.trim(),
+          password: registerForm.password,
+        });
+        const payload = unwrapApiData(loginResponse);
+
+        if (payload?.accessToken) {
+          saveAuthSession(payload, { remember, scope: AUTH_SCOPES.customer });
+          
+          // 3. Tạo địa chỉ giao hàng mặc định ngay sau khi đăng nhập thành công
+          try {
+            await shippingAddressService.createAddress({
+              fullName: registerForm.name.trim(),
+              phone: registerForm.phoneNumber.trim(),
+              city: registerAddress.provinceName,
+              address: buildDetailedAddress(registerAddress),
+              defaultAddress: true,
+            });
+          } catch (addrErr) {
+            console.warn("Failed to create default shipping address on registration:", addrErr);
+          }
+
+          onAuthenticated(payload.user || null);
+          router.replace("/");
+          return;
+        }
 
         setLoginForm({
           email: registerForm.email.trim(),
           password: "",
         });
         setRegisterForm(blankRegisterForm);
+        setRegisterAddress(createVietnamAddressForm());
         setShowPassword(false);
         setMode("login");
         setNotice("Đăng ký thành công. Vui lòng đăng nhập để vào hồ sơ.");
@@ -300,6 +335,7 @@ function AuthPanel({ onAuthenticated }) {
         </div>
       </div>
 
+      {/* Tabs Đăng nhập/Đăng ký */}
       <div className="mb-5 grid grid-cols-2 gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50/70 p-1">
         {[
           { value: "login", label: "Đăng nhập" },
@@ -324,10 +360,39 @@ function AuthPanel({ onAuthenticated }) {
         ))}
       </div>
 
+      {/* Tabs Lựa chọn vai trò Đăng nhập đa vai trò trực tiếp */}
+      {isLogin && (
+        <div className="mb-5">
+          <Label className="mb-2 block text-xs font-black uppercase text-slate-500">Vai trò đăng nhập</Label>
+          <div className="grid grid-cols-3 gap-2 rounded-[8px] border border-slate-100 bg-slate-50 p-1">
+            <button
+              type="button"
+              className="h-8 rounded-[6px] text-xs font-bold bg-white text-emerald-800 shadow-sm"
+            >
+              Khách hàng
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/delivery")}
+              className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
+            >
+              Giao hàng
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/admin/login")}
+              className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
+            >
+              Quản trị viên
+            </button>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         {!isLogin && (
           <div className="space-y-2">
-            <Label htmlFor="register-name">Họ tên</Label>
+            <Label htmlFor="register-name">Họ và tên</Label>
             <div className="relative">
               <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <Input
@@ -344,7 +409,7 @@ function AuthPanel({ onAuthenticated }) {
 
         <div className="space-y-2">
           <Label htmlFor={isLogin ? "login-email" : "register-email"}>
-            Email
+            Địa chỉ email
           </Label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -402,7 +467,7 @@ function AuthPanel({ onAuthenticated }) {
         </div>
 
         {!isLogin && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <>
             <div className="space-y-2">
               <Label htmlFor="register-phone">Số điện thoại</Label>
               <div className="relative">
@@ -417,28 +482,24 @@ function AuthPanel({ onAuthenticated }) {
                   className={`h-11 pl-9 ${phoneError ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                   placeholder="090xxxxxxxx"
                   maxLength="10"
+                  required
                 />
               </div>
               {phoneError && (
                 <p className="text-sm font-medium text-red-600">{phoneError}</p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="register-address">Địa chỉ</Label>
-              <div className="relative">
-                <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  id="register-address"
-                  value={registerForm.address}
-                  onChange={(event) =>
-                    updateRegister("address", event.target.value)
-                  }
-                  className="h-11 pl-9"
-                  placeholder="Địa chỉ nhận hàng"
-                />
-              </div>
+
+            <div className="border-t border-emerald-100/50 pt-4 mt-2">
+              <Label className="mb-3 block text-sm font-black text-emerald-800">Địa chỉ giao hàng mặc định (Việt Nam)</Label>
+              <VietnamAddressFields
+                value={registerAddress}
+                onChange={setRegisterAddress}
+                idPrefix="register-address"
+                className="bg-emerald-50/20 p-3 rounded-lg border border-emerald-100/50"
+              />
             </div>
-          </div>
+          </>
         )}
 
         <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
@@ -472,12 +533,13 @@ function AuthPanel({ onAuthenticated }) {
             ? "Đang xử lý..."
             : isLogin
               ? "Đăng nhập"
-              : "Đăng ký"}
+              : "Đăng ký tài khoản"}
           {!loading && <CheckCircle2 className="size-4" />}
         </Button>
       </form>
     </section>
   );
+}
 }
 
 function PurchaseHistorySection({

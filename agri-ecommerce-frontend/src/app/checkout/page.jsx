@@ -604,7 +604,7 @@ export default function CheckoutPage() {
   const hasServerDiscount = checkoutQuoteReady && summary.discountAmount > 0;
   const hasServerFreeShipping =
     checkoutQuoteReady && cartItems.length > 0 && summary.shippingFee === 0;
-  const pendingAmountLabel = previewing ? "Đang tính..." : "Chờ API";
+  const pendingAmountLabel = previewing ? "Đang tính..." : "Đang tính toán...";
   const totalAmountLabel = checkoutQuoteReady
     ? formatCurrency(summary.totalPrice)
     : pendingAmountLabel;
