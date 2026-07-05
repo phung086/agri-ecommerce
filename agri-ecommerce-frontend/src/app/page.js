@@ -883,7 +883,7 @@ function WishlistDrawer({
 
 export default function Home() {
   const router = useRouter();
-  const { locale } = useLanguage();
+  const { locale, t } = useLanguage();
   const [filters, setFilters] = useState({
     keyword: "",
     categorySlug: ALL_CATEGORY,

@@ -79,15 +79,17 @@ File: `src/main/java/com/agri/ecommerce/service/impl/EmailServiceImpl.java`
 - Giữ nguyên SMTP/JavaMailSender làm mặc định cho local/dev.
 - Thêm provider mới qua config:
   - `EMAIL_PROVIDER=smtp` mặc định.
-  - `EMAIL_PROVIDER=resend` để bật Resend trên production.
-- Khi provider là `resend`, service sẽ:
+  - `EMAIL_PROVIDER=google-script` để bật Google Apps Script relay trên demo production.
+- Khi provider là `google-script`, service sẽ:
   - lấy email người nhận từ `order.user.email`;
   - build subject và HTML hóa đơn như trước;
-  - POST payload JSON tới `RESEND_API_URL`;
-  - dùng header `Authorization: Bearer <RESEND_API_KEY>`;
+  - build thêm text fallback body;
+  - POST payload JSON tới `GOOGLE_SCRIPT_MAIL_URL`;
+  - gửi kèm `GOOGLE_SCRIPT_MAIL_SECRET` để Apps Script kiểm tra;
   - dùng `Idempotency-Key: agri-order-invoice-<orderId>` để hạn chế gửi trùng trong trường hợp retry;
-  - log rõ HTTP status/body rút gọn nếu Resend trả lỗi.
-- Nếu bật Resend nhưng thiếu `RESEND_API_KEY` hoặc `MAIL_FROM`, service sẽ log lỗi cấu hình và không fallback mù sang SMTP production.
+- log rõ HTTP status/body rút gọn nếu Apps Script trả lỗi.
+- Nếu bật `google-script` nhưng thiếu `GOOGLE_SCRIPT_MAIL_URL` hoặc `GOOGLE_SCRIPT_MAIL_SECRET`, service sẽ log lỗi cấu hình và bỏ qua gửi mail.
+- Đã xóa provider Resend khỏi code sau khi chọn Google Apps Script làm phương án cuối cho demo.
 
 ### `application.yml`
 
@@ -100,9 +102,11 @@ app:
   email:
     provider: ${EMAIL_PROVIDER:smtp}
     from: ${MAIL_FROM:${SPRING_MAIL_USERNAME:}}
-    resend:
-      api-key: ${RESEND_API_KEY:}
-      api-url: ${RESEND_API_URL:https://api.resend.com/emails}
+    from-name: ${MAIL_FROM_NAME:AgriMarket}
+    reply-to: ${MAIL_REPLY_TO:${SPRING_MAIL_USERNAME:}}
+    google-script:
+      url: ${GOOGLE_SCRIPT_MAIL_URL:}
+      secret: ${GOOGLE_SCRIPT_MAIL_SECRET:}
 ```
 
 ### `.env.example`
@@ -114,55 +118,45 @@ File: `.env.example`
 ```properties
 EMAIL_PROVIDER=smtp
 MAIL_FROM=AgriMarket <no-reply@example.com>
-RESEND_API_KEY=your_resend_api_key_here
-RESEND_API_URL=https://api.resend.com/emails
+MAIL_FROM_NAME=AgriMarket
+MAIL_REPLY_TO=agrimarket.ecommerce@gmail.com
+GOOGLE_SCRIPT_MAIL_URL=https://script.google.com/macros/s/your_deployment_id/exec
+GOOGLE_SCRIPT_MAIL_SECRET=replace_with_a_long_random_secret
 ```
 
 ### Test
 
 File: `src/test/java/com/agri/ecommerce/service/EmailServiceImplTest.java`
 
-- Thêm unit test giả lập Resend endpoint bằng local HTTP server.
-- Test xác nhận backend gửi `POST /emails` đúng header và payload:
-  - `Authorization`
+- Thêm unit test giả lập Google Apps Script endpoint bằng local HTTP server.
+- Test xác nhận backend gửi `POST /emails` đúng payload:
   - `Idempotency-Key`
-  - `from`
   - `to`
-  - `subject`
-  - `tags.order_id`
+  - `secret`
+  - `replyTo`
+  - `trackingNumber`
+  - `source`
 
-## 5. Cần làm trên Resend
-
-1. Tạo tài khoản Resend hoặc dùng tài khoản hiện có.
-2. Tạo API key.
-3. Add và verify domain gửi mail.
-4. Chọn sender email đã verify, ví dụ:
-
-```text
-AgriMarket <no-reply@your-domain.com>
-```
-
-Không nên dùng domain chưa verify cho production. Nếu dùng sender test của Resend thì có thể bị giới hạn người nhận.
+## 5. Ghi chú Resend đã loại bỏ
 
 Update 2026-07-05:
 
-- API key Resend đã được tạo trong onboarding, nhưng key xuất hiện rõ trong ảnh chụp màn hình.
-- Không dùng key đã lộ này cho production.
-- Cần vào Resend `API keys`, revoke/delete key đã lộ, sau đó tạo key mới và chỉ đưa key mới vào Railway Variables.
-- Domain đang thử nhập dạng subdomain. Chỉ tiếp tục nếu có quyền quản lý DNS của domain đó; nếu không có quyền thêm DNS records, Resend sẽ không verify được và không gửi production tới khách hàng thật.
-- Domain trong Resend không phải URL frontend/backend Railway/Vercel. Đây là domain dùng làm địa chỉ gửi email, ví dụ `updates.agrimarket.vn`, để email hiển thị từ `AgriMarket <no-reply@updates.agrimarket.vn>`.
-- Nếu chỉ có URL Vercel như `agri-ecommerce-sigma.vercel.app` hoặc URL Railway như `agri-ecommerce-backend-production.up.railway.app`, không nên dùng các domain này làm sending domain vì không sở hữu DNS gốc để thêm bản ghi xác thực email.
-- Domain trường/lớp như `st.phenikaa-uni.edu.vn` chỉ dùng được nếu có quyền thêm DNS records trong hệ thống DNS của domain đó. Thông thường sinh viên không có quyền này, nên production nên dùng domain riêng mua/thuê.
+- Resend đã được cân nhắc vì gửi qua HTTPS `443`, tránh lỗi Railway timeout SMTP.
+- Không chọn Resend làm phương án demo cuối vì chưa có domain riêng để verify DNS.
+- Code/config/test/env mẫu liên quan Resend đã được xóa.
+- Railway production cũng đã kiểm tra/xóa các biến `RESEND_API_KEY`, `RESEND_API_URL` nếu có.
+- Phần này chỉ giữ lại làm lịch sử phân tích cho báo cáo thực tập.
 
 ## 6. Cần làm trên Railway production
 
 Trong Railway service `agri-ecommerce-backend`, environment `production`, thêm/cập nhật:
 
 ```properties
-EMAIL_PROVIDER=resend
-RESEND_API_KEY=<Resend API key thật>
-MAIL_FROM=AgriMarket <no-reply@your-verified-domain.com>
-RESEND_API_URL=https://api.resend.com/emails
+EMAIL_PROVIDER=google-script
+MAIL_FROM_NAME=AgriMarket
+MAIL_REPLY_TO=agrimarket.ecommerce@gmail.com
+GOOGLE_SCRIPT_MAIL_URL=https://script.google.com/macros/s/AKfycbzJODyzm7wXo2PoFd0g5RKbDZ2N5O3ypiPooWstHx54-dBZahxdWs-YigEemUwIkBUp/exec
+GOOGLE_SCRIPT_MAIL_SECRET=<giống MAIL_SECRET trong Apps Script>
 ```
 
 Có thể dùng UI Railway Variables hoặc CLI.
@@ -170,17 +164,18 @@ Có thể dùng UI Railway Variables hoặc CLI.
 CLI mẫu:
 
 ```powershell
-railway variable set EMAIL_PROVIDER=resend --service agri-ecommerce-backend --environment production
-railway variable set RESEND_API_KEY=<Resend API key thật> --service agri-ecommerce-backend --environment production
-railway variable set "MAIL_FROM=AgriMarket <no-reply@your-verified-domain.com>" --service agri-ecommerce-backend --environment production
-railway variable set RESEND_API_URL=https://api.resend.com/emails --service agri-ecommerce-backend --environment production
+railway variable set EMAIL_PROVIDER=google-script --service agri-ecommerce-backend --environment production
+railway variable set MAIL_FROM_NAME=AgriMarket --service agri-ecommerce-backend --environment production
+railway variable set MAIL_REPLY_TO=agrimarket.ecommerce@gmail.com --service agri-ecommerce-backend --environment production
+railway variable set GOOGLE_SCRIPT_MAIL_URL=<Apps Script /exec URL> --service agri-ecommerce-backend --environment production
+railway variable set GOOGLE_SCRIPT_MAIL_SECRET=<secret> --service agri-ecommerce-backend --environment production
 ```
 
 Lưu ý bảo mật:
 
 - Không chụp màn hình/gửi log output từ `railway variable list`. Railway CLI trên máy hiện tại có thể in raw secret ngay cả khi không dùng `--json` hoặc `--kv`.
 - Không commit `.env` thật.
-- Không ghi API key thật vào báo cáo.
+- Không ghi secret thật vào báo cáo công khai.
 
 Sau khi set biến, redeploy backend:
 
@@ -200,20 +195,21 @@ railway up --service agri-ecommerce-backend --detach
    - thành công mong đợi:
 
 ```text
-[Email Service] Invoice email sent via Resend to <email> for Order #<id>
+[Email Service] Invoice email sent via Google Apps Script to <email> for Order #<id>
 ```
 
-   - nếu thiếu key:
+   - nếu thiếu URL hoặc secret:
 
 ```text
-EMAIL_PROVIDER=resend but RESEND_API_KEY is not configured
+EMAIL_PROVIDER=google-script but GOOGLE_SCRIPT_MAIL_URL is not configured
+EMAIL_PROVIDER=google-script but GOOGLE_SCRIPT_MAIL_SECRET is not configured
 ```
 
-   - nếu sender chưa verify hoặc domain lỗi, Resend sẽ trả HTTP `4xx` và body lỗi sẽ được log rút gọn.
+   - nếu Apps Script sai secret hoặc lỗi quyền gửi mail, backend sẽ log `Google Apps Script mail relay failed`.
 5. Kiểm tra hộp thư:
    - Inbox;
    - Spam/Promotions;
-   - Resend dashboard logs.
+   - Apps Script `Nhật ký thực thi`.
 
 ## 8. Vì sao local chạy được nhưng Railway lỗi
 
@@ -221,7 +217,7 @@ Localhost chạy trên mạng máy cá nhân, thường được phép outbound 
 
 Production Railway chạy trong môi trường cloud/container. Kết nối SMTP outbound tới Gmail có thể timeout hoặc bị hạn chế. Vì vậy local test OK không chứng minh SMTP production sẽ ổn.
 
-Fix bền vững là dùng email API qua HTTPS port `443`, hoặc dùng SMTP provider chuyên dụng có cấu hình production rõ ràng. Trong lần này chọn Resend HTTPS API.
+Fix phù hợp cho demo là dùng Google Apps Script relay qua HTTPS port `443`. Nếu sau này chạy production thương mại, có thể nâng cấp sang email provider chuyên dụng kèm domain riêng đã verify.
 
 ## 9. Ghi chú chi phí custom domain với Vercel
 
@@ -233,7 +229,7 @@ Fix bền vững là dùng email API qua HTTPS port `443`, hoặc dùng SMTP pro
 - Một domain riêng có thể dùng đồng thời cho frontend và email:
   - `www.agrimarket.vn` cho Vercel frontend.
   - `api.agrimarket.vn` cho backend Railway nếu cần.
-  - `updates.agrimarket.vn` cho Resend sending domain.
+  - `updates.agrimarket.vn` cho email provider chuyên dụng nếu sau này cần nâng cấp.
 
 ## 10. Phương án gửi mail thật khi chưa có domain riêng
 
@@ -295,11 +291,7 @@ GOOGLE_SCRIPT_MAIL_SECRET=<secret giống MAIL_SECRET trong Apps Script>
    - Gửi từ Gmail thật qua HTTPS.
    - Đúng kỹ thuật hơn Apps Script relay nhưng setup OAuth phức tạp hơn và cần lưu `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`.
 
-3. Resend test domain
-   - Có thể dùng `onboarding@resend.dev` để test gửi tới email chính của tài khoản Resend.
-   - Không gửi production tới khách hàng khác được nếu chưa verify domain riêng; Resend trả lỗi `403`.
-
 Khuyến nghị hiện tại:
 
 - Nếu mục tiêu là demo sớm bằng những gì đang có: dùng Google Apps Script relay.
-- Nếu mục tiêu là production sạch và dễ mở rộng: dùng Resend với domain riêng đã verify.
+- Nếu mục tiêu là production thương mại thật: dùng email provider chuyên dụng với domain riêng đã verify.
