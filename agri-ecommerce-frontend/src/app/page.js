@@ -1383,23 +1383,23 @@ export default function Home() {
   const marketStats = [
     {
       value: `${formatNumber(Math.max(totalProducts, productCards.length))}+`,
-      label: "Sản phẩm sẵn sàng",
+      label: t("Sản phẩm sẵn sàng"),
       icon: ShoppingBasket,
-      description: "Đang mở bán tại cửa hàng",
+      description: t("Đang mở bán tại cửa hàng"),
       tone: "green",
     },
     {
       value: `${formatNumber(Math.max(categoryOptions.length - 1, 0))}+`,
-      label: "Nhóm nông sản",
+      label: t("Nhóm nông sản"),
       icon: Leaf,
-      description: "Lọc nhanh theo nhu cầu",
+      description: t("Lọc nhanh theo nhu cầu"),
       tone: "amber",
     },
     {
       value: "2h",
-      label: "Giao nhanh nội thành",
+      label: t("Giao nhanh nội thành"),
       icon: Truck,
-      description: "Ước tính giao trong ngày",
+      description: t("Ước tính giao trong ngày"),
       tone: "blue",
     },
   ];

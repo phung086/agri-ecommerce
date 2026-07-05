@@ -64,9 +64,14 @@ app:
   email:
     provider: ${EMAIL_PROVIDER:smtp}
     from: ${MAIL_FROM:${SPRING_MAIL_USERNAME:}}
+    from-name: ${MAIL_FROM_NAME:AgriMarket}
+    reply-to: ${MAIL_REPLY_TO:${SPRING_MAIL_USERNAME:}}
     resend:
       api-key: ${RESEND_API_KEY:}
       api-url: ${RESEND_API_URL:https://api.resend.com/emails}
+    google-script:
+      url: ${GOOGLE_SCRIPT_MAIL_URL:}
+      secret: ${GOOGLE_SCRIPT_MAIL_SECRET:}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:https://agri-ecommerce*.vercel.app}

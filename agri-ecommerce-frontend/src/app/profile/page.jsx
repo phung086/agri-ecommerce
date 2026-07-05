@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useLanguage } from "@/i18n/language-provider";
 import {
   ArrowLeft,
   CalendarClock,
@@ -1059,6 +1060,7 @@ function mapShippingAddressToForm(shippingAddress) {
 }
 
 export default function CustomerProfilePage() {
+  const { t } = useLanguage();
   const [authStatus, setAuthStatus] = useState("checking");
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(blankProfileForm);
@@ -1815,7 +1817,7 @@ export default function CustomerProfilePage() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-slate-900">{profile?.name || "Thành viên"}</p>
+                  <p className="truncate text-sm font-black text-slate-900">{profile?.name || t("Thành viên")}</p>
                   <button
                     onClick={() => setActiveTab("profile")}
                     className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-emerald-700 transition"
@@ -1823,13 +1825,13 @@ export default function CustomerProfilePage() {
                     <svg className="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
-                    Sửa hồ sơ
+                    {t("Sửa hồ sơ")}
                   </button>
                 </div>
               </div>
 
               <nav className="space-y-1">
-                <div className="px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-400">Tài khoản của tôi</div>
+                <div className="px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-400">{t("Tài khoản của tôi")}</div>
                 <button
                   onClick={() => setActiveTab("profile")}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition ${
@@ -1839,7 +1841,7 @@ export default function CustomerProfilePage() {
                   }`}
                 >
                   <UserRound className="size-4" />
-                  Hồ sơ cá nhân
+                  {t("Hồ sơ cá nhân")}
                 </button>
                 <button
                   onClick={() => setActiveTab("addresses")}
@@ -1850,7 +1852,7 @@ export default function CustomerProfilePage() {
                   }`}
                 >
                   <MapPin className="size-4" />
-                  Địa chỉ nhận hàng
+                  {t("Địa chỉ nhận hàng")}
                 </button>
                 <button
                   onClick={() => setActiveTab("password")}
@@ -1861,10 +1863,10 @@ export default function CustomerProfilePage() {
                   }`}
                 >
                   <LockKeyhole className="size-4" />
-                  Đổi mật khẩu
+                  {t("Đổi mật khẩu")}
                 </button>
 
-                <div className="pt-4 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-400">Quản lý giao dịch</div>
+                <div className="pt-4 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-400">{t("Quản lý giao dịch")}</div>
                 <button
                   onClick={() => {
                     setActiveTab("orders");
@@ -1877,7 +1879,7 @@ export default function CustomerProfilePage() {
                   }`}
                 >
                   <ReceiptText className="size-4" />
-                  Đơn mua của tôi
+                  {t("Đơn mua của tôi")}
                 </button>
               </nav>
             </aside>
@@ -2243,11 +2245,11 @@ export default function CustomerProfilePage() {
                   {/* Thanh Phân loại Trạng thái Đơn hàng Shopee Style */}
                   <div className="flex border-b border-slate-200 bg-white rounded-xl shadow-sm overflow-x-auto whitespace-nowrap">
                     {[
-                      { value: "all", label: "Tất cả" },
-                      { value: "pending", label: "Chờ xử lý" },
-                      { value: "delivering", label: "Đang giao" },
-                      { value: "completed", label: "Hoàn tất" },
-                      { value: "canceled", label: "Đã hủy" },
+                      { value: "all", label: t("Tất cả") },
+                      { value: "pending", label: t("Chờ xử lý") },
+                      { value: "delivering", label: t("Đang giao") },
+                      { value: "completed", label: t("Hoàn tất") },
+                      { value: "canceled", label: t("Đã hủy") },
                     ].map((tab) => (
                       <button
                         key={tab.value}

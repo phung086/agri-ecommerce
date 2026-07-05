@@ -160,7 +160,7 @@ public class EmailServiceImpl implements EmailService {
                     .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
                     .build();
 
-            HttpResponse<String> response = resendHttpClient.send(
+            HttpResponse<String> response = emailApiHttpClient.send(
                     request,
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
             );

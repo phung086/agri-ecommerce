@@ -37,7 +37,7 @@ class EmailServiceImplTest {
     private OrderRepository orderRepository;
 
     private EmailServiceImpl emailService;
-    private HttpServer resendServer;
+    private HttpServer emailRelayServer;
     private final List<RecordedRequest> recordedRequests = new CopyOnWriteArrayList<>();
 
     @BeforeEach
@@ -47,14 +47,14 @@ class EmailServiceImplTest {
 
     @AfterEach
     void tearDown() {
-        if (resendServer != null) {
-            resendServer.stop(0);
+        if (emailRelayServer != null) {
+            emailRelayServer.stop(0);
         }
     }
 
     @Test
     void sendOrderInvoice_whenResendConfigured_shouldPostEmailPayloadToResend() throws Exception {
-        int port = startResendServer();
+        int port = startEmailRelayServer("{\"id\":\"email_123\"}");
         ReflectionTestUtils.setField(emailService, "emailProvider", "resend");
         ReflectionTestUtils.setField(emailService, "configuredFromEmail", "AgriMarket <no-reply@example.com>");
         ReflectionTestUtils.setField(emailService, "resendApiKey", "re_test");
@@ -77,14 +77,41 @@ class EmailServiceImplTest {
         assertThat(request.body()).contains("\"tags\":[{\"name\":\"order_id\",\"value\":\"99\"}]");
     }
 
-    private int startResendServer() throws IOException {
-        resendServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        resendServer.createContext("/emails", this::recordEmailRequest);
-        resendServer.start();
-        return resendServer.getAddress().getPort();
+    @Test
+    void sendOrderInvoice_whenGoogleScriptConfigured_shouldPostEmailPayloadToRelay() throws Exception {
+        int port = startEmailRelayServer("{\"ok\":true,\"quotaRemaining\":99}");
+        ReflectionTestUtils.setField(emailService, "emailProvider", "google-script");
+        ReflectionTestUtils.setField(emailService, "configuredFromName", "AgriMarket");
+        ReflectionTestUtils.setField(emailService, "replyToEmail", "agrimarket.ecommerce@gmail.com");
+        ReflectionTestUtils.setField(emailService, "googleScriptSecret", "secret_test");
+        ReflectionTestUtils.setField(emailService, "googleScriptUrl", "http://127.0.0.1:" + port + "/emails");
+
+        OrderEntity order = order();
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(order));
+        when(orderItemRepository.findByOrder_IdOrderByIdAsc(99L)).thenReturn(List.of());
+
+        emailService.sendOrderInvoice(OrderEntity.builder().id(99L).build());
+
+        assertThat(recordedRequests).hasSize(1);
+        RecordedRequest request = recordedRequests.getFirst();
+        assertThat(request.method()).isEqualTo("POST");
+        assertThat(request.idempotencyKey()).isEqualTo("agri-order-invoice-99");
+        assertThat(request.body()).contains("\"secret\":\"secret_test\"");
+        assertThat(request.body()).contains("\"to\":\"customer@example.com\"");
+        assertThat(request.body()).contains("\"name\":\"AgriMarket\"");
+        assertThat(request.body()).contains("\"replyTo\":\"agrimarket.ecommerce@gmail.com\"");
+        assertThat(request.body()).contains("\"trackingNumber\":\"LAU789\"");
+        assertThat(request.body()).contains("\"source\":\"agri-ecommerce-backend\"");
     }
 
-    private void recordEmailRequest(HttpExchange exchange) throws IOException {
+    private int startEmailRelayServer(String responseJson) throws IOException {
+        emailRelayServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        emailRelayServer.createContext("/emails", exchange -> recordEmailRequest(exchange, responseJson));
+        emailRelayServer.start();
+        return emailRelayServer.getAddress().getPort();
+    }
+
+    private void recordEmailRequest(HttpExchange exchange, String responseJson) throws IOException {
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         recordedRequests.add(new RecordedRequest(
                 exchange.getRequestMethod(),
@@ -93,7 +120,7 @@ class EmailServiceImplTest {
                 body
         ));
 
-        byte[] responseBody = "{\"id\":\"email_123\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] responseBody = responseJson.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, responseBody.length);
         exchange.getResponseBody().write(responseBody);

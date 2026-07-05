@@ -236,6 +236,29 @@ Các lựa chọn:
    - Cần thêm secret để chỉ backend được gọi endpoint.
    - Phù hợp demo/đồ án vì nhanh, miễn phí, gửi từ Gmail thật.
    - Giới hạn theo Google Apps Script: consumer Gmail khoảng `100` recipients/day, Google Workspace khoảng `1,500` recipients/day; quota có thể thay đổi theo chính sách Google.
+   - Đã tích hợp provider backend `EMAIL_PROVIDER=google-script`.
+   - File script mẫu đã lưu tại `docs/google-apps-script-mail-relay.gs`.
+   - Biến Railway cần set:
+
+```properties
+EMAIL_PROVIDER=google-script
+MAIL_FROM_NAME=AgriMarket
+MAIL_REPLY_TO=agrimarket.ecommerce@gmail.com
+GOOGLE_SCRIPT_MAIL_URL=<Apps Script Web App /exec URL>
+GOOGLE_SCRIPT_MAIL_SECRET=<secret giống MAIL_SECRET trong Apps Script>
+```
+
+   - Các bước tạo Apps Script:
+     1. Vào `https://script.google.com`, tạo project mới bằng Gmail gửi mail.
+     2. Copy nội dung `docs/google-apps-script-mail-relay.gs` vào `Code.gs`.
+     3. Vào Project Settings -> Script properties -> thêm `MAIL_SECRET`.
+     4. Chạy hàm `authorizeMail()` một lần và cấp quyền gửi mail.
+     5. Deploy -> New deployment -> Web app.
+     6. Chọn `Execute as: Me`.
+     7. Chọn `Who has access: Anyone`.
+     8. Copy Web app URL kết thúc bằng `/exec` đưa vào `GOOGLE_SCRIPT_MAIL_URL`.
+     9. Set cùng secret vào Railway `GOOGLE_SCRIPT_MAIL_SECRET`.
+     10. Redeploy backend và tạo đơn COD mới để test.
 
 2. Gmail API trực tiếp
    - Backend lấy OAuth refresh token rồi gọi Gmail API `users.messages.send`.
