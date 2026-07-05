@@ -885,11 +885,21 @@ function PurchaseHistorySection({
                             {order.shippingAddress?.fullName || order.customerName || "Khách hàng"}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-muted-foreground">
-                            {order.shippingAddress?.phone || order.customerPhoneNumber || "Chưa có SĐT"}
+                            SĐT: {order.shippingAddress?.phone || order.customerPhoneNumber || "Chưa có SĐT"}
                           </p>
-                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            {getShippingText(order)}
+                          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                            Đến: {getShippingText(order)}
                           </p>
+                          {order.deliveryStaff && (
+                            <div className="mt-3 pt-3 border-t border-emerald-100/50">
+                              <p className="text-xs font-black uppercase text-emerald-700">Đơn vị & Tài xế giao hàng</p>
+                              <p className="mt-1 font-bold text-slate-900">{order.deliveryStaff.name || "Tài xế AgriMarket"}</p>
+                              {order.deliveryStaff.phoneNumber && (
+                                <p className="text-xs font-semibold text-slate-500">Liên hệ: {order.deliveryStaff.phoneNumber}</p>
+                              )}
+                              <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">Đối tác vận chuyển hỏa tốc AgriExpress</p>
+                            </div>
+                          )}
                         </div>
 
                         <div className="rounded-[8px] border border-emerald-100 bg-white p-3">

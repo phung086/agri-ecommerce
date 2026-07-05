@@ -7,6 +7,7 @@ const exactTranslations = {
   "Sản phẩm": "Products",
   "Giao hàng": "Delivery",
   "Liên hệ": "Contact",
+  "Cần hỏi về cửa hàng hoặc sản phẩm?": "Have questions about our store or products?",
   "Marketplace": "Marketplace",
   "Public API": "Public API",
   "Giỏ hàng client": "Client cart",

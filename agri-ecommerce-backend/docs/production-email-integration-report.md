@@ -156,7 +156,7 @@ railway variable set RESEND_API_URL=https://api.resend.com/emails --service agri
 
 Lưu ý bảo mật:
 
-- Không dùng `railway variable list --json` hoặc `--kv` để chụp màn hình/gửi log, vì các mode đó có thể in raw secret.
+- Không chụp màn hình/gửi log output từ `railway variable list`. Railway CLI trên máy hiện tại có thể in raw secret ngay cả khi không dùng `--json` hoặc `--kv`.
 - Không commit `.env` thật.
 - Không ghi API key thật vào báo cáo.
 
@@ -200,4 +200,3 @@ Localhost chạy trên mạng máy cá nhân, thường được phép outbound 
 Production Railway chạy trong môi trường cloud/container. Kết nối SMTP outbound tới Gmail có thể timeout hoặc bị hạn chế. Vì vậy local test OK không chứng minh SMTP production sẽ ổn.
 
 Fix bền vững là dùng email API qua HTTPS port `443`, hoặc dùng SMTP provider chuyên dụng có cấu hình production rõ ràng. Trong lần này chọn Resend HTTPS API.
-
