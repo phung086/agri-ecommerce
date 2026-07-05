@@ -16,8 +16,14 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 
@@ -26,14 +32,33 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class EmailServiceImpl implements EmailService {
 
+    private static final Duration RESEND_CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration RESEND_REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final int LOG_BODY_MAX_LENGTH = 500;
+
     @Autowired(required = false)
     private JavaMailSender mailSender;
 
     private final OrderItemRepository orderItemRepository;
     private final OrderRepository orderRepository;
+    private final HttpClient resendHttpClient = HttpClient.newBuilder()
+            .connectTimeout(RESEND_CONNECT_TIMEOUT)
+            .build();
 
     @Value("${spring.mail.username:}")
     private String senderEmail;
+
+    @Value("${app.email.provider:smtp}")
+    private String emailProvider;
+
+    @Value("${app.email.from:${spring.mail.username:}}")
+    private String configuredFromEmail;
+
+    @Value("${app.email.resend.api-key:}")
+    private String resendApiKey;
+
+    @Value("${app.email.resend.api-url:https://api.resend.com/emails}")
+    private String resendApiUrl;
 
     @Async
     @Override
@@ -57,8 +82,17 @@ public class EmailServiceImpl implements EmailService {
         }
 
         List<OrderItemEntity> items = orderItemRepository.findByOrder_IdOrderByIdAsc(invoiceOrder.getId());
+        String fromEmail = resolveFromEmail();
+        String orderReference = invoiceOrder.getTrackingNumber() != null ? invoiceOrder.getTrackingNumber() : "#" + invoiceOrder.getId();
+        String subject = "[AgriMarket] Hóa đơn xác nhận đơn đặt hàng " + orderReference;
+        String htmlBody = buildInvoiceHtml(invoiceOrder, items);
 
-        if (mailSender == null || senderEmail == null || senderEmail.trim().isBlank()) {
+        if (isResendProvider()) {
+            sendWithResend(invoiceOrder, recipientEmail, fromEmail, subject, htmlBody);
+            return;
+        }
+
+        if (mailSender == null || !hasText(fromEmail)) {
             log.info("[Email Service MOCK] 'spring.mail.username' or JavaMailSender is not configured. Logging order invoice instead.");
             log.info("[Email Service MOCK] Order ID: #{}", invoiceOrder.getId());
             log.info("[Email Service MOCK] Customer: {} ({})", invoiceOrder.getUser().getName(), recipientEmail);
@@ -74,11 +108,9 @@ public class EmailServiceImpl implements EmailService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom(senderEmail);
+            helper.setFrom(fromEmail);
             helper.setTo(recipientEmail);
-            helper.setSubject("[AgriMarket] Hóa đơn xác nhận đơn đặt hàng " + (invoiceOrder.getTrackingNumber() != null ? invoiceOrder.getTrackingNumber() : "#" + invoiceOrder.getId()));
-
-            String htmlBody = buildInvoiceHtml(invoiceOrder, items);
+            helper.setSubject(subject);
             helper.setText(htmlBody, true);
 
             mailSender.send(message);
@@ -86,6 +118,111 @@ public class EmailServiceImpl implements EmailService {
         } catch (Exception e) {
             log.error("[Email Service] Failed to send email invoice for Order #{}: {}", invoiceOrder.getId(), e.getMessage(), e);
         }
+    }
+
+    private void sendWithResend(OrderEntity order, String recipientEmail, String fromEmail, String subject, String htmlBody) {
+        if (!hasText(resendApiKey)) {
+            log.error("[Email Service] EMAIL_PROVIDER=resend but RESEND_API_KEY is not configured. Skipping invoice email for Order #{}.", order.getId());
+            return;
+        }
+
+        if (!hasText(fromEmail)) {
+            log.error("[Email Service] EMAIL_PROVIDER=resend but MAIL_FROM/app.email.from is not configured. Skipping invoice email for Order #{}.", order.getId());
+            return;
+        }
+
+        try {
+            String payload = buildResendPayload(fromEmail, recipientEmail, subject, htmlBody, order.getId());
+            HttpRequest request = HttpRequest.newBuilder(URI.create(resendApiUrl.trim()))
+                    .timeout(RESEND_REQUEST_TIMEOUT)
+                    .header("Authorization", "Bearer " + resendApiKey.trim())
+                    .header("Content-Type", "application/json")
+                    .header("Idempotency-Key", "agri-order-invoice-" + order.getId())
+                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = resendHttpClient.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+            );
+
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                log.info("[Email Service] Invoice email sent via Resend to {} for Order #{}", recipientEmail, order.getId());
+                return;
+            }
+
+            log.error("[Email Service] Resend failed for Order #{} with HTTP {}: {}",
+                    order.getId(), response.statusCode(), truncateForLog(response.body()));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("[Email Service] Resend email send interrupted for Order #{}: {}", order.getId(), e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("[Email Service] Failed to send email invoice via Resend for Order #{}: {}", order.getId(), e.getMessage(), e);
+        }
+    }
+
+    private String buildResendPayload(String fromEmail, String recipientEmail, String subject, String htmlBody, Long orderId) {
+        return "{"
+                + "\"from\":" + toJsonString(fromEmail) + ","
+                + "\"to\":[" + toJsonString(recipientEmail) + "],"
+                + "\"subject\":" + toJsonString(subject) + ","
+                + "\"html\":" + toJsonString(htmlBody) + ","
+                + "\"tags\":[{\"name\":\"order_id\",\"value\":" + toJsonString(String.valueOf(orderId)) + "}]"
+                + "}";
+    }
+
+    private String resolveFromEmail() {
+        if (hasText(configuredFromEmail)) {
+            return configuredFromEmail.trim();
+        }
+
+        return hasText(senderEmail) ? senderEmail.trim() : "";
+    }
+
+    private boolean isResendProvider() {
+        return "resend".equalsIgnoreCase(emailProvider == null ? "" : emailProvider.trim());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isBlank();
+    }
+
+    private String toJsonString(String value) {
+        if (value == null) {
+            return "null";
+        }
+
+        StringBuilder escaped = new StringBuilder(value.length() + 2);
+        escaped.append('"');
+        for (int i = 0; i < value.length(); i++) {
+            char current = value.charAt(i);
+            switch (current) {
+                case '"' -> escaped.append("\\\"");
+                case '\\' -> escaped.append("\\\\");
+                case '\b' -> escaped.append("\\b");
+                case '\f' -> escaped.append("\\f");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                default -> {
+                    if (current < 0x20) {
+                        escaped.append(String.format("\\u%04x", (int) current));
+                    } else {
+                        escaped.append(current);
+                    }
+                }
+            }
+        }
+        escaped.append('"');
+        return escaped.toString();
+    }
+
+    private String truncateForLog(String value) {
+        if (value == null || value.length() <= LOG_BODY_MAX_LENGTH) {
+            return value;
+        }
+
+        return value.substring(0, LOG_BODY_MAX_LENGTH) + "...";
     }
 
     private String buildInvoiceHtml(OrderEntity order, List<OrderItemEntity> items) {

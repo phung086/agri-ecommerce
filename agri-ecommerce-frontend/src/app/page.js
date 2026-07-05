@@ -1957,7 +1957,7 @@ export default function Home() {
           <div className="relative grid min-h-[360px] gap-6 p-5 text-white sm:p-7 lg:grid-cols-[1fr_520px] lg:items-end lg:p-8">
             <div className="max-w-3xl self-center">
               <div className="flex flex-wrap gap-2">
-                {["Marketplace", "Public API", "Giỏ hàng client"].map((badge) => (
+                {["Nông sản sạch", "Giao nhanh 2h", "Giá bình ổn"].map((badge) => (
                   <span
                     key={badge}
                     className="rounded-[8px] border border-white/30 bg-white/16 px-3 py-1 text-xs font-bold text-white backdrop-blur"
@@ -2354,8 +2354,7 @@ export default function Home() {
               Từ nông trại đến giỏ hàng trong một hành trình rõ ràng
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-500">
-              Trải nghiệm client hiện có thể tìm sản phẩm, lọc theo nhu cầu,
-              xem nhanh chi tiết và gom giỏ trước khi nối tiếp sang checkout.
+              Hệ thống hỗ trợ tìm kiếm sản phẩm thông minh, chọn lọc vùng miền và giao hàng hỏa tốc trong ngày để bảo đảm độ tươi ngon tối đa.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">

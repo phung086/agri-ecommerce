@@ -1081,6 +1081,8 @@ export default function CustomerProfilePage() {
   const [reviewSubmittingId, setReviewSubmittingId] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
+  const [activeTab, setActiveTab] = useState("profile"); // "profile", "addresses", "password", "orders"
+  const [orderFilter, setOrderFilter] = useState("all"); // "all", "pending", "delivering", "completed", "canceled"
   const [phoneError, setPhoneError] = useState("");
 
   const profileInitial = getInitial(profile);
@@ -1745,9 +1747,9 @@ export default function CustomerProfilePage() {
       <div className="mx-auto w-full max-w-[1480px] space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         <AdminPageHeader
           title="Hồ sơ khách hàng"
-          description="Quản lý thông tin cá nhân, số điện thoại và địa chỉ nhận hàng dùng cho trải nghiệm mua nông sản trên AgriMarket."
+          description="Quản lý thông tin cá nhân, số điện thoại và địa chỉ nhận hàng để cập nhật trạng thái mua sắm của bạn."
           image="/market-assets/fresh-market-hero.png"
-          badges={["Customer profile", "Auth API", "Cập nhật hồ sơ"]}
+          badges={["Thành viên AgriMarket", "Tài khoản hoạt động"]}
         >
           <Link
             href="/"
@@ -1777,9 +1779,7 @@ export default function CustomerProfilePage() {
                 Đăng nhập để dùng hồ sơ mua hàng
               </h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Backend hiện hỗ trợ đăng ký, đăng nhập, lấy hồ sơ, cập nhật hồ
-                sơ và đổi mật khẩu cho khách hàng. Trang này dùng trực tiếp các
-                API đó.
+                Đăng nhập tài khoản của bạn để dễ dàng theo dõi đơn hàng, quản lý danh sách địa chỉ nhận hàng và nhận thêm nhiều ưu đãi thành viên đặc quyền từ AgriMarket.
               </p>
               {error && (
                 <div className="mt-4 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
@@ -1790,196 +1790,140 @@ export default function CustomerProfilePage() {
             <AuthPanel onAuthenticated={handleAuthenticated} />
           </div>
         ) : (
-          <div className="space-y-5">
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {profileStats.map((item) => (
-                <StatCard
-                  key={item.title}
-                  title={item.title}
-                  value={item.value}
-                  description={item.description}
-                  icon={item.icon}
-                  tone={item.tone}
-                />
-              ))}
-            </section>
-
-            <section className="grid gap-5 lg:grid-cols-[0.78fr_1.22fr]">
-              <div className="space-y-5">
-                <div className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
-                  <div className="flex items-start gap-4">
-                    <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-emerald-600 text-2xl font-black text-white shadow-sm">
-                      {profileAvatarUrl ? (
-                        <span
-                          className="size-full bg-cover bg-center"
-                          style={{ backgroundImage: `url("${profileAvatarUrl}")` }}
-                        />
-                      ) : (
-                        profileInitial
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-black uppercase text-emerald-700">
-                        Thông tin tài khoản
-                      </p>
-                      <h2 className="mt-1 truncate text-2xl font-black text-emerald-950">
-                        {profile?.name || "Khách hàng"}
-                      </h2>
-                      <p className="mt-1 truncate text-sm font-semibold text-muted-foreground">
-                        {profile?.email}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 space-y-3 text-sm">
-                    <div className="rounded-[8px] border border-emerald-100 bg-emerald-50/70 p-3">
-                      <p className="font-black text-emerald-950">Địa chỉ</p>
-                      <p className="mt-1 leading-6 text-muted-foreground">
-                        {addresses.find(a => a.defaultAddress) 
-                          ? [addresses.find(a => a.defaultAddress).address, addresses.find(a => a.defaultAddress).city].filter(Boolean).join(", ")
-                          : (profile?.address || "Chưa có địa chỉ nhận hàng.")}
-                      </p>
-                    </div>
-                    <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3">
-                      <p className="font-black text-sky-950">Email đăng nhập</p>
-                      <p className="mt-1 leading-6 text-muted-foreground">
-                        {profile?.email}
-                      </p>
-                    </div>
-                  </div>
+          <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+            {/* Sidebar Cột Trái (Shopee Style) */}
+            <aside className="space-y-4">
+              <div className="flex items-center gap-3 border-b border-emerald-100/50 pb-4">
+                <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-emerald-600 text-lg font-black text-white shadow-sm">
+                  {profileAvatarUrl ? (
+                    <span
+                      className="size-full bg-cover bg-center"
+                      style={{ backgroundImage: `url("${profileAvatarUrl}")` }}
+                    />
+                  ) : (
+                    profileInitial
+                  )}
                 </div>
-
-                <form
-                  onSubmit={handleChangePassword}
-                  className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]"
-                >
-                  <div className="mb-5 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-black uppercase text-emerald-700">
-                        Bảo mật
-                      </p>
-                      <h2 className="mt-1 text-xl font-black text-emerald-950">
-                        Đổi mật khẩu
-                      </h2>
-                    </div>
-                    <div className="flex size-10 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-                      <LockKeyhole className="size-5" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="customer-current-password">
-                        Mật khẩu hiện tại
-                      </Label>
-                      <Input
-                        id="customer-current-password"
-                        type="password"
-                        value={passwordForm.currentPassword}
-                        onChange={(event) =>
-                          updatePasswordForm("currentPassword", event.target.value)
-                        }
-                        className="h-10"
-                        autoComplete="current-password"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="customer-new-password">Mật khẩu mới</Label>
-                      <Input
-                        id="customer-new-password"
-                        type="password"
-                        value={passwordForm.newPassword}
-                        onChange={(event) =>
-                          updatePasswordForm("newPassword", event.target.value)
-                        }
-                        className="h-10"
-                        minLength={6}
-                        autoComplete="new-password"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="customer-confirm-password">
-                        Xác nhận mật khẩu mới
-                      </Label>
-                      <Input
-                        id="customer-confirm-password"
-                        type="password"
-                        value={passwordForm.confirmPassword}
-                        onChange={(event) =>
-                          updatePasswordForm("confirmPassword", event.target.value)
-                        }
-                        className="h-10"
-                        minLength={6}
-                        autoComplete="new-password"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="mt-4 h-10 bg-slate-950 font-bold hover:bg-emerald-700"
-                    disabled={changingPassword}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">{profile?.name || "Thành viên"}</p>
+                  <button
+                    onClick={() => setActiveTab("profile")}
+                    className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-emerald-700 transition"
                   >
-                    <LockKeyhole className="size-4" />
-                    {changingPassword ? "Đang đổi..." : "Đổi mật khẩu"}
-                  </Button>
-                </form>
+                    <svg className="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    Sửa hồ sơ
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-5">
-                {/* Form thông tin cá nhân cơ bản */}
+              <nav className="space-y-1">
+                <div className="px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-400">Tài khoản của tôi</div>
+                <button
+                  onClick={() => setActiveTab("profile")}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    activeTab === "profile"
+                      ? "bg-emerald-50 text-emerald-800"
+                      : "text-slate-600 hover:bg-emerald-50/40 hover:text-emerald-700"
+                  }`}
+                >
+                  <UserRound className="size-4" />
+                  Hồ sơ cá nhân
+                </button>
+                <button
+                  onClick={() => setActiveTab("addresses")}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    activeTab === "addresses"
+                      ? "bg-emerald-50 text-emerald-800"
+                      : "text-slate-600 hover:bg-emerald-50/40 hover:text-emerald-700"
+                  }`}
+                >
+                  <MapPin className="size-4" />
+                  Địa chỉ nhận hàng
+                </button>
+                <button
+                  onClick={() => setActiveTab("password")}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    activeTab === "password"
+                      ? "bg-emerald-50 text-emerald-800"
+                      : "text-slate-600 hover:bg-emerald-50/40 hover:text-emerald-700"
+                  }`}
+                >
+                  <LockKeyhole className="size-4" />
+                  Đổi mật khẩu
+                </button>
+
+                <div className="pt-4 px-3 py-2 text-xs font-black uppercase tracking-wider text-slate-400">Quản lý giao dịch</div>
+                <button
+                  onClick={() => {
+                    setActiveTab("orders");
+                    setOrderFilter("all");
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    activeTab === "orders"
+                      ? "bg-emerald-50 text-emerald-800"
+                      : "text-slate-600 hover:bg-emerald-50/40 hover:text-emerald-700"
+                  }`}
+                >
+                  <ReceiptText className="size-4" />
+                  Đơn mua của tôi
+                </button>
+              </nav>
+            </aside>
+
+            {/* Content Cột Phải (Shopee Style) */}
+            <main className="min-w-0">
+              {activeTab === "profile" && (
                 <form
                   onSubmit={handleSave}
-                  className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]"
+                  className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm space-y-6"
                 >
-                  <div className="mb-5 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-black uppercase text-emerald-700">
-                        Cập nhật hồ sơ
-                      </p>
-                      <h2 className="mt-1 text-2xl font-black tracking-normal text-emerald-950">
-                        Thông tin cá nhân
-                      </h2>
-                    </div>
-                    <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-                      <UserRound className="size-5" />
-                    </div>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">Hồ sơ cá nhân</h2>
+                    <p className="mt-1 text-sm text-slate-500">Quản lý thông tin hồ sơ để bảo mật tài khoản tốt nhất</p>
                   </div>
+                  <div className="grid gap-5 md:grid-cols-[1fr_220px]">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="profile-name">Họ và tên</Label>
+                        <Input
+                          id="profile-name"
+                          value={form.name}
+                          onChange={(event) => updateForm("name", event.target.value)}
+                          className="h-11 bg-slate-50/50"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="profile-email">Địa chỉ email</Label>
+                        <Input
+                          id="profile-email"
+                          value={profile?.email || ""}
+                          className="h-11 bg-slate-100 text-slate-500 cursor-not-allowed"
+                          disabled
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="profile-phone">Số điện thoại</Label>
+                        <Input
+                          id="profile-phone"
+                          value={form.phoneNumber}
+                          onChange={(event) => {
+                            updateForm("phoneNumber", event.target.value);
+                            setPhoneError(getVietnamPhoneError(event.target.value));
+                          }}
+                          className={`h-11 bg-slate-50/50 ${phoneError ? "border-red-500" : ""}`}
+                          placeholder="090..."
+                        />
+                        {phoneError && (
+                          <p className="text-xs font-semibold text-red-600">{phoneError}</p>
+                        )}
+                      </div>
+                    </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="profile-name">Họ tên</Label>
-                      <Input
-                        id="profile-name"
-                        value={form.name}
-                        onChange={(event) => updateForm("name", event.target.value)}
-                        className="h-11"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="profile-phone">Số điện thoại</Label>
-                      <Input
-                        id="profile-phone"
-                        value={form.phoneNumber}
-                        onChange={(event) => {
-                          updateForm("phoneNumber", event.target.value);
-                          setPhoneError(getVietnamPhoneError(event.target.value));
-                        }}
-                        className={`h-11 ${phoneError ? "border-red-500" : ""}`}
-                        placeholder="090..."
-                      />
-                      {phoneError && (
-                        <p className="text-xs font-semibold text-red-600">
-                          {phoneError}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="profile-avatar">Avatar</Label>
+                    <div className="flex flex-col items-center justify-center border-l border-slate-100 pl-4">
+                      <Label className="mb-3 block text-sm font-bold text-slate-600">Ảnh đại diện</Label>
                       <AvatarUploadField
                         id="profile-avatar"
                         value={form.avatar}
@@ -1994,35 +1938,31 @@ export default function CustomerProfilePage() {
                           setNotice("");
                         }}
                         onUploadEnd={() => setUploadingAvatar(false)}
-                        onUploadSuccess={(msg) => {
-                          setNotice(msg);
-                        }}
-                        onUploadError={(msg) => {
-                          setError(msg);
-                        }}
+                        onUploadSuccess={(msg) => setNotice(msg)}
+                        onUploadError={(msg) => setError(msg)}
                       />
                     </div>
                   </div>
 
                   {notice && (
-                    <div className="mt-4 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
                       {notice}
                     </div>
                   )}
                   {error && (
-                    <div className="mt-4 rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
                       {error}
                     </div>
                   )}
 
-                  <div className="mt-5 flex flex-wrap gap-2">
+                  <div className="flex gap-2 border-t border-slate-100 pt-4">
                     <Button
                       type="submit"
-                      className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
+                      className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700 px-6"
                       disabled={saving || loading || uploadingAvatar}
                     >
                       <Save className="size-4" />
-                      {saving ? "Đang lưu..." : "Lưu hồ sơ"}
+                      {saving ? "Đang lưu..." : "Lưu thay đổi"}
                     </Button>
                     <Button
                       type="button"
@@ -2035,22 +1975,19 @@ export default function CustomerProfilePage() {
                     </Button>
                   </div>
                 </form>
+              )}
 
-                {/* Phần Sổ địa chỉ (Address Book) */}
-                <div className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
-                  <div className="mb-5 flex items-center justify-between gap-4">
+              {activeTab === "addresses" && (
+                <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm space-y-6">
+                  <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-sm font-black uppercase text-emerald-700">
-                        Sổ địa chỉ
-                      </p>
-                      <h2 className="mt-1 text-2xl font-black tracking-normal text-emerald-950">
-                        Địa chỉ nhận hàng
-                      </h2>
+                      <h2 className="text-xl font-black text-slate-900">Địa chỉ nhận hàng</h2>
+                      <p className="mt-1 text-sm text-slate-500">Quản lý các địa chỉ nhận nông sản giao hỏa tốc của bạn</p>
                     </div>
                     {!showAddressForm && (
                       <Button
                         type="button"
-                        className="h-9 bg-emerald-600 px-3 font-bold hover:bg-emerald-700 text-xs"
+                        className="h-10 bg-emerald-600 px-4 font-bold hover:bg-emerald-700"
                         onClick={() => openAddressForm(null)}
                       >
                         + Thêm địa chỉ mới
@@ -2091,7 +2028,7 @@ export default function CustomerProfilePage() {
                           onChange={setAddressForm}
                           idPrefix="address-book"
                           className="sm:col-span-2"
-                          detailLabel="Địa chỉ nhận cụ thể"
+                          detailLabel="Địa chỉ chi tiết nhận hàng"
                           detailPlaceholder="Số nhà, tên đường, tên toà nhà..."
                           detailRows={3}
                         />
@@ -2106,12 +2043,12 @@ export default function CustomerProfilePage() {
                             className="size-4 rounded border-emerald-200 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                           />
                           <label htmlFor="address-default" className="text-sm font-semibold text-emerald-900 cursor-pointer">
-                            Đặt làm địa chỉ nhận mặc định
+                            Đặt làm địa chỉ nhận hàng mặc định
                           </label>
                         </div>
                       </div>
 
-                      <div className="flex gap-2 pt-2">
+                      <div className="flex gap-2 pt-2 border-t border-emerald-100/50">
                         <Button
                           type="submit"
                           className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
@@ -2136,7 +2073,7 @@ export default function CustomerProfilePage() {
                         <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground border border-dashed border-emerald-100 rounded-xl bg-emerald-50/5">
                           <MapPin className="size-8 text-emerald-600 mb-2 animate-bounce" />
                           <p className="font-semibold text-sm">Bạn chưa thêm địa chỉ nhận hàng nào.</p>
-                          <p className="text-xs mt-1">Vui lòng bấm &quot;+ Thêm địa chỉ mới&quot; để cập nhật thông tin.</p>
+                          <p className="text-xs mt-1">Vui lòng bấm &quot;+ Thêm địa chỉ mới&quot; để tiếp tục mua sắm.</p>
                         </div>
                       ) : (
                         <div className="grid gap-3">
@@ -2208,27 +2145,144 @@ export default function CustomerProfilePage() {
                     </div>
                   )}
                 </div>
-              </div>
-            </section>
+              )}
 
-            <PurchaseHistorySection
-              orders={orders}
-              ordersMeta={ordersMeta}
-              ordersLoading={ordersLoading}
-              ordersError={ordersError}
-              reviews={reviews}
-              reviewDrafts={reviewDrafts}
-              reviewSubmittingId={reviewSubmittingId}
-              expandedOrderId={expandedOrderId}
-              orderDetailLoading={orderDetailLoading}
-              onRefresh={() => {
-                loadOrderHistory();
-                loadMyReviews();
-              }}
-              onToggleOrder={handleToggleOrder}
-              onUpdateReviewDraft={updateReviewDraft}
-              onSubmitReview={submitReview}
-            />
+              {activeTab === "password" && (
+                <form
+                  onSubmit={handleChangePassword}
+                  className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm space-y-6 max-w-xl"
+                >
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">Đổi mật khẩu</h2>
+                    <p className="mt-1 text-sm text-slate-500">Để bảo mật tài khoản, vui lòng không chia sẻ mật khẩu cho người khác</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="customer-current-password">Mật khẩu hiện tại</Label>
+                      <Input
+                        id="customer-current-password"
+                        type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(event) =>
+                          updatePasswordForm("currentPassword", event.target.value)
+                        }
+                        className="h-11 bg-slate-50/50"
+                        autoComplete="current-password"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="customer-new-password">Mật khẩu mới</Label>
+                      <Input
+                        id="customer-new-password"
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(event) =>
+                          updatePasswordForm("newPassword", event.target.value)
+                        }
+                        className="h-11 bg-slate-50/50"
+                        minLength={6}
+                        autoComplete="new-password"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="customer-confirm-password">Xác nhận mật khẩu mới</Label>
+                      <Input
+                        id="customer-confirm-password"
+                        type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(event) =>
+                          updatePasswordForm("confirmPassword", event.target.value)
+                        }
+                        className="h-11 bg-slate-50/50"
+                        minLength={6}
+                        autoComplete="new-password"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {notice && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+                      {notice}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t border-slate-100 flex justify-end">
+                    <Button
+                      type="submit"
+                      className="h-10 bg-slate-950 font-bold hover:bg-emerald-700 px-6"
+                      disabled={changingPassword}
+                    >
+                      <LockKeyhole className="size-4" />
+                      {changingPassword ? "Đang đổi..." : "Cập nhật mật khẩu"}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {activeTab === "orders" && (
+                <div className="space-y-4">
+                  {/* Thanh Phân loại Trạng thái Đơn hàng Shopee Style */}
+                  <div className="flex border-b border-slate-200 bg-white rounded-xl shadow-sm overflow-x-auto whitespace-nowrap">
+                    {[
+                      { value: "all", label: "Tất cả" },
+                      { value: "pending", label: "Chờ xử lý" },
+                      { value: "delivering", label: "Đang giao" },
+                      { value: "completed", label: "Hoàn tất" },
+                      { value: "canceled", label: "Đã hủy" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        onClick={() => setOrderFilter(tab.value)}
+                        className={`flex-1 min-w-[80px] py-4 px-2 text-center text-sm font-bold border-b-2 transition ${
+                          orderFilter === tab.value
+                            ? "border-emerald-600 text-emerald-700"
+                            : "border-transparent text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <PurchaseHistorySection
+                    orders={orders.filter((order) => {
+                      if (orderFilter === "all") return true;
+                      const status = String(order.status || "").toLowerCase();
+                      if (orderFilter === "pending") return ["pending", "processing"].includes(status);
+                      if (orderFilter === "delivering") return ["ready_for_delivery", "out_for_delivery"].includes(status);
+                      if (orderFilter === "completed") return ["delivered", "completed"].includes(status);
+                      if (orderFilter === "canceled") return status === "canceled";
+                      return true;
+                    })}
+                    ordersMeta={ordersMeta}
+                    ordersLoading={ordersLoading}
+                    ordersError={ordersError}
+                    reviews={reviews}
+                    reviewDrafts={reviewDrafts}
+                    reviewSubmittingId={reviewSubmittingId}
+                    expandedOrderId={expandedOrderId}
+                    orderDetailLoading={orderDetailLoading}
+                    onRefresh={() => {
+                      loadOrderHistory();
+                      loadMyReviews();
+                    }}
+                    onToggleOrder={handleToggleOrder}
+                    onUpdateReviewDraft={updateReviewDraft}
+                    onSubmitReview={submitReview}
+                  />
+                </div>
+              )}
+            </main>
           </div>
         )}
       </div>
