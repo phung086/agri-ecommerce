@@ -51,7 +51,8 @@ public class AiChatServiceImpl implements AiChatService {
     private static final String SYSTEM_PROMPT = """
             You are AgriMarket AI Assistant for an agricultural e-commerce graduation project.
 
-            Answer in the requested RESPONSE_LANGUAGE. Be concise, practical, and focused on the current user role and screen.
+            Answer strictly in RESPONSE_LANGUAGE. Be concise, practical, and focused on the current user role and screen.
+            Never mention that you are "requested" or "instructed" to use a language. Just answer naturally in that language.
 
             Hard rules:
             - You are read-only. Never claim that you created, updated, canceled, assigned, refunded, paid, deleted, or changed any data.
@@ -134,12 +135,7 @@ public class AiChatServiceImpl implements AiChatService {
     public AiChatResponse chat(AiChatRequest request, Long userId) {
         String message = cleanMessage(request.getMessage());
         String guestToken = resolveGuestToken(request.getGuestToken(), userId);
-        String locale = request.getLocale();
-        if (locale == null || locale.trim().isEmpty()) {
-            locale = "vi";
-        } else {
-            locale = locale.trim().toLowerCase();
-        }
+        String locale = normalizeLocale(request.getLocale());
 
         // Lưu tin nhắn user vào DB (luôn lưu dù AI có bật hay không)
         saveChatMessage(userId, guestToken, SENDER_USER, message);
@@ -186,9 +182,9 @@ public class AiChatServiceImpl implements AiChatService {
 
     private String callLlm(String userMessage, String locale, Long userId) {
         try {
-            String responseLanguage = "Vietnamese (tiếng Việt)";
+            String responseLanguage = "Vietnamese only (tiếng Việt)";
             if ("en".equalsIgnoreCase(locale)) {
-                responseLanguage = "English";
+                responseLanguage = "English only";
             }
 
             String customSystemPrompt = SYSTEM_PROMPT.replace("RESPONSE_LANGUAGE", responseLanguage);
@@ -201,7 +197,7 @@ public class AiChatServiceImpl implements AiChatService {
 
             List<ChatMessage> messages = List.of(
                     SystemMessage.from(customSystemPrompt),
-                    UserMessage.from(userMessage)
+                    UserMessage.from(buildLanguageScopedUserMessage(userMessage, locale))
             );
 
             String reply = assistant.chat(messages);
@@ -253,6 +249,22 @@ public class AiChatServiceImpl implements AiChatService {
     private String cleanMessage(String message) {
         if (message == null) return "";
         return message.trim();
+    }
+
+    private String normalizeLocale(String locale) {
+        if (locale == null || locale.isBlank()) {
+            return "vi";
+        }
+        return "en".equalsIgnoreCase(locale.trim()) ? "en" : "vi";
+    }
+
+    private String buildLanguageScopedUserMessage(String userMessage, String locale) {
+        if ("en".equalsIgnoreCase(locale)) {
+            return "[Required response language: English. Do not explain this language rule.]\n"
+                    + "User message:\n" + userMessage;
+        }
+        return "[Ngôn ngữ trả lời bắt buộc: tiếng Việt. Không giải thích quy tắc ngôn ngữ này.]\n"
+                + "Tin nhắn người dùng:\n" + userMessage;
     }
 
     private AiChatResponse buildFallbackResponse(String guestToken, String message) {

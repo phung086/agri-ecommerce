@@ -293,6 +293,17 @@ GOOGLE_SCRIPT_MAIL_SECRET=<secret giống MAIL_SECRET trong Apps Script>
      - Đã xóa `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` khỏi local `.env`.
      - Test trực tiếp Apps Script trả `Unauthorized`, nguyên nhân là `MAIL_SECRET` trong Apps Script chưa khớp với `GOOGLE_SCRIPT_MAIL_SECRET` đã set ở Railway/local.
      - Cách fix: vào Apps Script -> `Cài đặt dự án` -> `Thuộc tính của tập lệnh`, sửa `MAIL_SECRET` cho khớp với secret đang dùng ở Railway/local, sau đó test lại tạo đơn COD. Không cần redeploy backend nếu chỉ sửa Apps Script property.
+   - Update 2026-07-06:
+     - Đơn `LAUCC6` có log GHN thành công nhưng email chạy vào nhánh `[Email Service MOCK]`, chứng tỏ deployment lúc đó chưa chạy đúng code Google Script hoặc runtime chưa nhận đúng build.
+     - Đã ép deploy lại từ repo root để Railway dùng đúng Dockerfile/root build context.
+     - Sau deploy root, backend start thành công và public API trả `200`.
+     - Test trực tiếp Apps Script bằng đúng URL + secret Railway vẫn trả `Unauthorized`, nên blocker còn lại là property trong Apps Script: tên phải là `MAIL_SECRET` và giá trị phải khớp tuyệt đối với `GOOGLE_SCRIPT_MAIL_SECRET`.
+     - Người dùng đã đồng bộ `GOOGLE_SCRIPT_MAIL_SECRET` trên Railway và `MAIL_SECRET` trong Apps Script về cùng giá trị.
+     - Test trực tiếp Apps Script sau khi đồng bộ trả `{"ok":true,"quotaRemaining":99}`, chứng tỏ relay gửi mail đã hoạt động.
+     - Đã redeploy Railway lại sau khi đồng bộ secret để container chắc chắn nhận env mới. Public API trả `200`.
+     - Bước kiểm thử còn lại: tạo đơn COD mới; đơn cũ như `LAUCC6` không tự gửi lại email.
+     - Đơn mới `LAUC3Y` đã tạo GHN thành công và log backend ghi: `Invoice email sent via Google Apps Script to phamhung080604@gmail.com for Order #21`.
+     - Gmail bên gửi đã có thư trong `Đã gửi`; nếu bên nhận chưa thấy trong `Hộp thư đến`, cần kiểm tra `Giao dịch mua`, Spam, Thùng rác hoặc tìm `in:anywhere LAUC3Y` vì Gmail có thể tự phân loại hóa đơn mua hàng.
 
 2. Gmail API trực tiếp
    - Backend lấy OAuth refresh token rồi gọi Gmail API `users.messages.send`.

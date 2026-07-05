@@ -2076,7 +2076,7 @@ export default function CustomerProfilePage() {
                           onClick={closeAddressForm}
                           disabled={savingAddress}
                         >
-                          {t("Hủy bộ")}
+                          {t("Hủy bỏ")}
                         </Button>
                       </div>
                     </form>

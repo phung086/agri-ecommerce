@@ -17,6 +17,15 @@ const QUICK_PROMPTS = [
   "Tư vấn giỏ hàng khoảng 100k",
 ];
 
+function createWelcomeMessage() {
+  return {
+    id: "welcome",
+    role: "assistant",
+    text: "Xin chào, tôi có thể gợi ý nông sản theo nhu cầu, ngân sách và tình trạng còn hàng.",
+    products: [],
+  };
+}
+
 function readGuestToken() {
   if (typeof window === "undefined") {
     return null;
@@ -86,18 +95,13 @@ export default function AiChatWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      id: "welcome",
-      role: "assistant",
-      text: "Xin chào, tôi có thể gợi ý nông sản theo nhu cầu, ngân sách và tình trạng còn hàng.",
-      products: [],
-    },
-  ]);
+  const [messages, setMessages] = useState(() => [createWelcomeMessage()]);
+  const [chatLocale, setChatLocale] = useState(locale);
 
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const guestTokenRef = useRef(null);
+  const requestSeqRef = useRef(0);
 
   useEffect(() => {
     guestTokenRef.current = readGuestToken();
@@ -105,7 +109,7 @@ export default function AiChatWidget() {
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, loading, chatLocale, locale]);
 
   useEffect(() => {
     if (!open) {
@@ -115,14 +119,39 @@ export default function AiChatWidget() {
     return () => window.clearTimeout(timer);
   }, [open]);
 
+  const isCurrentLocaleSession = chatLocale === locale;
+  const visibleMessages = isCurrentLocaleSession ? messages : [createWelcomeMessage()];
+  const visibleInput = isCurrentLocaleSession ? input : "";
+  const visibleLoading = isCurrentLocaleSession ? loading : false;
+
+  function activateCurrentLocaleSession() {
+    if (chatLocale === locale) {
+      return false;
+    }
+    requestSeqRef.current += 1;
+    setChatLocale(locale);
+    setMessages([createWelcomeMessage()]);
+    setInput("");
+    setLoading(false);
+    return true;
+  }
+
   async function sendMessage(rawMessage) {
     const message = rawMessage.trim();
-    if (!message || loading) {
+    if (!message || visibleLoading) {
       return;
     }
 
+    const requestLocale = locale;
+    const switchingLocale = chatLocale !== requestLocale;
+    if (switchingLocale) {
+      requestSeqRef.current += 1;
+      setChatLocale(requestLocale);
+    }
+    const requestSeq = ++requestSeqRef.current;
+
     setMessages((current) => [
-      ...current,
+      ...(switchingLocale ? [createWelcomeMessage()] : current),
       { id: crypto.randomUUID(), role: "user", text: message, products: [] },
     ]);
     setInput("");
@@ -137,13 +166,16 @@ export default function AiChatWidget() {
         body: JSON.stringify({
           message,
           guestToken: guestTokenRef.current || undefined,
-          locale, // MỚI
+          locale: requestLocale,
         }),
       });
 
       const payload = await response.json();
       if (!response.ok || !payload?.success) {
         throw new Error(payload?.message || "Chat request failed");
+      }
+      if (requestSeq !== requestSeqRef.current) {
+        return;
       }
 
       const data = payload.data || {};
@@ -159,33 +191,38 @@ export default function AiChatWidget() {
           role: "assistant",
           text:
             data.reply ||
-            (locale === "en"
+            (requestLocale === "en"
               ? "I don't have a suitable response. Please ask more specifically."
               : "Tôi chưa có câu trả lời phù hợp. Bạn thử hỏi cụ thể hơn nhé."),
           products: data.suggestedProducts || [],
         },
       ]);
     } catch {
+      if (requestSeq !== requestSeqRef.current) {
+        return;
+      }
       setMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: "assistant",
           text:
-            locale === "en"
+            requestLocale === "en"
               ? "Connection is temporarily lost. Please try again in a moment."
               : "Kết nối tư vấn đang gián đoạn. Bạn thử lại sau một chút nhé.",
           products: [],
         },
       ]);
     } finally {
-      setLoading(false);
+      if (requestSeq === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
   }
 
   function handleSubmit(event) {
     event.preventDefault();
-    sendMessage(input);
+    sendMessage(visibleInput);
   }
 
   return (
@@ -215,7 +252,7 @@ export default function AiChatWidget() {
           </header>
 
           <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-3 py-3">
-            {messages.map((message) => {
+            {visibleMessages.map((message) => {
               const isUser = message.role === "user";
               return (
                 <div
@@ -246,7 +283,7 @@ export default function AiChatWidget() {
               );
             })}
 
-            {loading && (
+            {visibleLoading && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">
                   <Loader2 size={15} className="animate-spin" />
@@ -257,7 +294,7 @@ export default function AiChatWidget() {
             <div ref={scrollRef} />
           </div>
 
-          {messages.length === 1 && (
+          {visibleMessages.length === 1 && (
             <div className="flex flex-wrap gap-2 border-t border-slate-100 px-3 py-2">
               {QUICK_PROMPTS.map((prompt) => (
                 <button
@@ -278,12 +315,15 @@ export default function AiChatWidget() {
           >
             <textarea
               ref={inputRef}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
+              value={visibleInput}
+              onChange={(event) => {
+                activateCurrentLocaleSession();
+                setInput(event.target.value);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
-                  sendMessage(input);
+                  sendMessage(visibleInput);
                 }
               }}
               maxLength={1000}
@@ -293,7 +333,7 @@ export default function AiChatWidget() {
             />
             <button
               type="submit"
-              disabled={!input.trim() || loading}
+              disabled={!visibleInput.trim() || visibleLoading}
               className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-700 text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
               aria-label={t("Gửi tin nhắn")}
             >

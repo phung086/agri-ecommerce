@@ -753,6 +753,213 @@ const additionalTranslations = {
   "Đã xóa ảnh đại diện.": "Avatar deleted successfully.",
   "Đã xóa ảnh đại diện admin.": "Admin avatar deleted successfully.",
   "Đang tải ảnh...": "Uploading image...",
+  "Ảnh đại diện không được vượt quá 5MB.": "Avatar image must not exceed 5MB.",
+  "Ảnh minh chứng giao hàng (POD)*": "Proof of delivery photo (POD)*",
+  "Ảnh thực tế tại địa điểm giao hàng": "Actual photo at the delivery location",
+  "Bạn chưa thêm địa chỉ nhận hàng nào.": "You have not added any shipping addresses yet.",
+  "Bạn có chắc chắn muốn xóa địa chỉ này?": "Are you sure you want to delete this address?",
+  "Bắt Đầu Giao (Transit)": "Start Delivery (Transit)",
+  "Bấm bắt đầu giao để kích hoạt di chuyển.": "Tap start delivery to begin the trip.",
+  "Chưa có sản phẩm hiển thị cho danh mục này.": "No products are displayed in this category.",
+  "bật": "enabled",
+  "Cần gia hạn hoặc tắt": "Needs renewal or disabling",
+  "Cần kiểm tra trước khi mở lại": "Needs review before reactivation",
+  "Cần quyền admin": "Admin permissions required",
+  "Cần xác nhận hoặc hủy": "Needs confirmation or cancellation",
+  "Cần xử lý": "Needs handling",
+  "Cập nhật chính xác lý do để bưu cục lưu trữ": "Enter the exact reason for branch records",
+  "Cập nhật địa chỉ thành công!": "Address updated successfully!",
+  "Cập nhật kết quả giao hàng và xác thực": "Update and verify delivery result",
+  "Cập nhật mật khẩu": "Update password",
+  "Cập nhật thất bại từ shipper.": "Failure reported by delivery staff.",
+  "Chỉ hỗ trợ ảnh JPG, JPEG, PNG hoặc WEBP.": "Only JPG, JPEG, PNG, or WEBP images are supported.",
+  "Chọn ảnh từ máy tính": "Choose image from computer",
+  "Chọn địa chỉ để hệ thống kiểm tra lại từ API.": "Choose an address so the system can verify it through the API.",
+  "Chọn lý do thất bại*": "Choose failure reason*",
+  "Chờ giao": "Waiting for delivery",
+  "Chụp ảnh / Chọn ảnh gói hàng": "Take or choose package photo",
+  "Chụp ảnh gói hàng tại cửa & lấy chữ ký của khách":
+    "Take a doorstep package photo and get the customer signature",
+  "Chuyển khoản nhanh qua QR": "Fast QR bank transfer",
+  "Chữ ký khách nhận hàng (Ký tay trực tiếp)": "Customer signature (sign directly)",
+  "Chưa có lịch sử trạng thái chi tiết cho đơn này.": "No detailed status history for this order yet.",
+  "chưa phản hồi": "unreplied",
+  "Danh sách sản phẩm": "Product list",
+  "Đã cập nhật địa chỉ thành công.": "Address updated successfully.",
+  "Đã cập nhật hồ sơ cá nhân thành công.": "Personal profile updated successfully.",
+  "Đã đặt làm địa chỉ mặc định thành công.": "Default address set successfully.",
+  "Đã giao hàng thành công.": "Delivery completed successfully.",
+  "Đã sao chép mã đơn hàng!": "Order code copied!",
+  "Đã tải ảnh minh chứng lên hệ thống.": "Proof photo uploaded to the system.",
+  "Đã thanh toán Online": "Paid online",
+  "Đã thêm địa chỉ giao hàng mới.": "New shipping address added.",
+  "Đã xóa địa chỉ thành công.": "Address deleted successfully.",
+  "đã phản hồi": "replied",
+  "Đang cập nhật danh sách đơn...": "Updating order list...",
+  "Đang đồng bộ địa chỉ nhận hàng từ API...": "Syncing shipping address from API...",
+  "Đang mở bán tại cửa hàng": "Available in store",
+  "Đang quét mã...": "Scanning code...",
+  "Đang tải ảnh lên...": "Uploading image...",
+  "Đang tải lịch sử mua hàng...": "Loading purchase history...",
+  "Đang tải phiên làm việc...": "Loading work session...",
+  "Đang tải sản phẩm từ API...": "Loading products from API...",
+  "Đang tìm kiếm nông sản...": "Searching produce...",
+  "Đang tính toán...": "Calculating...",
+  "Đang tính...": "Calculating...",
+  "Đang trên lộ trình giao cho khách.": "On the route to the customer.",
+  "Đặt làm địa chỉ nhận hàng mặc định": "Set as default shipping address",
+  "Để bảo mật tài khoản, vui lòng không chia sẻ mật khẩu cho người khác":
+    "To keep your account secure, do not share your password with anyone",
+  "để tiếp tục mua sắm.": "to continue shopping.",
+  "Đi tuyến Trần Hưng Đạo $\\rightarrow$ Cửa Đại $\\rightarrow$ Hai Bà Trưng để rút ngắn 2.5km di chuyển.":
+    "Take the Tran Hung Dao $\\rightarrow$ Cua Dai $\\rightarrow$ Hai Ba Trung route to shorten the trip by 2.5 km.",
+  "Địa chỉ chi tiết nhận hàng": "Detailed shipping address",
+  "Địa chỉ email": "Email address",
+  "Địa chỉ giao hàng mặc định (Việt Nam)": "Default shipping address (Vietnam)",
+  "Địa chỉ giao:": "Delivery address:",
+  "Địa chỉ nhận hàng chưa được đồng bộ từ API. Vui lòng thử lại.":
+    "Shipping address has not synced from the API. Please try again.",
+  "Địa chỉ vận hành hoặc liên hệ...": "Operations or contact address...",
+  "Đơn giá": "Unit price",
+  "Đơn giao thành công (COD)": "Successful COD deliveries",
+  "Đơn giao thành công (Online)": "Successful online-paid deliveries",
+  "Đơn hàng đã kết thúc giao nhận.": "The order delivery flow has ended.",
+  "Đơn mua của tôi": "My orders",
+  "Đơn tối thiểu": "Minimum order",
+  "Đơn vị & Tài xế giao hàng": "Carrier and delivery driver",
+  "Đường dẫn ảnh": "Image URL",
+  "Email không hợp lệ.": "Invalid email.",
+  "Ghi chú giao hàng (Không bắt buộc)": "Delivery note (optional)",
+  "Giá bình ổn": "Stable pricing",
+  "Giá trị hiển thị": "Displayed value",
+  "Giảm cao nhất": "Highest discount",
+  "Giảm giá đơn hàng": "Order discount",
+  "Giảm số lượng": "Decrease quantity",
+  "Giao nhanh nội thành": "Fast inner-city delivery",
+  "Gửi yêu cầu chốt ca nộp tiền thành công! Đang chờ Quản trị viên duyệt.":
+    "Cash handover request sent successfully. Waiting for admin approval.",
+  "Họ tên chỉ được chứa chữ cái và khoảng trắng.": "Full name may contain only letters and spaces.",
+  "Họ tên người nhận": "Recipient full name",
+  "Họ và tên": "Full name",
+  "Hồ sơ cá nhân": "Personal profile",
+  "Hội An / Đà Nẵng": "Hoi An / Da Nang",
+  "Hủy bỏ": "Cancel",
+  "Hệ thống hỗ trợ tìm kiếm sản phẩm thông minh, chọn lọc vùng miền và giao hàng hỏa tốc trong ngày để bảo đảm độ tươi ngon tối đa.":
+    "The system supports smart product search, regional curation, and same-day express delivery to keep produce as fresh as possible.",
+  "JPG, JPEG, PNG, WEBP - tối đa 5MB": "JPG, JPEG, PNG, WEBP - up to 5MB",
+  "Kết quả:": "Result:",
+  "Khách hàng không có số điện thoại!": "Customer has no phone number!",
+  "Khách hẹn giao lại (đổi ngày/giờ)": "Customer requested redelivery (change date/time)",
+  "Khách từ chối nhận hàng (Hủy đơn hàng)": "Customer refused delivery (cancel order)",
+  "Khi bạn checkout thành công, đơn hàng sẽ xuất hiện tại đây.":
+    "After you successfully checkout, your orders will appear here.",
+  "Không": "No",
+  "Không có số dư COD để chốt ca nộp tiền!": "No COD balance to close the cash handover shift!",
+  "Không liên lạc được (thuê bao/không bắt máy)": "Could not contact customer (unavailable/no answer)",
+  "Không tải được ưu đãi.": "Could not load promotions.",
+  "Không thể báo cáo thất bại đơn.": "Could not report delivery failure.",
+  "Không thể cập nhật địa chỉ.": "Could not update address.",
+  "Không thể cập nhật hồ sơ cá nhân.": "Could not update personal profile.",
+  "Không thể cập nhật trạng thái giao đơn.": "Could not update delivery status.",
+  "Không thể đặt địa chỉ mặc định.": "Could not set default address.",
+  "Không thể hoàn thành đơn giao.": "Could not complete delivery.",
+  "Không thể lưu địa chỉ giao hàng.": "Could not save shipping address.",
+  "Không thể tải danh sách ưu đãi.": "Could not load promotion list.",
+  "Không thể tải danh sách yêu thích từ tài khoản của bạn.": "Could not load wishlist from your account.",
+  "Không thể tải dữ liệu thanh toán của bạn.": "Could not load your checkout data.",
+  "Không thể tải giỏ hàng từ tài khoản của bạn.": "Could not load cart from your account.",
+  "Không thể tải lịch sử mua hàng.": "Could not load purchase history.",
+  "Không thể upload ảnh minh chứng.": "Could not upload proof photo.",
+  "Không thể xóa địa chỉ giao hàng.": "Could not delete shipping address.",
+  "Không thể xóa địa chỉ.": "Could not delete address.",
+  "Khu vực kiểm soát và giao nhận đơn hàng": "Order control and delivery area",
+  "Kiểm tra giao diện": "UI check",
+  "Kiểu giảm": "Discount type",
+  "Lịch sử mua hàng": "Purchase history",
+  "Loại mã": "Code type",
+  "Lộ trình AI tối ưu đề xuất:": "AI suggested optimal route:",
+  "Lưu địa chỉ": "Save address",
+  "Mã đơn hàng": "Order code",
+  "Mã giao dịch": "Transaction code",
+  "Mã nhận kho:": "Warehouse pickup code:",
+  "Mặc định": "Default",
+  "Mật khẩu của bạn": "Your password",
+  "Ngày bắt đầu": "Start date",
+  "Nhận ca": "Start shift",
+  "Nhân viên giao hàng bắt đầu di chuyển giao đơn.":
+    "Delivery staff started moving for the order.",
+  "Nhập 10 chữ số, bắt đầu bằng số 0.": "Enter 10 digits starting with 0.",
+  "Nhập ghi chú ví dụ: giao cho bảo vệ, người nhận thay...":
+    "Enter a note, e.g. leave with security or alternate recipient...",
+  "Nhập lý do chi tiết (ví dụ: thuê bao gọi 3 cuộc lúc 10h, khách bảo đang đi công tác...)":
+    "Enter a detailed reason, e.g. called 3 times at 10:00, customer said they were away for work...",
+  "Nhập: 099999999 hoặc +84999999999": "Enter: 099999999 or +84999999999",
+  "Nội dung phải từ 10 đến 255 ký tự.": "Content must be 10 to 255 characters.",
+  "Nông sản sạch": "Clean produce",
+  "Nông sản tươi, giá rõ ràng, giao trong ngày.": "Fresh produce, clear prices, same-day delivery.",
+  "Phần trăm giảm": "Percentage discount",
+  "Phí giao": "Shipping fee",
+  "Quản lý các địa chỉ nhận nông sản giao hỏa tốc của bạn":
+    "Manage your express produce delivery addresses",
+  "Quản lý giao dịch": "Transaction management",
+  "Quản lý thông tin cá nhân, số điện thoại và địa chỉ nhận hàng để cập nhật trạng thái mua sắm của bạn.":
+    "Manage your personal information, phone number, and shipping addresses to keep your shopping profile up to date.",
+  "Quét mã để chuyển khoản nhanh số tiền COD hôm nay":
+    "Scan the QR code to quickly transfer today's COD amount",
+  "Quét mã nhận kho thành công! Đã bắt đầu ca giao hàng.":
+    "Warehouse pickup code scanned successfully. Delivery shift started.",
+  "Sản phẩm đã mua": "Purchased products",
+  "Sản phẩm sẵn sàng": "Ready products",
+  "Sao chép mã đơn hàng": "Copy order code",
+  "Số điện thoại không hợp lệ.": "Invalid phone number.",
+  "Số điện thoại nhận hàng": "Delivery phone number",
+  "Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số":
+    "Phone number must start with 0 and contain exactly 10 digits",
+  "Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0987654321 hoặc +84987654321.":
+    "Phone number must match the Vietnam format, e.g. 0987654321 or +84987654321.",
+  "Số điện thoại phải gồm 10 chữ số.": "Phone number must contain 10 digits.",
+  "Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng số 0.":
+    "Phone number must contain exactly 10 digits and start with 0.",
+  "Số tiền": "Amount",
+  "Số tiền giảm": "Discount amount",
+  "Tài khoản của tôi": "My account",
+  "Tài xế AgriMarket": "AgriMarket driver",
+  "tắt": "disabled",
+  "Tất cả nhân viên": "All staff",
+  "Thành viên": "Member",
+  "Thành viên AgriMarket": "AgriMarket member",
+  "Theo phần trăm": "By percentage",
+  "Theo số tiền": "By amount",
+  "Thêm địa chỉ giao hàng mới": "Add new shipping address",
+  "Thiết lập làm mặc định": "Set as default",
+  "Thông tin hồ sơ để bảo mật tài khoản tốt nhất":
+    "Profile information for better account security",
+  "Thông tin khách hàng": "Customer information",
+  "Thông tin thanh toán": "Payment information",
+  "Tiền mặt cần nộp về công ty": "Cash to remit to the company",
+  "Tìm mã đơn, tên khách, địa chỉ...": "Search order code, customer name, or address...",
+  "Tìm theo danh mục, giá hoặc tên sản phẩm đang có trong kho.":
+    "Search by category, price, or product name currently in stock.",
+  "Tìm theo mã đơn, khách hàng, địa chỉ": "Search by order code, customer, or address",
+  "Tìm theo mã đơn, khách hàng, email, số điện thoại":
+    "Search by order code, customer, email, or phone",
+  "Tìm theo tên, email, số điện thoại, nội dung":
+    "Search by name, email, phone, or content",
+  "Tổng đơn hàng giao thành công": "Total successful deliveries",
+  "Tổng tiền thu hộ (COD):": "Total COD collected:",
+  "Trạng thái ca làm việc": "Shift status",
+  "Trạng thái hiện tại:": "Current status:",
+  "Tư vấn nông sản AI": "AI produce advisor",
+  "Vui lòng chọn đầy đủ Tỉnh/Thành phố, Quận/Huyện, Phường/Xã và nhập địa chỉ cụ thể.":
+    "Please select province/city, district, ward/commune, and enter the specific address.",
+  "Vui lòng chọn lý do giao hàng thất bại!": "Please choose a delivery failure reason!",
+  "Vui lòng nhập số điện thoại hợp lệ (bắt đầu bằng 0 và có 10 chữ số)":
+    "Please enter a valid phone number (starts with 0 and has 10 digits)",
+  "Vui lòng nhập số điện thoại.": "Please enter a phone number.",
+  "Vui lòng tải lên hoặc chụp ảnh minh chứng!": "Please upload or take a proof photo!",
+  "Xác Nhận & Gửi": "Confirm and submit",
+  "Xác Nhận Giao Thành Công": "Confirm Successful Delivery",
+  "Xóa địa chỉ thành công!": "Address deleted successfully!",
 };
 
 const termTranslations = {
@@ -806,9 +1013,22 @@ const termTranslations = {
   "quyền quản trị hệ thống": "system admin permissions",
   "vai trò": "roles",
   "voucher": "vouchers",
+  "danh sách ưu đãi": "promotion list",
+  "danh sách yêu thích từ tài khoản của bạn": "wishlist from your account",
+  "dữ liệu thanh toán của bạn": "your checkout data",
+  "giỏ hàng từ tài khoản của bạn": "cart from your account",
+  "lịch sử mua hàng": "purchase history",
+  "mã đơn, tên khách, địa chỉ": "order code, customer name, or address",
+  "mã đơn, khách hàng, địa chỉ": "order code, customer, or address",
+  "mã đơn, khách hàng, email, số điện thoại": "order code, customer, email, or phone",
+  "tên, email, số điện thoại, nội dung": "name, email, phone, or content",
+  "nhân viên": "staff",
+  "phiên làm việc": "work session",
+  "sản phẩm từ api": "products from API",
 };
 
 const patterns = [
+  [/^(.+)\s+đơn đang mở$/i, "$1 open orders"],
   [/^(\d+)\s+sản phẩm phù hợp$/i, "$1 matching products"],
   [/^(\d+)\s+còn lại$/i, "$1 left"],
   [/^(\d+)\s+sản phẩm$/i, "$1 products"],
@@ -830,8 +1050,10 @@ const patterns = [
   [/^Còn hàng:\s*(.+)$/i, "In stock: $1"],
   [/^Tất cả (.+)$/i, (_, value) => `All ${translateTerm(value)}`],
   [/^Tổng (.+)$/i, (_, value) => `Total ${translateTerm(value)}`],
-  [/^Quản lí (.+)$/i, (_, value) => `${capitalize(translateTerm(value))} management`],
-  [/^Quản lý (.+)$/i, (_, value) => `${capitalize(translateTerm(value))} management`],
+  [/^Trong (.+)\s+đơn mới nhất$/i, "Across the latest $1 orders"],
+  [/^Quản lí (.+)$/i, (_, value) => translateManagementPhrase(value)],
+  [/^Quản lý (.+)$/i, (_, value) => translateManagementPhrase(value)],
+  [/^Tìm theo (.+)$/i, (_, value) => `Search by ${translateTerm(value)}`],
   [/^Tìm (.+)$/i, (_, value) => `Search ${translateTerm(value)}`],
   [/^Không tìm thấy (.+)$/i, (_, value) => `No ${translateTerm(value)} found`],
   [/^Chưa có (.+)$/i, (_, value) => `No ${translateTerm(value)}`],
@@ -841,11 +1063,27 @@ const patterns = [
       return `Need ${term}`;
     }
     const trans = translateTerm(term);
-    return trans && trans !== term ? `Need ${trans}` : `Need ${term}`;
+    return trans && trans !== term ? `Need ${trans}` : null;
   }],
   [/^Không thể tải (.+?)\.?$/i, (_, value) => `Could not load ${translateTerm(value)}.`],
   [/^Đang tải (.+)\.\.\.$/i, (_, value) => `Loading ${translateTerm(value)}...`],
   [/^Đã tải ảnh (.+) lên server\.$/i, (_, value) => `${capitalize(translateTerm(value))} image uploaded to the server.`],
+  [/^Đã cập nhật báo cáo thất bại đơn hàng #(.+)\.$/i, "Failure report updated for order #$1."],
+  [/^Đã cập nhật mã (.+)\.$/i, "Coupon $1 updated."],
+  [/^Đã tạo mã (.+)\.$/i, "Coupon $1 created."],
+  [/^Đã xóa mã (.+)\.$/i, "Coupon $1 deleted."],
+  [/^Xóa mã (.+)\?$/i, "Delete coupon $1?"],
+  [/^Đã thêm (.+) vào giỏ hàng\.$/i, 'Added "$1" to the cart.'],
+  [/^Đơn #(.+) đã chuyển sang Đang giao hàng\.$/i, "Order #$1 is now out for delivery."],
+  [/^Đơn #(.+) đã hoàn thành giao hàng!$/i, "Order #$1 delivery completed!"],
+  [
+    /^Đã gửi yêu cầu đối soát số tiền (.+) COD thu được\. Vui lòng quét mã QR chuyển khoản hoặc nộp tiền mặt tại bưu cục\.$/i,
+    "COD reconciliation request for $1 has been submitted. Please scan the QR code to transfer it or submit cash at the branch.",
+  ],
+  [
+    /^Xin chào (.+), tôi là nhân viên giao hàng từ AgriMarket\. Tôi đang trên đường giao đơn hàng #(.+) trị giá (.+) cho quý khách\. Vui lòng giữ liên lạc điện thoại nhé!$/i,
+    "Hello $1, I am a delivery staff member from AgriMarket. I am on the way to deliver order #$2 worth $3. Please keep your phone available!",
+  ],
   [/^Đã cập nhật (.+?)(?:\s+"(.+)")?\.$/i, (_, value, name) => `Updated ${translateTerm(value)}${name ? ` "${name}"` : ""}.`],
   [/^Đã tạo (.+?)(?:\s+"(.+)")?\.$/i, (_, value, name) => `Created ${translateTerm(value)}${name ? ` "${name}"` : ""}.`],
   [/^Đã xóa (.+?)(?:\s+"(.+)")?\.$/i, (_, value, name) => `Deleted ${translateTerm(value)}${name ? ` "${name}"` : ""}.`],
@@ -1093,12 +1331,24 @@ function matchPattern(value) {
     const match = value.match(pattern);
     if (match) {
       if (typeof replacement === "function") {
-        return replacement(...match);
+        const translated = replacement(...match);
+        if (translated === null || translated === undefined) {
+          continue;
+        }
+        return translated;
       }
       return value.replace(pattern, replacement);
     }
   }
   return null;
+}
+
+function translateManagementPhrase(value) {
+  const term = String(value || "").trim();
+  if (!term || /[.,;:!?]/.test(term) || term.length > 48) {
+    return null;
+  }
+  return `${capitalize(translateTerm(term))} management`;
 }
 
 function translateTerm(value) {
