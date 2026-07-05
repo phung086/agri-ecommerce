@@ -248,9 +248,9 @@ const exactTranslations = {
   "Hôm nay tôi cần giao đơn nào?": "Which orders do I need to deliver today?",
   "Khi nào bấm đã giao?": "When should I mark delivered?",
   "Luồng giao hàng chuẩn là gì?": "What is the standard delivery flow?",
-  "Tóm tắt việc cần chú ý hôm nay": "Summarize what needs attention today",
   "Kiểm tra đơn pending và payment lỗi": "Check pending orders and failed payments",
   "Sản phẩm nào sắp hết hàng?": "Which products are nearly out of stock?",
+  "Vận hành bán hàng, kho và giao nhận trên cùng một bảng điều khiển.": "Manage sales, inventory, and fulfillment in one unified dashboard.",
 };
 
 const additionalTranslations = {
