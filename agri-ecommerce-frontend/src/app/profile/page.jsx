@@ -1893,13 +1893,13 @@ export default function CustomerProfilePage() {
                   className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm space-y-6"
                 >
                   <div>
-                    <h2 className="text-xl font-black text-slate-900">Hồ sơ cá nhân</h2>
-                    <p className="mt-1 text-sm text-slate-500">Quản lý thông tin hồ sơ để bảo mật tài khoản tốt nhất</p>
+                    <h2 className="text-xl font-black text-slate-900">{t("Hồ sơ cá nhân")}</h2>
+                    <p className="mt-1 text-sm text-slate-500">{t("Thông tin hồ sơ để bảo mật tài khoản tốt nhất")}</p>
                   </div>
                   <div className="grid gap-5 md:grid-cols-[1fr_220px]">
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="profile-name">Họ và tên</Label>
+                        <Label htmlFor="profile-name">{t("Họ và tên")}</Label>
                         <Input
                           id="profile-name"
                           value={form.name}
@@ -1909,7 +1909,7 @@ export default function CustomerProfilePage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="profile-email">Địa chỉ email</Label>
+                        <Label htmlFor="profile-email">{t("Địa chỉ email")}</Label>
                         <Input
                           id="profile-email"
                           value={profile?.email || ""}
@@ -1918,7 +1918,7 @@ export default function CustomerProfilePage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="profile-phone">Số điện thoại</Label>
+                        <Label htmlFor="profile-phone">{t("Số điện thoại")}</Label>
                         <Input
                           id="profile-phone"
                           value={form.phoneNumber}
@@ -1936,7 +1936,7 @@ export default function CustomerProfilePage() {
                     </div>
 
                     <div className="flex flex-col items-center justify-center border-l border-slate-100 pl-4">
-                      <Label className="mb-3 block text-sm font-bold text-slate-600">Ảnh đại diện</Label>
+                      <Label className="mb-3 block text-sm font-bold text-slate-600">{t("Ảnh đại diện")}</Label>
                       <AvatarUploadField
                         id="profile-avatar"
                         value={form.avatar}
@@ -1975,7 +1975,7 @@ export default function CustomerProfilePage() {
                       disabled={saving || loading || uploadingAvatar}
                     >
                       <Save className="size-4" />
-                      {saving ? "Đang lưu..." : "Lưu thay đổi"}
+                      {saving ? t("Đang lưu...") : t("Lưu thay đổi")}
                     </Button>
                     <Button
                       type="button"
@@ -1984,7 +1984,7 @@ export default function CustomerProfilePage() {
                       onClick={loadProfile}
                       disabled={loading}
                     >
-                      Tải lại
+                      {t("Tải lại")}
                     </Button>
                   </div>
                 </form>
@@ -1994,8 +1994,8 @@ export default function CustomerProfilePage() {
                 <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm space-y-6">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <h2 className="text-xl font-black text-slate-900">Địa chỉ nhận hàng</h2>
-                      <p className="mt-1 text-sm text-slate-500">Quản lý các địa chỉ nhận nông sản giao hỏa tốc của bạn</p>
+                      <h2 className="text-xl font-black text-slate-900">{t("Địa chỉ nhận hàng")}</h2>
+                      <p className="mt-1 text-sm text-slate-500">{t("Quản lý các địa chỉ nhận nông sản giao hỏa tốc của bạn")}</p>
                     </div>
                     {!showAddressForm && (
                       <Button
@@ -2003,7 +2003,7 @@ export default function CustomerProfilePage() {
                         className="h-10 bg-emerald-600 px-4 font-bold hover:bg-emerald-700"
                         onClick={() => openAddressForm(null)}
                       >
-                        + Thêm địa chỉ mới
+                        + {t("Thêm địa chỉ mới")}
                       </Button>
                     )}
                   </div>
@@ -2011,12 +2011,12 @@ export default function CustomerProfilePage() {
                   {showAddressForm ? (
                     <form onSubmit={handleSaveAddress} className="space-y-4 rounded-xl border border-emerald-100 bg-emerald-50/20 p-4">
                       <h3 className="font-black text-emerald-950 text-base">
-                        {editingAddress ? "Chỉnh sửa địa chỉ nhận hàng" : "Thêm địa chỉ giao hàng mới"}
+                        {editingAddress ? t("Chỉnh sửa địa chỉ nhận hàng") : t("Thêm địa chỉ giao hàng mới")}
                       </h3>
                       
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <Label htmlFor="address-fullname">Họ tên người nhận</Label>
+                          <Label htmlFor="address-fullname">{t("Họ tên người nhận")}</Label>
                           <Input
                             id="address-fullname"
                             value={addressForm.fullName || ""}
@@ -2026,7 +2026,7 @@ export default function CustomerProfilePage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="address-phone">Số điện thoại nhận hàng</Label>
+                          <Label htmlFor="address-phone">{t("Số điện thoại nhận hàng")}</Label>
                           <Input
                             id="address-phone"
                             value={addressForm.phone || ""}
@@ -2056,7 +2056,7 @@ export default function CustomerProfilePage() {
                             className="size-4 rounded border-emerald-200 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                           />
                           <label htmlFor="address-default" className="text-sm font-semibold text-emerald-900 cursor-pointer">
-                            Đặt làm địa chỉ nhận hàng mặc định
+                            {t("Đặt làm địa chỉ nhận hàng mặc định")}
                           </label>
                         </div>
                       </div>
@@ -2067,7 +2067,7 @@ export default function CustomerProfilePage() {
                           className="h-10 bg-emerald-600 font-bold hover:bg-emerald-700"
                           disabled={savingAddress}
                         >
-                          {savingAddress ? "Đang lưu..." : "Lưu địa chỉ"}
+                          {savingAddress ? t("Đang lưu...") : t("Lưu địa chỉ")}
                         </Button>
                         <Button
                           type="button"
@@ -2076,7 +2076,7 @@ export default function CustomerProfilePage() {
                           onClick={closeAddressForm}
                           disabled={savingAddress}
                         >
-                          Hủy bỏ
+                          {t("Hủy bộ")}
                         </Button>
                       </div>
                     </form>
@@ -2085,8 +2085,8 @@ export default function CustomerProfilePage() {
                       {addresses.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground border border-dashed border-emerald-100 rounded-xl bg-emerald-50/5">
                           <MapPin className="size-8 text-emerald-600 mb-2 animate-bounce" />
-                          <p className="font-semibold text-sm">Bạn chưa thêm địa chỉ nhận hàng nào.</p>
-                          <p className="text-xs mt-1">Vui lòng bấm &quot;+ Thêm địa chỉ mới&quot; để tiếp tục mua sắm.</p>
+                          <p className="font-semibold text-sm">{t("Bạn chưa thêm địa chỉ nhận hàng nào.")}</p>
+                          <p className="text-xs mt-1">{t("Vui lòng bấm \"+ Thêm địa chỉ mới\" để tiếp tục mua sắm.")}</p>
                         </div>
                       ) : (
                         <div className="grid gap-3">
@@ -2110,7 +2110,7 @@ export default function CustomerProfilePage() {
                                     </span>
                                     {addr.defaultAddress && (
                                       <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-black text-emerald-800">
-                                        Mặc định
+                                        {t("Mặc định")}
                                       </span>
                                     )}
                                   </div>
@@ -2126,7 +2126,7 @@ export default function CustomerProfilePage() {
                                     className="h-8 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 text-xs px-2"
                                     onClick={() => openAddressForm(addr)}
                                   >
-                                    Sửa
+                                    {t("Sửa")}
                                   </Button>
                                   <Button
                                     type="button"
@@ -2134,7 +2134,7 @@ export default function CustomerProfilePage() {
                                     className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs px-2"
                                     onClick={() => handleDeleteAddress(addr.id)}
                                   >
-                                    Xóa
+                                    {t("Xóa")}
                                   </Button>
                                 </div>
                               </div>
@@ -2147,7 +2147,7 @@ export default function CustomerProfilePage() {
                                     className="h-8 text-xs border-emerald-100 text-emerald-800 bg-white hover:bg-emerald-50"
                                     onClick={() => handleSetDefault(addr.id)}
                                   >
-                                    Thiết lập làm mặc định
+                                    {t("Thiết lập làm mặc định")}
                                   </Button>
                                 </div>
                               )}
@@ -2166,13 +2166,13 @@ export default function CustomerProfilePage() {
                   className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm space-y-6 max-w-xl"
                 >
                   <div>
-                    <h2 className="text-xl font-black text-slate-900">Đổi mật khẩu</h2>
-                    <p className="mt-1 text-sm text-slate-500">Để bảo mật tài khoản, vui lòng không chia sẻ mật khẩu cho người khác</p>
+                    <h2 className="text-xl font-black text-slate-900">{t("Đổi mật khẩu")}</h2>
+                    <p className="mt-1 text-sm text-slate-500">{t("Để bảo mật tài khoản, vui lòng không chia sẻ mật khẩu cho người khác")}</p>
                   </div>
 
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="customer-current-password">Mật khẩu hiện tại</Label>
+                      <Label htmlFor="customer-current-password">{t("Mật khẩu hiện tại")}</Label>
                       <Input
                         id="customer-current-password"
                         type="password"
@@ -2186,7 +2186,7 @@ export default function CustomerProfilePage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="customer-new-password">Mật khẩu mới</Label>
+                      <Label htmlFor="customer-new-password">{t("Mật khẩu mới")}</Label>
                       <Input
                         id="customer-new-password"
                         type="password"
@@ -2201,7 +2201,7 @@ export default function CustomerProfilePage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="customer-confirm-password">Xác nhận mật khẩu mới</Label>
+                      <Label htmlFor="customer-confirm-password">{t("Xác nhận mật khẩu mới")}</Label>
                       <Input
                         id="customer-confirm-password"
                         type="password"
@@ -2235,7 +2235,7 @@ export default function CustomerProfilePage() {
                       disabled={changingPassword}
                     >
                       <LockKeyhole className="size-4" />
-                      {changingPassword ? "Đang đổi..." : "Cập nhật mật khẩu"}
+                      {changingPassword ? t("Đang đổi...") : t("Cập nhật mật khẩu")}
                     </Button>
                   </div>
                 </form>

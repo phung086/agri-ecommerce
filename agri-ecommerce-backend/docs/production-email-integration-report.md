@@ -286,6 +286,14 @@ GOOGLE_SCRIPT_MAIL_SECRET=<secret giống MAIL_SECRET trong Apps Script>
      15. Click `Triển khai`.
      16. Copy `URL ứng dụng web` kết thúc bằng `/exec`.
 
+   - Update 2026-07-05 sau khi deploy:
+     - Đã set Railway production sang `EMAIL_PROVIDER=google-script`.
+     - Đã set `GOOGLE_SCRIPT_MAIL_URL` bằng Apps Script `/exec` URL đã tạo.
+     - Đã xóa các biến Railway cũ không còn dùng: SMTP Gmail override và Resend nếu có.
+     - Đã xóa `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` khỏi local `.env`.
+     - Test trực tiếp Apps Script trả `Unauthorized`, nguyên nhân là `MAIL_SECRET` trong Apps Script chưa khớp với `GOOGLE_SCRIPT_MAIL_SECRET` đã set ở Railway/local.
+     - Cách fix: vào Apps Script -> `Cài đặt dự án` -> `Thuộc tính của tập lệnh`, sửa `MAIL_SECRET` cho khớp với secret đang dùng ở Railway/local, sau đó test lại tạo đơn COD. Không cần redeploy backend nếu chỉ sửa Apps Script property.
+
 2. Gmail API trực tiếp
    - Backend lấy OAuth refresh token rồi gọi Gmail API `users.messages.send`.
    - Gửi từ Gmail thật qua HTTPS.
