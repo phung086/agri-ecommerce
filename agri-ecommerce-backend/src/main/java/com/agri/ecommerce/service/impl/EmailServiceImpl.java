@@ -76,7 +76,7 @@ public class EmailServiceImpl implements EmailService {
 
             helper.setFrom(senderEmail);
             helper.setTo(recipientEmail);
-            helper.setSubject("[AgriMarket] Hóa đơn xác nhận đơn đặt hàng #" + invoiceOrder.getId());
+            helper.setSubject("[AgriMarket] Hóa đơn xác nhận đơn đặt hàng " + (invoiceOrder.getTrackingNumber() != null ? invoiceOrder.getTrackingNumber() : "#" + invoiceOrder.getId()));
 
             String htmlBody = buildInvoiceHtml(invoiceOrder, items);
             helper.setText(htmlBody, true);
@@ -115,7 +115,7 @@ public class EmailServiceImpl implements EmailService {
                 + "    <p style='color: #666; font-size: 14px;'>Cảm ơn bạn đã tin dùng sản phẩm nông sản sạch của chúng tôi!</p>"
                 + "  </div>"
                 + "  <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>"
-                + "  <h3 style='color: #333;'>Thông tin hóa đơn đặt hàng #" + order.getId() + "</h3>"
+                + "  <h3 style='color: #333;'>Thông tin hóa đơn đặt hàng " + (order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId()) + "</h3>"
                 + "  <p style='font-size: 14px;'><strong>Ngày đặt hàng:</strong> " + escapeHtml(order.getCreatedAt()) + "</p>"
                 + "  <div style='background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-size: 14px;'>"
                 + "    <h4 style='margin-top: 0; color: #2e7d32;'>Thông tin nhận hàng:</h4>"

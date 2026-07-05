@@ -17,7 +17,10 @@ import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.OrderService;
 import com.agri.ecommerce.service.PaymentService;
 import com.agri.ecommerce.service.ShippingCarrierService;
+import com.agri.ecommerce.service.EmailService;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,7 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
@@ -84,6 +88,9 @@ public class OrderServiceImpl implements OrderService {
     private final ShippingCarrierService shippingCarrierService;
 
     private final VnpayProperties vnpayProperties;
+
+    @Autowired
+    private EmailService emailService;
 
     @Override
     @Transactional(readOnly = true)
@@ -240,10 +247,22 @@ public class OrderServiceImpl implements OrderService {
                 .status(PAYMENT_PENDING)
                 .build());
 
+        String orderNote = "Customer created order";
+        if ("cash".equalsIgnoreCase(paymentMethod)) {
+            try {
+                String trackingCode = shippingCarrierService.createShippingLabel(order);
+                order.setTrackingNumber(trackingCode);
+                orderRepository.save(order);
+                orderNote += ". Đã tạo vận đơn trên GHN. Mã vận đơn: " + trackingCode;
+            } catch (Exception ex) {
+                log.error("[Order Service] Failed to create GHN shipping label: {}", ex.getMessage());
+            }
+        }
+
         OrderStatusHistoryEntity history = orderStatusHistoryRepository.save(createStatusHistory(
                 order,
                 ORDER_PENDING,
-                "Customer created order"
+                orderNote
         ));
 
         checkoutItems.forEach(this::decreaseProductStock);
@@ -254,6 +273,29 @@ public class OrderServiceImpl implements OrderService {
                 "Đơn hàng #" + order.getId() + " đã được tạo thành công",
                 buildOrderLink(order.getId())
         );
+
+        if ("cash".equalsIgnoreCase(paymentMethod)) {
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                emailService.sendOrderInvoice(order);
+                            } catch (Exception ex) {
+                                log.error("[Order Service] Failed to send COD email after commit: {}", ex.getMessage());
+                            }
+                        }
+                    }
+                );
+            } else {
+                try {
+                    emailService.sendOrderInvoice(order);
+                } catch (Exception ex) {
+                    log.error("[Order Service] Failed to send COD email: {}", ex.getMessage());
+                }
+            }
+        }
 
         return orderMapper.toOrderResponse(order, savedOrderItems, payment, List.of(history));
     }

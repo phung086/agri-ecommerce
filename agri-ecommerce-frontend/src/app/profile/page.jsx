@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   CreditCard,
+  Copy,
   Eye,
   EyeOff,
   Home,
@@ -591,9 +592,32 @@ function PurchaseHistorySection({
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-black text-slate-950">
-                        Đơn hàng #{order.id}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-black text-slate-950">
+                          Đơn hàng {order.trackingNumber || '#' + order.id}
+                        </h3>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(order.trackingNumber || String(order.id));
+                            toast.success("Đã sao chép mã đơn hàng!");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(order.trackingNumber || String(order.id));
+                              toast.success("Đã sao chép mã đơn hàng!");
+                            }
+                          }}
+                          className="flex size-6 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
+                          title="Sao chép mã đơn hàng"
+                        >
+                          <Copy className="size-3.5" />
+                        </span>
+                      </div>
                       <StatusBadge status={order.status} />
                       {order.payment?.status && (
                         <StatusBadge status={order.payment.status} />

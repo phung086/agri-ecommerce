@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   CheckCircle2,
   CircleDollarSign,
@@ -12,6 +13,7 @@ import {
   Search,
   Truck,
   XCircle,
+  Copy,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -457,7 +459,7 @@ export default function AdminOrdersPage() {
 
           return (
             <TableRow key={order.id}>
-              <TableCell className="px-4 font-medium">#{order.id}</TableCell>
+              <TableCell className="px-4 font-medium">{order.trackingNumber || '#' + order.id}</TableCell>
               <TableCell className="px-4">
                 <div className="min-w-0">
                   <p className="truncate font-medium">
@@ -576,7 +578,21 @@ export default function AdminOrdersPage() {
           {selectedOrder && (
             <div className="space-y-4">
               <DialogHeader>
-                <DialogTitle>Đơn hàng #{selectedOrder.id}</DialogTitle>
+                <div className="flex items-center gap-2">
+                  <DialogTitle>Đơn hàng {selectedOrder.trackingNumber || '#' + selectedOrder.id}</DialogTitle>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(selectedOrder.trackingNumber || String(selectedOrder.id));
+                      toast.success("Đã sao chép mã đơn hàng!");
+                    }}
+                    className="flex size-5 items-center justify-center rounded bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition"
+                    title="Sao chép mã đơn hàng"
+                  >
+                    <Copy className="size-3" />
+                  </button>
+                </div>
                 <DialogDescription>
                   Chi tiết đơn hàng lấy từ API quản trị.
                 </DialogDescription>

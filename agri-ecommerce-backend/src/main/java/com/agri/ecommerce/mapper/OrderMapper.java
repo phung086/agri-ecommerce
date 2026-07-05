@@ -48,6 +48,7 @@ public class OrderMapper {
                 .deliveryProofImage(order.getDeliveryProofImage())
                 .deliverySignature(order.getDeliverySignature())
                 .deliveryFailureReason(order.getDeliveryFailureReason())
+                .trackingNumber(order.getTrackingNumber())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();

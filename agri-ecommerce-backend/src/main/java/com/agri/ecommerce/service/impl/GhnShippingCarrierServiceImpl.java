@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,8 +48,8 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
 
     public GhnShippingCarrierServiceImpl(OrderItemRepository orderItemRepository, PaymentRepository paymentRepository) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofSeconds(2));
-        requestFactory.setReadTimeout(Duration.ofSeconds(3));
+        requestFactory.setConnectTimeout(Duration.ofSeconds(5));
+        requestFactory.setReadTimeout(Duration.ofSeconds(10));
         this.restTemplate = new RestTemplate(requestFactory);
         this.orderItemRepository = orderItemRepository;
         this.paymentRepository = paymentRepository;
@@ -234,18 +235,36 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             String streetAddress = detailedAddress;
 
             String[] parts = detailedAddress.split(",");
-            if (parts.length >= 2) {
-                district = parts[parts.length - 1].trim();
-                ward = parts[parts.length - 2].trim();
-                // Everything before ward is the street address
-                List<String> streetParts = new ArrayList<>();
-                for (int i = 0; i < parts.length - 2; i++) {
-                    streetParts.add(parts[i].trim());
+            List<String> trimmedParts = new ArrayList<>();
+            for (String part : parts) {
+                String p = part.trim();
+                if (!p.isEmpty()) {
+                    trimmedParts.add(p);
                 }
-                streetAddress = String.join(", ", streetParts);
-            } else if (parts.length == 1) {
-                district = parts[0].trim();
             }
+
+            // If the last part matches/contains the province name, strip it to prevent offset
+            if (!trimmedParts.isEmpty() && !province.isEmpty()) {
+                String lastPartNormalized = normalizeName(trimmedParts.get(trimmedParts.size() - 1));
+                String provinceNormalized = normalizeName(province);
+                if (lastPartNormalized.equals(provinceNormalized) || 
+                    lastPartNormalized.contains(provinceNormalized) || 
+                    provinceNormalized.contains(lastPartNormalized)) {
+                    trimmedParts.remove(trimmedParts.size() - 1);
+                }
+            }
+
+            if (trimmedParts.size() >= 2) {
+                district = trimmedParts.get(trimmedParts.size() - 1);
+                ward = trimmedParts.get(trimmedParts.size() - 2);
+                List<String> streetParts = trimmedParts.subList(0, trimmedParts.size() - 2);
+                streetAddress = String.join(", ", streetParts);
+            } else if (trimmedParts.size() == 1) {
+                district = trimmedParts.get(0);
+            }
+
+            log.info("[GHN API] Parsed address → province='{}', district='{}', ward='{}', street='{}'",
+                    province, district, ward, streetAddress);
 
             ResolvedLocation loc = resolveLocation(province, district, ward);
             if (loc == null) {
@@ -274,7 +293,7 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             HttpHeaders headers = buildHeaders();
             GhnOrderRequest orderRequest = GhnOrderRequest.builder()
                     .paymentTypeId(1) // 1: Shop pays shipping fee (since we collect from customer directly)
-                    .requiredNote("CHOXEMHANG")
+                    .requiredNote("CHOXEMHANGKHONGTHU")
                     .toName(order.getShippingName() != null ? order.getShippingName() : order.getUser().getName())
                     .toPhone(order.getShippingPhone() != null ? order.getShippingPhone() : order.getUser().getPhoneNumber())
                     .toAddress(streetAddress.isEmpty() ? detailedAddress : streetAddress)
@@ -335,6 +354,7 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             );
 
             if (provResp.getBody() == null || provResp.getBody().getData() == null) {
+                log.warn("[GHN Location] Province API returned null body/data. HTTP status: {}", provResp.getStatusCode());
                 return null;
             }
 
@@ -342,8 +362,17 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             int matchedProvinceId = -1;
             String normalizedPName = normalizeName(pName);
 
+            log.info("[GHN Location] Province lookup: input='{}', normalized='{}', totalProvinces={}. Sample: {}",
+                    pName, normalizedPName, provinces.size(),
+                    provinces.stream().limit(3)
+                            .map(p -> p.get("ProvinceName") + "→" + normalizeName((String) p.get("ProvinceName")))
+                            .toList());
+
             for (Map<String, Object> prov : provinces) {
                 String name = (String) prov.get("ProvinceName");
+                if (name == null || name.contains("02") || name.toLowerCase().contains("test") || name.toLowerCase().contains("mock")) {
+                    continue; // Skip dummy sandbox provinces
+                }
                 List<String> extensions = (List<String>) prov.get("NameExtension");
                 if (normalizeName(name).equals(normalizedPName) || isExtensionMatch(extensions, normalizedPName)) {
                     matchedProvinceId = ((Number) prov.get("ProvinceID")).intValue();
@@ -355,6 +384,9 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
                 // Fuzzy fallback: check if one contains the other
                 for (Map<String, Object> prov : provinces) {
                     String name = (String) prov.get("ProvinceName");
+                    if (name == null || name.contains("02") || name.toLowerCase().contains("test") || name.toLowerCase().contains("mock")) {
+                        continue;
+                    }
                     if (normalizeName(name).contains(normalizedPName) || normalizedPName.contains(normalizeName(name))) {
                         matchedProvinceId = ((Number) prov.get("ProvinceID")).intValue();
                         break;
@@ -363,9 +395,11 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             }
 
             if (matchedProvinceId == -1) {
-                log.warn("[GHN Location] Province not resolved: {}", pName);
+                log.warn("[GHN Location] Province not resolved: '{}' (normalized='{}')", pName, normalizedPName);
                 return null;
             }
+
+            log.info("[GHN Location] Resolved Province: '{}' -> ID={}", pName, matchedProvinceId);
 
             // 2. Fetch districts and match
             String distUrl = apiUrl + "/master-data/district";
@@ -373,9 +407,10 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             HttpEntity<Map<String, Object>> distEntity = new HttpEntity<>(distBody, headers);
             ResponseEntity<GhnResponse> distResp = restTemplate.exchange(
                     distUrl, HttpMethod.POST, distEntity, GhnResponse.class
-            );
+                );
 
             if (distResp.getBody() == null || distResp.getBody().getData() == null) {
+                log.warn("[GHN Location] District API returned null body/data. HTTP status: {}", distResp.getStatusCode());
                 return null;
             }
 
@@ -387,8 +422,14 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
                 return null;
             }
 
+            log.info("[GHN Location] District lookup: input='{}', normalized='{}', totalDistricts={}",
+                    dName, normalizedDName, districts.size());
+
             for (Map<String, Object> dist : districts) {
                 String name = (String) dist.get("DistrictName");
+                if (name == null || name.contains("02") || name.toLowerCase().contains("test") || name.toLowerCase().contains("mock")) {
+                    continue;
+                }
                 List<String> extensions = (List<String>) dist.get("NameExtension");
                 if (normalizeName(name).equals(normalizedDName) || isExtensionMatch(extensions, normalizedDName)) {
                     matchedDistrictId = ((Number) dist.get("DistrictID")).intValue();
@@ -400,6 +441,9 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
                 // Fuzzy fallback
                 for (Map<String, Object> dist : districts) {
                     String name = (String) dist.get("DistrictName");
+                    if (name == null || name.contains("02") || name.toLowerCase().contains("test") || name.toLowerCase().contains("mock")) {
+                        continue;
+                    }
                     if (normalizeName(name).contains(normalizedDName) || normalizedDName.contains(normalizeName(name))) {
                         matchedDistrictId = ((Number) dist.get("DistrictID")).intValue();
                         break;
@@ -408,13 +452,14 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             }
 
             if (matchedDistrictId == -1) {
-                log.warn("[GHN Location] District not resolved: {} in province ID {}", dName, matchedProvinceId);
+                log.warn("[GHN Location] District not resolved: '{}' (normalized='{}') in province ID {}", dName, normalizedDName, matchedProvinceId);
                 return null;
             }
 
+            log.info("[GHN Location] Resolved District: '{}' -> ID={}", dName, matchedDistrictId);
+
             // 3. Fetch wards and match
             String wardUrl = apiUrl + "/master-data/ward?district_id=" + matchedDistrictId;
-            // GHN accepts district_id either as query parameter or request body
             Map<String, Object> wardBody = Map.of("district_id", matchedDistrictId);
             HttpEntity<Map<String, Object>> wardEntity = new HttpEntity<>(wardBody, headers);
             ResponseEntity<GhnResponse> wardResp = restTemplate.exchange(
@@ -422,6 +467,7 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             );
 
             if (wardResp.getBody() == null || wardResp.getBody().getData() == null) {
+                log.warn("[GHN Location] Ward API returned null body/data. HTTP status: {}", wardResp.getStatusCode());
                 return null;
             }
 
@@ -462,7 +508,8 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
 
             return new ResolvedLocation(matchedProvinceId, matchedDistrictId, matchedWardCode);
         } catch (Exception e) {
-            log.error("[GHN Location] Error resolving location: {}", e.getMessage());
+            log.error("[GHN Location] Error resolving location for province='{}', district='{}', ward='{}': {} - {}",
+                    pName, dName, wName, e.getClass().getSimpleName(), e.getMessage(), e);
         }
         return null;
     }
@@ -481,24 +528,25 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
 
     private String normalizeName(String name) {
         if (name == null) return "";
-        return name.toLowerCase()
-                .replaceAll("thành phố", "")
-                .replaceAll("tỉnh", "")
-                .replaceAll("quận", "")
-                .replaceAll("huyện", "")
-                .replaceAll("thị xã", "")
-                .replaceAll("phường", "")
-                .replaceAll("xã", "")
-                .replaceAll("thị trấn", "")
-                .replaceAll("[àáạảãâầấậẩẫăằắặẳẵ]", "a")
-                .replaceAll("[èéẹẻẽêềếệểễ]", "e")
-                .replaceAll("[ìíịỉĩ]", "i")
-                .replaceAll("[òóọỏõôồốộổỗơờớợởỡ]", "o")
-                .replaceAll("[ùúụủũưừứựửữ]", "u")
-                .replaceAll("[ỳýỵỷỹ]", "y")
-                .replaceAll("đ", "d")
-                .replaceAll("\\s+", "")
-                .trim();
+        // Normalize to NFC first to ensure consistent Unicode representation
+        String nfc = Normalizer.normalize(name, Normalizer.Form.NFC);
+        String lower = nfc.toLowerCase();
+        // Remove Vietnamese administrative prefix words
+        lower = lower.replaceAll("th\u00e0nh ph\u1ed1", "")  // thành phố
+                     .replaceAll("t\u1ec9nh", "")             // tỉnh
+                     .replaceAll("qu\u1eadn", "")             // quận
+                     .replaceAll("huy\u1ec7n", "")            // huyện
+                     .replaceAll("th\u1ecb x\u00e3", "")      // thị xã
+                     .replaceAll("ph\u01b0\u1eddng", "")      // phường
+                     .replaceAll("x\u00e3", "")               // xã
+                     .replaceAll("th\u1ecb tr\u1ea5n", "");   // thị trấn
+        // Remove all diacritics by decomposing to NFD and stripping combining marks
+        String decomposed = Normalizer.normalize(lower, Normalizer.Form.NFD);
+        String stripped = decomposed.replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+        // Handle đ/Đ (not covered by standard decomposition)
+        stripped = stripped.replaceAll("[d\u0111]", "d");
+        // Remove all whitespace
+        return stripped.replaceAll("\\s+", "").trim();
     }
 
     private HttpHeaders buildHeaders() {

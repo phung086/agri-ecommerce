@@ -80,6 +80,9 @@ public class OrderEntity {
     @Column(name = "shipping_city")
     private String shippingCity;
 
+    @Column(name = "tracking_number", length = 100)
+    private String trackingNumber;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

@@ -1105,7 +1105,7 @@ export default function CheckoutPage() {
       setPreview(null);
 
       if (paymentMethod === "vnpay") {
-        setNotice(`Đã tạo đơn hàng #${order.id}. Đang chuyển sang VNPay...`);
+        setNotice(`Đã tạo đơn hàng ${order.trackingNumber || '#' + order.id}. Đang chuyển sang VNPay...`);
         const payment = await orderService.createVnpayPaymentUrl(order.id);
         window.location.assign(payment.paymentUrl);
         return;
@@ -1113,7 +1113,7 @@ export default function CheckoutPage() {
 
       const nextCart = await cartService.getCart();
       setCart(nextCart);
-      setNotice(`Đã tạo đơn hàng #${order.id}.`);
+      setNotice(`Đã tạo đơn hàng ${order.trackingNumber || '#' + order.id}.`);
     } catch (err) {
       setError(getErrorMessage(err, "Không thể tạo đơn hàng."));
     } finally {
@@ -1195,7 +1195,7 @@ export default function CheckoutPage() {
                 <section className="rounded-[8px] border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
                   <CheckCircle2 className="size-8" />
                   <h2 className="mt-3 text-xl font-black">
-                    Đã tạo đơn hàng #{createdOrder.id}
+                    Đã tạo đơn hàng {createdOrder.trackingNumber || '#' + createdOrder.id}
                   </h2>
                   <p className="mt-2 text-sm font-semibold">
                     Trạng thái hiện tại: {createdOrder.status}. Admin có thể xử

@@ -18,6 +18,7 @@ import com.agri.ecommerce.repository.*;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.PaymentService;
 import com.agri.ecommerce.service.EmailService;
+import com.agri.ecommerce.service.ShippingCarrierService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -112,6 +113,9 @@ public class PaymentServiceImpl implements PaymentService {
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
 
     private final EmailService emailService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private ShippingCarrierService shippingCarrierService;
 
     @Override
     @Transactional(readOnly = true)
@@ -302,18 +306,43 @@ public class PaymentServiceImpl implements PaymentService {
                 order.setStatus(ORDER_PROCESSING);
                 orderRepository.save(order);
 
+                String ghnNote = "Thanh toán VNPay thành công. Trạng thái đơn hàng tự động chuyển sang Processing.";
+                try {
+                    String trackingCode = shippingCarrierService.createShippingLabel(order);
+                    order.setTrackingNumber(trackingCode);
+                    orderRepository.save(order);
+                    ghnNote += " Đã tạo vận đơn trên GHN. Mã vận đơn: " + trackingCode;
+                } catch (Exception ex) {
+                    log.error("[Payment Service] Failed to create GHN shipping label: {}", ex.getMessage());
+                }
+
                 orderStatusHistoryRepository.save(OrderStatusHistoryEntity.builder()
                         .order(order)
                         .status(ORDER_PROCESSING)
                         .changedAt(LocalDateTime.now())
-                        .note("Thanh toán VNPay thành công. Trạng thái đơn hàng tự động chuyển sang Processing.")
+                        .note(ghnNote)
                         .build());
             }
 
-            try {
-                emailService.sendOrderInvoice(order);
-            } catch (Exception e) {
-                log.error("[Payment Service] Failed to send email invoice: {}", e.getMessage());
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                emailService.sendOrderInvoice(order);
+                            } catch (Exception ex) {
+                                log.error("[Payment Service] Failed to send email invoice after commit: {}", ex.getMessage());
+                            }
+                        }
+                    }
+                );
+            } else {
+                try {
+                    emailService.sendOrderInvoice(order);
+                } catch (Exception e) {
+                    log.error("[Payment Service] Failed to send email invoice: {}", e.getMessage());
+                }
             }
 
             notifyCustomerPaymentChange(
