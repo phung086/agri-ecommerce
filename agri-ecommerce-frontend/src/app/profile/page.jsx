@@ -540,7 +540,6 @@ function AuthPanel({ onAuthenticated }) {
     </section>
   );
 }
-}
 
 function PurchaseHistorySection({
   orders,
