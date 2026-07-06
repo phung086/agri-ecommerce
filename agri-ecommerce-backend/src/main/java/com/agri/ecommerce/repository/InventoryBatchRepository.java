@@ -19,6 +19,6 @@ public interface InventoryBatchRepository extends JpaRepository<InventoryBatchEn
     @Query("SELECT b FROM InventoryBatchEntity b WHERE b.expiryDate < :now AND b.remainingQuantity > 0")
     List<InventoryBatchEntity> findExpiredBatchesWithStock(@Param("now") LocalDateTime now);
 
-    @Query("SELECT b FROM InventoryBatchEntity b WHERE b.product.id = :productId AND b.expiryDate > :now AND b.expiryDate <= :nearExpiryThreshold AND b.remainingQuantity > 0")
+    @Query("SELECT b FROM InventoryBatchEntity b WHERE b.product.id = :productId AND b.expiryDate > :now AND b.expiryDate <= :nearExpiryThreshold AND b.remainingQuantity > 0 ORDER BY b.expiryDate ASC")
     List<InventoryBatchEntity> findNearExpiryBatches(@Param("productId") Long productId, @Param("now") LocalDateTime now, @Param("nearExpiryThreshold") LocalDateTime nearExpiryThreshold);
 }
