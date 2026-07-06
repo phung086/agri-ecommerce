@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+  flyway:
+    enabled: false
+  mail:
+    host: localhost
+    port: 3025
+app:
+  jwt:
+    secret: AgriEcommerceJwtSecretKeyForLocalDevelopmentMustBeAtLeast32Chars2026
+    expiration-ms: 86400000
+  shipping:
+    ghn:
+      api-url: https://mock-ghn.test
+      token: mock-token
+      shop-id: "12345"

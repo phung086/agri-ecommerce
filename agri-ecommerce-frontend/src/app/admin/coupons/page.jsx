@@ -57,6 +57,7 @@ const blankCouponForm = {
   discountType: "PERCENTAGE",
   discountPercentage: "",
   discountAmount: "",
+  minOrderValue: "",
   startsAt: "",
   expiresAt: "",
   usageLimit: "",
@@ -116,6 +117,7 @@ function buildCouponPayload(form) {
     startsAt: toApiDateTime(form.startsAt),
     expiresAt: toApiDateTime(form.expiresAt),
     usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
+    minOrderValue: form.minOrderValue ? Number(form.minOrderValue) : null,
     active: Boolean(form.active),
   };
 
@@ -264,6 +266,7 @@ export default function AdminCouponsPage() {
       discountType: coupon.discountType || "PERCENTAGE",
       discountPercentage: String(coupon.discountPercentage ?? ""),
       discountAmount: String(coupon.discountAmount ?? ""),
+      minOrderValue: String(coupon.minOrderValue ?? ""),
       startsAt: toDateInput(coupon.startsAt),
       expiresAt: toDateInput(coupon.expiresAt),
       usageLimit: String(coupon.usageLimit ?? ""),
@@ -445,6 +448,7 @@ export default function AdminCouponsPage() {
           "Mã",
           "Loại",
           "Giảm",
+          "Đơn tối thiểu",
           "Lượt dùng",
           "Hạn dùng",
           "Trạng thái",
@@ -471,6 +475,11 @@ export default function AdminCouponsPage() {
               </TableCell>
               <TableCell className="px-4 font-medium">
                 {getCouponDiscountLabel(coupon)}
+              </TableCell>
+              <TableCell className="px-4">
+                {coupon.minOrderValue
+                  ? formatCurrency(coupon.minOrderValue)
+                  : "Không"}
               </TableCell>
               <TableCell className="px-4">
                 {formatNumber(coupon.timesUsed)} /{" "}
@@ -622,6 +631,19 @@ export default function AdminCouponsPage() {
                   )}
                 </>
               )}
+
+              <div className="space-y-2">
+                <Label htmlFor="coupon-min-order">Đơn tối thiểu</Label>
+                <Input
+                  id="coupon-min-order"
+                  type="number"
+                  min="1"
+                  value={form.minOrderValue}
+                  onChange={(event) =>
+                    updateForm("minOrderValue", event.target.value)
+                  }
+                />
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="coupon-starts">Ngày bắt đầu</Label>

@@ -61,6 +61,8 @@ public class OrderResponse {
 
     private String deliveryFailureReason;
 
+    private String trackingNumber;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

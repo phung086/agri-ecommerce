@@ -883,7 +883,7 @@ function WishlistDrawer({
 
 export default function Home() {
   const router = useRouter();
-  const { locale } = useLanguage();
+  const { locale, t } = useLanguage();
   const [filters, setFilters] = useState({
     keyword: "",
     categorySlug: ALL_CATEGORY,
@@ -944,14 +944,15 @@ export default function Home() {
 
   useEffect(() => {
     const cleanKeyword = filters.keyword.trim();
-    if (!cleanKeyword) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return undefined;
-    }
-
-    setSuggestionsLoading(true);
     const handler = setTimeout(async () => {
+      if (!cleanKeyword) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        setSuggestionsLoading(false);
+        return;
+      }
+
+      setSuggestionsLoading(true);
       try {
         const response = await marketplaceService.getSearchSuggestions(cleanKeyword, 8);
         setSuggestions(Array.isArray(response) ? response : []);
@@ -963,7 +964,7 @@ export default function Home() {
       } finally {
         setSuggestionsLoading(false);
       }
-    }, 250);
+    }, cleanKeyword ? 250 : 0);
 
     return () => {
       clearTimeout(handler);
@@ -1382,23 +1383,23 @@ export default function Home() {
   const marketStats = [
     {
       value: `${formatNumber(Math.max(totalProducts, productCards.length))}+`,
-      label: "sản phẩm sẵn sàng",
+      label: t("Sản phẩm sẵn sàng"),
       icon: ShoppingBasket,
-      description: "Đang mở bán trên public API",
+      description: t("Đang mở bán tại cửa hàng"),
       tone: "green",
     },
     {
       value: `${formatNumber(Math.max(categoryOptions.length - 1, 0))}+`,
-      label: "nhóm nông sản",
+      label: t("Nhóm nông sản"),
       icon: Leaf,
-      description: "Lọc nhanh theo nhu cầu",
+      description: t("Lọc nhanh theo nhu cầu"),
       tone: "amber",
     },
     {
       value: "2h",
-      label: "giao nhanh nội thành",
+      label: t("Giao nhanh nội thành"),
       icon: Truck,
-      description: "Ước tính cho đơn trong ngày",
+      description: t("Ước tính giao trong ngày"),
       tone: "blue",
     },
   ];
@@ -1850,7 +1851,7 @@ export default function Home() {
                           onClick={() => setShowSuggestions(false)}
                           className="text-[10px] font-black text-emerald-700 hover:text-emerald-800 transition"
                         >
-                          Xem tất cả gợi ý cho "{filters.keyword}" →
+                          Xem tất cả gợi ý cho &quot;{filters.keyword}&quot; →
                         </a>
                       </div>
                     </>
@@ -1956,7 +1957,7 @@ export default function Home() {
           <div className="relative grid min-h-[360px] gap-6 p-5 text-white sm:p-7 lg:grid-cols-[1fr_520px] lg:items-end lg:p-8">
             <div className="max-w-3xl self-center">
               <div className="flex flex-wrap gap-2">
-                {["Marketplace", "Public API", "Giỏ hàng client"].map((badge) => (
+                {["Nông sản sạch", "Giao nhanh 2h", "Giá bình ổn"].map((badge) => (
                   <span
                     key={badge}
                     className="rounded-[8px] border border-white/30 bg-white/16 px-3 py-1 text-xs font-bold text-white backdrop-blur"
@@ -2353,8 +2354,7 @@ export default function Home() {
               Từ nông trại đến giỏ hàng trong một hành trình rõ ràng
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-500">
-              Trải nghiệm client hiện có thể tìm sản phẩm, lọc theo nhu cầu,
-              xem nhanh chi tiết và gom giỏ trước khi nối tiếp sang checkout.
+              Hệ thống hỗ trợ tìm kiếm sản phẩm thông minh, chọn lọc vùng miền và giao hàng hỏa tốc trong ngày để bảo đảm độ tươi ngon tối đa.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">

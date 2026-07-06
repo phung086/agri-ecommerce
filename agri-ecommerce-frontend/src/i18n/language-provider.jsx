@@ -90,6 +90,12 @@ export function LanguageProvider({ children }) {
     };
   }, [hydrated, locale]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.__agriTranslate = (text) => translateText(text, locale);
+    }
+  }, [locale]);
+
   const value = useMemo(
     () => ({
       locale,

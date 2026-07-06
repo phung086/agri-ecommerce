@@ -11,11 +11,16 @@ import com.agri.ecommerce.entity.*;
 import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.OrderMapper;
+import com.agri.ecommerce.mapper.ShippingAddressMapper;
 import com.agri.ecommerce.repository.*;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.OrderService;
 import com.agri.ecommerce.service.PaymentService;
+import com.agri.ecommerce.service.ShippingCarrierService;
+import com.agri.ecommerce.service.EmailService;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +32,7 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
@@ -46,6 +52,7 @@ public class OrderServiceImpl implements OrderService {
     private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final String PAYMENT_METHOD_VNPAY = "vnpay";
     private static final BigDecimal DEFAULT_SHIPPING_FEE = new BigDecimal("25000.00");
+    private static final double DEFAULT_ITEM_WEIGHT_GRAMS = 500.0d;
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ALLOWED_PAYMENT_METHODS = Set.of("cash", "paypal", "vnpay");
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
@@ -76,7 +83,14 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderMapper orderMapper;
 
+    private final ShippingAddressMapper shippingAddressMapper;
+
+    private final ShippingCarrierService shippingCarrierService;
+
     private final VnpayProperties vnpayProperties;
+
+    @Autowired
+    private EmailService emailService;
 
     @Override
     @Transactional(readOnly = true)
@@ -108,7 +122,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public CheckoutPreviewResponse previewCheckout(Long userId, CheckoutRequest request) {
         findUserById(userId);
-        findShippingAddressByIdAndUserId(request.getShippingAddressId(), userId);
+        ShippingAddressEntity shippingAddress = findShippingAddressByIdAndUserId(request.getShippingAddressId(), userId);
         String paymentMethod = normalizePaymentMethod(request.getPaymentMethod());
         List<CartItemEntity> cartItems = cartItemRepository.findByUser_IdOrderByCreatedAtDesc(userId);
 
@@ -119,6 +133,7 @@ public class OrderServiceImpl implements OrderService {
                     .couponCode(cleanBlank(request.getCouponCode()))
                     .couponValid(false)
                     .couponMessage("Cart is empty")
+                    .shippingAddress(shippingAddressMapper.toShippingAddressResponse(shippingAddress))
                     .totalQuantity(0)
                     .subtotal(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                     .discountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
@@ -138,11 +153,15 @@ public class OrderServiceImpl implements OrderService {
                 .map(entry -> toCheckoutPreviewItem(productsById.get(entry.getKey()), entry.getValue()))
                 .toList();
         boolean allItemsAvailable = previewItems.stream().allMatch(CheckoutPreviewItemResponse::isAvailable);
+        int totalQuantity = previewItems.stream()
+                .mapToInt(item -> item.getRequestedQuantity() == null ? 0 : item.getRequestedQuantity())
+                .sum();
         BigDecimal subtotal = previewItems.stream()
                 .map(CheckoutPreviewItemResponse::getLineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
-        CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal);
+        BigDecimal baseShippingFee = calculateBaseShippingFee(shippingAddress, totalQuantity);
+        CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal, baseShippingFee);
         BigDecimal totalPrice = subtotal
                 .subtract(couponCalculation.discountAmount())
                 .add(couponCalculation.shippingFee())
@@ -155,9 +174,8 @@ public class OrderServiceImpl implements OrderService {
                 .couponCode(couponCalculation.couponCode())
                 .couponValid(couponCalculation.valid())
                 .couponMessage(couponCalculation.message())
-                .totalQuantity(previewItems.stream()
-                        .mapToInt(item -> item.getRequestedQuantity() == null ? 0 : item.getRequestedQuantity())
-                        .sum())
+                .shippingAddress(shippingAddressMapper.toShippingAddressResponse(shippingAddress))
+                .totalQuantity(totalQuantity)
                 .subtotal(subtotal)
                 .discountAmount(couponCalculation.discountAmount())
                 .shippingFee(couponCalculation.shippingFee())
@@ -188,7 +206,9 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal subtotal = checkoutItems.stream()
                 .map(CheckoutItem::lineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        CouponCalculation couponCalculation = calculateCoupon(request.getCouponCode(), subtotal);
+        int totalQuantity = checkoutItems.stream().mapToInt(CheckoutItem::quantity).sum();
+        BigDecimal baseShippingFee = calculateBaseShippingFee(shippingAddress, totalQuantity);
+        CouponCalculation couponCalculation = calculateCoupon(request.getCouponCode(), subtotal, baseShippingFee);
         BigDecimal totalPrice = subtotal
                 .subtract(couponCalculation.discountAmount())
                 .add(couponCalculation.shippingFee())
@@ -197,6 +217,10 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity order = orderRepository.save(OrderEntity.builder()
                 .user(user)
                 .shippingAddress(shippingAddress)
+                .shippingName(shippingAddress.getFullName())
+                .shippingPhone(shippingAddress.getPhone())
+                .shippingAddressDetail(shippingAddress.getAddress())
+                .shippingCity(shippingAddress.getCity())
                 .subtotal(subtotal)
                 .discountAmount(couponCalculation.discountAmount())
                 .shippingFee(couponCalculation.shippingFee())
@@ -223,10 +247,22 @@ public class OrderServiceImpl implements OrderService {
                 .status(PAYMENT_PENDING)
                 .build());
 
+        String orderNote = "Customer created order";
+        if ("cash".equalsIgnoreCase(paymentMethod)) {
+            try {
+                String trackingCode = shippingCarrierService.createShippingLabel(order);
+                order.setTrackingNumber(trackingCode);
+                orderRepository.save(order);
+                orderNote += ". Đã tạo vận đơn trên GHN. Mã vận đơn: " + trackingCode;
+            } catch (Exception ex) {
+                log.error("[Order Service] Failed to create GHN shipping label: {}", ex.getMessage());
+            }
+        }
+
         OrderStatusHistoryEntity history = orderStatusHistoryRepository.save(createStatusHistory(
                 order,
                 ORDER_PENDING,
-                "Customer created order"
+                orderNote
         ));
 
         checkoutItems.forEach(this::decreaseProductStock);
@@ -237,6 +273,29 @@ public class OrderServiceImpl implements OrderService {
                 "Đơn hàng #" + order.getId() + " đã được tạo thành công",
                 buildOrderLink(order.getId())
         );
+
+        if ("cash".equalsIgnoreCase(paymentMethod)) {
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                emailService.sendOrderInvoice(order);
+                            } catch (Exception ex) {
+                                log.error("[Order Service] Failed to send COD email after commit: {}", ex.getMessage());
+                            }
+                        }
+                    }
+                );
+            } else {
+                try {
+                    emailService.sendOrderInvoice(order);
+                } catch (Exception ex) {
+                    log.error("[Order Service] Failed to send COD email: {}", ex.getMessage());
+                }
+            }
+        }
 
         return orderMapper.toOrderResponse(order, savedOrderItems, payment, List.of(history));
     }
@@ -511,7 +570,7 @@ public class OrderServiceImpl implements OrderService {
         productRepository.saveAll(productsById.values());
     }
 
-    private CouponCalculation calculateCoupon(String couponCode, BigDecimal subtotal) {
+    private CouponCalculation calculateCoupon(String couponCode, BigDecimal subtotal, BigDecimal baseShippingFee) {
         String cleanCouponCode = cleanBlank(couponCode);
 
         if (cleanCouponCode == null) {
@@ -519,16 +578,16 @@ public class OrderServiceImpl implements OrderService {
                     null,
                     null,
                     BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
-                    DEFAULT_SHIPPING_FEE
+                    baseShippingFee
             );
         }
 
         CouponEntity coupon = couponRepository.findByCodeIgnoreCaseForUpdate(cleanCouponCode)
                 .orElseThrow(() -> new BadRequestException("Mã giảm giá không tồn tại"));
-        validateCoupon(coupon);
+        validateCoupon(coupon, subtotal);
 
         BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal);
-        BigDecimal shippingFee = calculateShippingFee(coupon);
+        BigDecimal shippingFee = calculateShippingFee(coupon, baseShippingFee);
 
         coupon.setTimesUsed((coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed()) + 1);
         couponRepository.save(coupon);
@@ -536,14 +595,14 @@ public class OrderServiceImpl implements OrderService {
         return new CouponCalculation(coupon, coupon.getCode(), discountAmount, shippingFee);
     }
 
-    private CouponPreviewCalculation calculateCouponPreview(String couponCode, BigDecimal subtotal) {
+    private CouponPreviewCalculation calculateCouponPreview(String couponCode, BigDecimal subtotal, BigDecimal baseShippingFee) {
         String cleanCouponCode = cleanBlank(couponCode);
 
         if (cleanCouponCode == null) {
             return new CouponPreviewCalculation(
                     null,
                     BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
-                    DEFAULT_SHIPPING_FEE,
+                    baseShippingFee,
                     false,
                     true,
                     "No coupon applied"
@@ -552,17 +611,17 @@ public class OrderServiceImpl implements OrderService {
 
         Optional<CouponEntity> couponOptional = couponRepository.findByCodeIgnoreCase(cleanCouponCode);
         if (couponOptional.isEmpty()) {
-            return invalidCouponPreview(cleanCouponCode, "Coupon does not exist");
+            return invalidCouponPreview(cleanCouponCode, "Coupon does not exist", baseShippingFee);
         }
 
         CouponEntity coupon = couponOptional.get();
-        String invalidMessage = getCouponInvalidMessage(coupon);
+        String invalidMessage = getCouponInvalidMessage(coupon, subtotal);
         if (invalidMessage != null) {
-            return invalidCouponPreview(coupon.getCode(), invalidMessage);
+            return invalidCouponPreview(coupon.getCode(), invalidMessage, baseShippingFee);
         }
 
         BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal);
-        BigDecimal shippingFee = calculateShippingFee(coupon);
+        BigDecimal shippingFee = calculateShippingFee(coupon, baseShippingFee);
 
         return new CouponPreviewCalculation(
                 coupon.getCode(),
@@ -574,11 +633,11 @@ public class OrderServiceImpl implements OrderService {
         );
     }
 
-    private CouponPreviewCalculation invalidCouponPreview(String couponCode, String message) {
+    private CouponPreviewCalculation invalidCouponPreview(String couponCode, String message, BigDecimal baseShippingFee) {
         return new CouponPreviewCalculation(
                 couponCode,
                 BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
-                DEFAULT_SHIPPING_FEE,
+                baseShippingFee,
                 false,
                 false,
                 message
@@ -606,12 +665,54 @@ public class OrderServiceImpl implements OrderService {
         return discountAmount.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal calculateShippingFee(CouponEntity coupon) {
+    private BigDecimal calculateShippingFee(CouponEntity coupon, BigDecimal baseShippingFee) {
         if (COUPON_TYPE_FREESHIP.equals(normalizeCouponType(coupon))) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
-        return DEFAULT_SHIPPING_FEE;
+        return normalizeMoney(baseShippingFee);
+    }
+
+    private BigDecimal calculateBaseShippingFee(ShippingAddressEntity shippingAddress, int totalQuantity) {
+        if (shippingAddress == null || totalQuantity <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal shippingFee = shippingCarrierService.calculateShippingFee(
+                shippingAddress.getCity(),
+                getAddressSegmentFromEnd(shippingAddress.getAddress(), 1),
+                getAddressSegmentFromEnd(shippingAddress.getAddress(), 2),
+                Math.max(totalQuantity, 1) * DEFAULT_ITEM_WEIGHT_GRAMS
+        );
+
+        if (shippingFee == null || shippingFee.compareTo(BigDecimal.ZERO) < 0) {
+            return DEFAULT_SHIPPING_FEE;
+        }
+
+        return normalizeMoney(shippingFee);
+    }
+
+    private BigDecimal normalizeMoney(BigDecimal amount) {
+        if (amount == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String getAddressSegmentFromEnd(String address, int offsetFromEnd) {
+        if (address == null || address.trim().isEmpty()) {
+            return null;
+        }
+
+        String[] parts = address.split(",");
+        int index = parts.length - offsetFromEnd;
+        if (index < 0 || index >= parts.length) {
+            return null;
+        }
+
+        String segment = parts[index].trim();
+        return segment.isEmpty() ? null : segment;
     }
 
     private String normalizeCouponType(CouponEntity coupon) {
@@ -622,7 +723,7 @@ public class OrderServiceImpl implements OrderService {
         return coupon.getDiscountType() == null ? "PERCENTAGE" : coupon.getDiscountType();
     }
 
-    private void validateCoupon(CouponEntity coupon) {
+    private void validateCoupon(CouponEntity coupon, BigDecimal subtotal) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             throw new BadRequestException("Mã giảm giá đã bị vô hiệu hóa");
         }
@@ -637,6 +738,10 @@ public class OrderServiceImpl implements OrderService {
 
         if (coupon.getUsageLimit() != null && coupon.getTimesUsed() != null && coupon.getTimesUsed() >= coupon.getUsageLimit()) {
             throw new BadRequestException("Mã giảm giá đã hết lượt sử dụng");
+        }
+
+        if (coupon.getMinOrderValue() != null && subtotal != null && subtotal.compareTo(coupon.getMinOrderValue()) < 0) {
+            throw new BadRequestException("Đơn hàng chưa đạt giá trị tối thiểu " + coupon.getMinOrderValue().longValue() + "đ để áp dụng mã này");
         }
 
         if (COUPON_TYPE_FREESHIP.equals(normalizeCouponType(coupon))) {
@@ -657,7 +762,7 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private String getCouponInvalidMessage(CouponEntity coupon) {
+    private String getCouponInvalidMessage(CouponEntity coupon, BigDecimal subtotal) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             return "Coupon is inactive";
         }
@@ -672,6 +777,10 @@ public class OrderServiceImpl implements OrderService {
 
         if (coupon.getUsageLimit() != null && coupon.getTimesUsed() != null && coupon.getTimesUsed() >= coupon.getUsageLimit()) {
             return "Coupon usage limit has been reached";
+        }
+
+        if (coupon.getMinOrderValue() != null && subtotal != null && subtotal.compareTo(coupon.getMinOrderValue()) < 0) {
+            return "Đơn hàng tối thiểu phải từ " + coupon.getMinOrderValue().longValue() + "đ";
         }
 
         if (COUPON_TYPE_FREESHIP.equals(normalizeCouponType(coupon))) {

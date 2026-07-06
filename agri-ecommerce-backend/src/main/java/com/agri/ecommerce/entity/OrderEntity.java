@@ -65,8 +65,23 @@ public class OrderEntity {
     private String deliveryFailureReason;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shipping_address_id", nullable = false)
+    @JoinColumn(name = "shipping_address_id")
     private ShippingAddressEntity shippingAddress;
+
+    @Column(name = "shipping_name")
+    private String shippingName;
+
+    @Column(name = "shipping_phone")
+    private String shippingPhone;
+
+    @Column(name = "shipping_address_detail")
+    private String shippingAddressDetail;
+
+    @Column(name = "shipping_city")
+    private String shippingCity;
+
+    @Column(name = "tracking_number", length = 100)
+    private String trackingNumber;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
