@@ -142,4 +142,17 @@ public class DeliveryOrderController {
                 ApiResponse.success("Cập nhật kết quả giao hàng thất bại thành công", response, HttpStatus.OK.value())
         );
     }
+
+    @Operation(summary = "Gửi email thông báo chuẩn bị giao hàng cho khách hàng")
+    @PostMapping("/{orderId}/notify-arrival")
+    public ResponseEntity<ApiResponse<Object>> notifyArrival(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID đơn hàng", example = "1")
+            @PathVariable Long orderId
+    ) {
+        deliveryOrderService.notifyArrival(principal.getId(), orderId);
+        return ResponseEntity.ok(
+                ApiResponse.success("Đã gửi email thông báo chuẩn bị giao hàng thành công", null, HttpStatus.OK.value())
+        );
+    }
 }

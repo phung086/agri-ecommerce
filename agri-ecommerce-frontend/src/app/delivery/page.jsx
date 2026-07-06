@@ -32,7 +32,11 @@ import {
   User,
   Navigation,
   Check,
-  CameraOff
+  CameraOff,
+  Settings,
+  UserRound,
+  KeyRound,
+  Save
 } from "lucide-react";
 
 import { StatCard } from "@/components/admin/stat-card";
@@ -41,6 +45,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AvatarUploadField } from "@/components/profile/avatar-upload-field";
+import { VietnamAddressFields } from "@/components/profile/vietnam-address-fields";
+import {
+  createVietnamAddressForm,
+  parseFullVietnamAddress,
+  buildProfileAddress,
+  getVietnamAddressError
+} from "@/lib/vietnam-addresses";
+import { getVietnamPhoneError, normalizeVietnamPhone } from "@/lib/profile-validation";
+import { profileService } from "@/services/profile.service";
 import {
   formatCurrency,
   formatDate,
@@ -111,6 +125,7 @@ export default function DeliveryPage() {
   const [loginForm, setLoginForm] = useState(blankLoginForm);
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -129,6 +144,26 @@ export default function DeliveryPage() {
   // Verification states
   const [verifyMode, setVerifyMode] = useState(null); // "success", "failed"
   const [failedReason, setFailedReason] = useState(""); // "rescheduled", "cannot_contact", "canceled"
+
+  // Settings tab states
+  const [profileForm, setProfileForm] = useState({ name: "", phoneNumber: "", avatar: "" });
+  const [addressForm, setAddressForm] = useState(createVietnamAddressForm());
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
+
+  useEffect(() => {
+    if (currentUser) {
+      setProfileForm({
+        name: currentUser.name || "",
+        phoneNumber: currentUser.phoneNumber || "",
+        avatar: currentUser.avatar || "",
+      });
+      setAddressForm(parseFullVietnamAddress(currentUser.address || ""));
+    }
+  }, [currentUser]);
   const [verificationNote, setVerificationNote] = useState("");
   const [proofImage, setProofImage] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -224,6 +259,130 @@ export default function DeliveryPage() {
     }));
   }
 
+  const syncStoredDeliveryProfile = (nextProfile) => {
+    const session = getAuthSession(AUTH_SCOPES.delivery);
+    if (!session?.accessToken) return;
+    saveAuthSession(
+      {
+        accessToken: session.accessToken,
+        tokenType: session.tokenType,
+        user: nextProfile,
+        expiresIn: session.tokenExpiresAt ? Math.max(session.tokenExpiresAt - Date.now(), 0) : undefined,
+      },
+      {
+        remember: isAuthSessionRemembered(AUTH_SCOPES.delivery),
+        scope: AUTH_SCOPES.delivery,
+      }
+    );
+    setCurrentUser(nextProfile);
+  };
+
+  async function handleSaveProfile(event) {
+    event.preventDefault();
+    setSavingProfile(true);
+    setNotice("");
+    setError("");
+
+    try {
+      const phoneValidationError = getVietnamPhoneError(profileForm.phoneNumber);
+      if (phoneValidationError) {
+        setError(phoneValidationError);
+        setSavingProfile(false);
+        return;
+      }
+
+      const addressValidationError = getVietnamAddressError(addressForm, { required: false });
+      if (addressValidationError) {
+        setError(addressValidationError);
+        setSavingProfile(false);
+        return;
+      }
+
+      const fullAddressStr = buildProfileAddress(addressForm);
+
+      const response = await profileService.updateProfile({
+        name: profileForm.name.trim(),
+        phoneNumber: normalizeVietnamPhone(profileForm.phoneNumber),
+        avatar: profileForm.avatar.trim(),
+        address: fullAddressStr,
+      });
+      const nextProfile = response?.data ?? response;
+
+      syncStoredDeliveryProfile(nextProfile);
+      toast.success("Đã cập nhật hồ sơ cá nhân.");
+      setNotice("Đã cập nhật hồ sơ cá nhân.");
+    } catch (err) {
+      toast.error(err?.message || "Có lỗi xảy ra khi lưu hồ sơ.");
+      setError(err?.message || "Có lỗi xảy ra khi lưu hồ sơ.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function handleChangePassword(event) {
+    event.preventDefault();
+    setSavingPassword(true);
+    setNotice("");
+    setError("");
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setError("Mật khẩu xác nhận không khớp.");
+      setSavingPassword(false);
+      return;
+    }
+
+    try {
+      await profileService.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
+      });
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      toast.success("Đã đổi mật khẩu thành công.");
+      setNotice("Đã đổi mật khẩu thành công.");
+    } catch (err) {
+      setError(err?.message || "Không thể đổi mật khẩu.");
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
+  async function handleAvatarFile(file) {
+    if (!file) return null;
+    setUploadingAvatar(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await profileService.uploadAvatar(file);
+      const nextProfile = response?.data ?? response;
+      syncStoredDeliveryProfile(nextProfile);
+      toast.success("Đã upload ảnh đại diện mới.");
+      setNotice("Đã upload ảnh đại diện mới.");
+      return nextProfile;
+    } catch (err) {
+      toast.error(err?.message || "Không thể tải ảnh lên.");
+      setError(err?.message || "Không thể tải ảnh lên.");
+      return null;
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  async function handleAvatarRemove() {
+    setError("");
+    setNotice("");
+    try {
+      const response = await profileService.deleteAvatar();
+      const nextProfile = response?.data ?? response;
+      syncStoredDeliveryProfile(nextProfile);
+      toast.success("Đã xóa ảnh đại diện.");
+      setNotice("Đã xóa ảnh đại diện.");
+    } catch (err) {
+      toast.error(err?.message || "Không thể xóa ảnh đại diện.");
+      setError(err?.message || "Không thể xóa ảnh đại diện.");
+    }
+  }
+
   function updateOrderInState(updatedOrder) {
     setOrders((current) =>
       current.map((order) => (order.id === updatedOrder.id ? updatedOrder : order))
@@ -306,17 +465,18 @@ export default function DeliveryPage() {
     }, 1500);
   };
 
-  // Automated SMS notification to client
-  const sendArrivalNotification = (order) => {
-    const phone = getCustomerPhone(order);
-    if (!phone) {
-      alert("Khách hàng không có số điện thoại!");
-      return;
+  // Automated email notification to client
+  const sendArrivalNotification = async (order) => {
+    setError("");
+    setNotice("");
+    try {
+      await deliveryService.notifyArrival(order.id);
+      toast.success("Đã gửi email thông báo chuẩn bị giao hàng tới khách hàng!");
+      setNotice("Đã gửi email thông báo chuẩn bị giao hàng thành công.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Không thể gửi thông báo cho khách hàng."));
+      setError(getErrorMessage(err, "Không thể gửi thông báo cho khách hàng."));
     }
-    const message = `Xin chào ${getCustomerName(order)}, tôi là nhân viên giao hàng từ AgriMarket. Tôi đang trên đường giao đơn hàng #${order.id} trị giá ${formatCurrency(order.totalPrice)} cho quý khách. Vui lòng giữ liên lạc điện thoại nhé!`;
-    
-    // Simulate SMS sending
-    alert(`Đã gửi tin nhắn thông báo tự động tới số ${phone}:\n\n"${message}"`);
   };
 
   async function handleStartTransit(order) {
@@ -531,39 +691,49 @@ export default function DeliveryPage() {
           </div>
         ) : authStatus === "unauthenticated" ? (
           /* Login Form */
-          <div className="rounded-2xl bg-white p-6 shadow-xl">
+          <div className="rounded-2xl bg-white p-6 shadow-xl relative">
+            <div className="absolute right-4 top-4">
+              <button
+                type="button"
+                onClick={() => setShowRoleDropdown((prev) => !prev)}
+                className="flex size-9 items-center justify-center rounded-[8px] bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-emerald-700 transition border border-slate-100"
+                title="Chọn vai trò đăng nhập"
+              >
+                <UserCheck className="size-4" />
+              </button>
+              
+              {showRoleDropdown && (
+                <div className="absolute right-0 top-full z-50 mt-1.5 w-40 rounded-[8px] border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/profile")}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+                  >
+                    Khách hàng
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs font-bold bg-slate-50 text-emerald-800 rounded-[6px]"
+                  >
+                    Giao hàng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/admin/login")}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+                  >
+                    Quản trị viên
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="mb-6 text-center">
               <span className="inline-block rounded-full bg-emerald-50 p-3 text-emerald-600">
                 <Truck className="size-8" />
               </span>
               <h2 className="mt-2 text-2xl font-black text-slate-800">Shipper Đăng Nhập</h2>
               <p className="text-sm text-slate-500">Khu vực kiểm soát và giao nhận đơn hàng</p>
-            </div>
-
-            <div className="mb-5">
-              <Label className="mb-2 block text-xs font-black uppercase text-slate-500">Vai trò đăng nhập</Label>
-              <div className="grid grid-cols-3 gap-2 rounded-[8px] border border-slate-100 bg-slate-50 p-1">
-                <button
-                  type="button"
-                  onClick={() => router.push("/profile")}
-                  className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-                >
-                  Khách hàng
-                </button>
-                <button
-                  type="button"
-                  className="h-8 rounded-[6px] text-xs font-bold bg-white text-emerald-800 shadow-sm"
-                >
-                  Giao hàng
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/admin/login")}
-                  className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-                >
-                  Quản trị viên
-                </button>
-              </div>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
@@ -877,6 +1047,164 @@ export default function DeliveryPage() {
                 )}
               </div>
             )}
+
+            {/* TAB 4: CÀI ĐẶT HỒ SƠ */}
+            {activeTab === "settings" && (
+              <div className="space-y-4 pb-10">
+                {/* Profile Card & Info */}
+                <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100 flex items-center gap-4">
+                  <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-emerald-600 text-xl font-black text-white shadow-sm">
+                    {profileForm.avatar ? (
+                      <span
+                        className="size-full bg-cover bg-center"
+                        style={{ backgroundImage: `url("${getAssetUrl(profileForm.avatar)}")` }}
+                      />
+                    ) : (
+                      (profileForm.name || currentUser?.email || "S").charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase text-emerald-700">Tài khoản Shipper</p>
+                    <h3 className="text-lg font-black text-slate-800 truncate">{profileForm.name || "Shipper"}</h3>
+                    <p className="text-xs font-semibold text-slate-500 truncate">{currentUser?.email}</p>
+                  </div>
+                </div>
+
+                {/* Edit Profile Form */}
+                <form onSubmit={handleSaveProfile} className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-50 pb-3">
+                    <h3 className="text-sm font-black text-slate-800 uppercase flex items-center gap-2">
+                      <UserRound className="size-4 text-emerald-600" />
+                      Thông tin cá nhân
+                    </h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="shipper-name">Họ tên shipper</Label>
+                      <Input
+                        id="shipper-name"
+                        value={profileForm.name}
+                        onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))}
+                        placeholder="Họ tên của bạn"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="shipper-phone">Số điện thoại</Label>
+                      <Input
+                        id="shipper-phone"
+                        type="tel"
+                        value={profileForm.phoneNumber}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setProfileForm(p => ({ ...p, phoneNumber: val }));
+                          setPhoneError(getVietnamPhoneError(val));
+                        }}
+                        className={phoneError ? "border-red-500" : ""}
+                        placeholder="Ví dụ: 0999999999"
+                      />
+                      {phoneError && (
+                        <p className="text-xs font-semibold text-red-600">{phoneError}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="shipper-avatar">Ảnh đại diện</Label>
+                      <AvatarUploadField
+                        id="shipper-avatar"
+                        value={profileForm.avatar}
+                        disabled={savingProfile}
+                        uploading={uploadingAvatar}
+                        onChange={(val) => setProfileForm(p => ({ ...p, avatar: val }))}
+                        onUpload={handleAvatarFile}
+                        onRemove={handleAvatarRemove}
+                        onUploadStart={() => setUploadingAvatar(true)}
+                        onUploadEnd={() => setUploadingAvatar(false)}
+                        onUploadSuccess={(msg) => toast.success(msg)}
+                        onUploadError={(msg) => toast.error(msg)}
+                      />
+                    </div>
+
+                    <div className="space-y-4 border-t border-slate-100 pt-3 mt-1">
+                      <h4 className="text-xs font-black uppercase text-slate-500">Địa chỉ liên hệ</h4>
+                      <VietnamAddressFields
+                        value={addressForm}
+                        onChange={setAddressForm}
+                        idPrefix="shipper-addr"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 rounded-xl mt-2"
+                    disabled={savingProfile || uploadingAvatar}
+                  >
+                    {savingProfile ? <Loader2 className="size-4 animate-spin mx-auto" /> : "Lưu Thay Đổi"}
+                  </Button>
+                </form>
+
+                {/* Change Password Form */}
+                <form onSubmit={handleChangePassword} className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-50 pb-3">
+                    <h3 className="text-sm font-black text-slate-800 uppercase flex items-center gap-2">
+                      <KeyRound className="size-4 text-emerald-600" />
+                      Đổi mật khẩu
+                    </h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="del-curr-pass">Mật khẩu hiện tại</Label>
+                      <Input
+                        id="del-curr-pass"
+                        type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) => setPasswordForm(p => ({ ...p, currentPassword: e.target.value }))}
+                        placeholder="Nhập mật khẩu cũ"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="del-new-pass">Mật khẩu mới</Label>
+                      <Input
+                        id="del-new-pass"
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm(p => ({ ...p, newPassword: e.target.value }))}
+                        placeholder="Mật khẩu mới (tối thiểu 6 ký tự)"
+                        minLength={6}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="del-conf-pass">Xác nhận mật khẩu</Label>
+                      <Input
+                        id="del-conf-pass"
+                        type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => setPasswordForm(p => ({ ...p, confirmPassword: e.target.value }))}
+                        placeholder="Nhập lại mật khẩu mới"
+                        minLength={6}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold h-11 rounded-xl mt-2"
+                    disabled={savingPassword}
+                  >
+                    {savingPassword ? <Loader2 className="size-4 animate-spin mx-auto" /> : "Cập Nhật Mật Khẩu"}
+                  </Button>
+                </form>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -910,6 +1238,15 @@ export default function DeliveryPage() {
           >
             <Wallet className="size-5" />
             <span className="text-[10px] font-black mt-1">Đối soát</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab("settings"); setSelectedOrder(null); setVerifyMode(null); }}
+            className={`flex-1 flex flex-col items-center justify-center h-full transition ${
+              activeTab === "settings" ? "text-emerald-600" : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <Settings className="size-5" />
+            <span className="text-[10px] font-black mt-1">Cài đặt</span>
           </button>
         </nav>
       )}

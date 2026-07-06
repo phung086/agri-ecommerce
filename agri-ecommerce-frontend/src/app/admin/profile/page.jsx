@@ -33,6 +33,13 @@ import {
   normalizeVietnamPhone,
 } from "@/lib/profile-validation";
 import { profileService } from "@/services/profile.service";
+import { VietnamAddressFields } from "@/components/profile/vietnam-address-fields";
+import {
+  createVietnamAddressForm,
+  parseFullVietnamAddress,
+  buildProfileAddress,
+  getVietnamAddressError
+} from "@/lib/vietnam-addresses";
 
 const blankProfileForm = {
   name: "",
@@ -58,6 +65,7 @@ function getInitial(user) {
 export default function AdminProfilePage() {
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState(blankProfileForm);
+  const [addressForm, setAddressForm] = useState(createVietnamAddressForm());
   const [passwordForm, setPasswordForm] = useState(blankPasswordForm);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -75,6 +83,7 @@ export default function AdminProfilePage() {
       avatar: nextProfile?.avatar || "",
       address: nextProfile?.address || "",
     });
+    setAddressForm(parseFullVietnamAddress(nextProfile?.address || ""));
   }, []);
 
   const loadProfile = useCallback(async () => {
@@ -186,8 +195,6 @@ export default function AdminProfilePage() {
     setError("");
     setPhoneError("");
 
-
-
     try {
       const phoneValidationError = getVietnamPhoneError(profileForm.phoneNumber);
       if (phoneValidationError) {
@@ -197,11 +204,20 @@ export default function AdminProfilePage() {
         return;
       }
 
+      const addressValidationError = getVietnamAddressError(addressForm, { required: false });
+      if (addressValidationError) {
+        setError(addressValidationError);
+        setSavingProfile(false);
+        return;
+      }
+
+      const fullAddressStr = buildProfileAddress(addressForm);
+
       const response = await profileService.updateProfile({
         name: profileForm.name.trim(),
         phoneNumber: normalizeVietnamPhone(profileForm.phoneNumber),
         avatar: profileForm.avatar.trim(),
-        address: profileForm.address.trim(),
+        address: fullAddressStr,
       });
       const nextProfile = unwrapApiData(response);
 
@@ -500,17 +516,12 @@ export default function AdminProfilePage() {
                 </p>
               )}
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="admin-address">Địa chỉ liên hệ</Label>
-              <Textarea
-                id="admin-address"
-                value={profileForm.address}
-                onChange={(event) =>
-                  updateProfileForm("address", event.target.value)
-                }
-                rows={5}
-                placeholder="Địa chỉ vận hành hoặc liên hệ..."
-                disabled={loading}
+            <div className="space-y-4 sm:col-span-2 border-t border-slate-100 pt-4 mt-2">
+              <h3 className="text-sm font-bold text-slate-800">Địa chỉ liên hệ</h3>
+              <VietnamAddressFields
+                value={addressForm}
+                onChange={setAddressForm}
+                idPrefix="admin-addr"
               />
             </div>
           </div>

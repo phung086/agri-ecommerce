@@ -54,4 +54,9 @@ export const deliveryService = {
     });
     return unwrapApiData(response);
   },
+
+  notifyArrival: async (orderId) => {
+    const response = await axiosClient.post(`/delivery/orders/${orderId}/notify-arrival`);
+    return unwrapApiData(response);
+  },
 };

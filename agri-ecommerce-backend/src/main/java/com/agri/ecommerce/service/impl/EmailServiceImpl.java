@@ -336,4 +336,83 @@ public class EmailServiceImpl implements EmailService {
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");
     }
+
+    @Async
+    @Override
+    @Transactional(readOnly = true)
+    public void sendOrderStatusUpdate(OrderEntity order, String statusTitle, String statusDescription) {
+        if (order == null || order.getId() == null) {
+            log.warn("[Email Service] Order is null, cannot send status email update.");
+            return;
+        }
+
+        OrderEntity targetOrder = orderRepository.findById(order.getId()).orElse(order);
+        if (targetOrder.getUser() == null) {
+            log.warn("[Email Service] Order #{} has no user, cannot send email status update.", targetOrder.getId());
+            return;
+        }
+
+        String recipientEmail = targetOrder.getUser().getEmail();
+        if (recipientEmail == null || recipientEmail.trim().isBlank()) {
+            log.warn("[Email Service] Recipient email is blank, skipping status update for Order #{}", targetOrder.getId());
+            return;
+        }
+
+        String fromEmail = resolveFromEmail();
+        String orderReference = targetOrder.getTrackingNumber() != null ? targetOrder.getTrackingNumber() : "#" + targetOrder.getId();
+        String subject = "[AgriMarket] Cập nhật trạng thái đơn hàng " + orderReference + ": " + statusTitle;
+        String htmlBody = buildStatusUpdateHtml(targetOrder, statusTitle, statusDescription);
+
+        if (isGoogleScriptProvider()) {
+            String textBody = "Don hàng " + orderReference + " cua ban da cap nhat: " + statusTitle + ". " + statusDescription;
+            sendWithGoogleScript(targetOrder, recipientEmail, subject, htmlBody, textBody);
+            return;
+        }
+
+        if (mailSender == null || !hasText(fromEmail)) {
+            log.info("[Email Service MOCK] 'spring.mail.username' or JavaMailSender is not configured. Logging order status update instead.");
+            log.info("[Email Service MOCK] Order ID: #{}", targetOrder.getId());
+            log.info("[Email Service MOCK] Customer: {} ({})", targetOrder.getUser().getName(), recipientEmail);
+            log.info("[Email Service MOCK] Status Update: {} - {}", statusTitle, statusDescription);
+            return;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(recipientEmail);
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true);
+
+            mailSender.send(message);
+            log.info("[Email Service] Status update email sent successfully to {} for Order #{}", recipientEmail, targetOrder.getId());
+        } catch (Exception e) {
+            log.error("[Email Service] Failed to send status update email for Order #{}: {}", targetOrder.getId(), e.getMessage(), e);
+        }
+    }
+
+    private String buildStatusUpdateHtml(OrderEntity order, String statusTitle, String statusDescription) {
+        String recipientName = order.getShippingName() != null ? order.getShippingName() : order.getUser().getName();
+        String orderReference = order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId();
+
+        return "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);'>"
+                + "  <div style='text-align: center; margin-bottom: 20px;'>"
+                + "    <h2 style='color: #2e7d32; margin: 0;'>AgriMarket - Cập nhật đơn hàng</h2>"
+                + "    <p style='color: #666; font-size: 14px;'>Đơn hàng của bạn vừa có cập nhật mới từ bưu cục/shipper.</p>"
+                + "  </div>"
+                + "  <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>"
+                + "  <h3 style='color: #333;'>Đơn hàng " + orderReference + "</h3>"
+                + "  <div style='background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-size: 14px;'>"
+                + "    <p style='margin: 5px 0;'><strong>Xin chào:</strong> " + escapeHtml(recipientName) + "</p>"
+                + "    <p style='margin: 10px 0; font-size: 16px; color: #2e7d32;'><strong>Trạng thái mới:</strong> " + escapeHtml(statusTitle) + "</p>"
+                + "    <p style='margin: 5px 0; line-height: 1.5; color: #555;'>" + escapeHtml(statusDescription) + "</p>"
+                + "  </div>"
+                + "  <div style='text-align: center; color: #888; font-size: 12px; margin-top: 30px;'>"
+                + "    <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với bộ phận chăm sóc khách hàng của AgriMarket.</p>"
+                + "    <p>&copy; 2026 AgriMarket. All rights reserved.</p>"
+                + "  </div>"
+                + "</div>";
+    }
 }

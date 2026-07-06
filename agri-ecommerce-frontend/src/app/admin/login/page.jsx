@@ -66,6 +66,7 @@ export default function AdminLoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -191,34 +192,40 @@ export default function AdminLoginPage() {
                 Đăng nhập quản trị
               </h2>
             </div>
-            <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-              <ShieldCheck className="size-5" />
-            </div>
-          </div>
-
-          <div className="mb-5">
-            <Label className="mb-2 block text-xs font-black uppercase text-slate-500">Vai trò đăng nhập</Label>
-            <div className="grid grid-cols-3 gap-2 rounded-[8px] border border-slate-100 bg-slate-50 p-1">
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => router.push("/profile")}
-                className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
+                onClick={() => setShowRoleDropdown((prev) => !prev)}
+                className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-100 transition"
+                title="Chọn vai trò đăng nhập"
               >
-                Khách hàng
+                <ShieldCheck className="size-5" />
               </button>
-              <button
-                type="button"
-                onClick={() => router.push("/delivery")}
-                className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-              >
-                Giao hàng
-              </button>
-              <button
-                type="button"
-                className="h-8 rounded-[6px] text-xs font-bold bg-white text-emerald-800 shadow-sm"
-              >
-                Quản trị viên
-              </button>
+              
+              {showRoleDropdown && (
+                <div className="absolute right-0 top-full z-50 mt-1.5 w-40 rounded-[8px] border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/profile")}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+                  >
+                    Khách hàng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/delivery")}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+                  >
+                    Giao hàng
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs font-bold bg-slate-50 text-emerald-800 rounded-[6px]"
+                  >
+                    Quản trị viên
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

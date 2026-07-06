@@ -80,6 +80,7 @@ import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
 import { reviewService } from "@/services/review.service";
 import { shippingAddressService } from "@/services/shipping-address.service";
+import { promotionService } from "@/services/promotion.service";
 
 const blankLoginForm = {
   email: "",
@@ -182,6 +183,7 @@ function getShippingText(order) {
 function AuthPanel({ onAuthenticated }) {
   const router = useRouter();
   const [mode, setMode] = useState("login");
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [loginForm, setLoginForm] = useState(blankLoginForm);
   const [registerForm, setRegisterForm] = useState(blankRegisterForm);
   const [remember, setRemember] = useState(true);
@@ -331,8 +333,40 @@ function AuthPanel({ onAuthenticated }) {
             {isLogin ? "Đăng nhập hồ sơ" : "Tạo tài khoản mới"}
           </h2>
         </div>
-        <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-          <UserRound className="size-5" />
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowRoleDropdown((prev) => !prev)}
+            className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-100 transition"
+            title="Chọn vai trò đăng nhập"
+          >
+            <UserRound className="size-5" />
+          </button>
+          
+          {showRoleDropdown && (
+            <div className="absolute right-0 top-full z-50 mt-1.5 w-40 rounded-[8px] border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 text-xs font-bold bg-slate-50 text-emerald-800 rounded-[6px]"
+              >
+                Khách hàng
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/delivery")}
+                className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+              >
+                Giao hàng
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/admin/login")}
+                className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+              >
+                Quản trị viên
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -360,35 +394,6 @@ function AuthPanel({ onAuthenticated }) {
           </button>
         ))}
       </div>
-
-      {/* Tabs Lựa chọn vai trò Đăng nhập đa vai trò trực tiếp */}
-      {isLogin && (
-        <div className="mb-5">
-          <Label className="mb-2 block text-xs font-black uppercase text-slate-500">Vai trò đăng nhập</Label>
-          <div className="grid grid-cols-3 gap-2 rounded-[8px] border border-slate-100 bg-slate-50 p-1">
-            <button
-              type="button"
-              className="h-8 rounded-[6px] text-xs font-bold bg-white text-emerald-800 shadow-sm"
-            >
-              Khách hàng
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/delivery")}
-              className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-            >
-              Giao hàng
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/admin/login")}
-              className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-            >
-              Quản trị viên
-            </button>
-          </div>
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {!isLogin && (
@@ -1097,6 +1102,22 @@ export default function CustomerProfilePage() {
   const [activeTab, setActiveTab] = useState("profile"); // "profile", "addresses", "password", "orders"
   const [orderFilter, setOrderFilter] = useState("all"); // "all", "pending", "delivering", "completed", "canceled"
   const [phoneError, setPhoneError] = useState("");
+  const [coupons, setCoupons] = useState([]);
+  const [couponsLoading, setCouponsLoading] = useState(false);
+
+  const loadPublicCoupons = useCallback(async () => {
+    setCouponsLoading(true);
+    try {
+      const response = await promotionService.getPublicCoupons({ page: 0, size: 5 });
+      const content = readPageContent(response);
+      setCoupons(content || []);
+    } catch (err) {
+      console.warn("Failed to load public coupons:", err);
+      setCoupons([]);
+    } finally {
+      setCouponsLoading(false);
+    }
+  }, []);
 
   const profileInitial = getInitial(profile);
   const profileAvatarUrl = getAssetUrl(form.avatar || profile?.avatar);
@@ -1242,6 +1263,7 @@ export default function CustomerProfilePage() {
       if (!session?.accessToken || isAuthSessionExpired(session)) {
         clearAuthSession(AUTH_SCOPES.customer);
         setAuthStatus("unauthenticated");
+        loadPublicCoupons();
         return;
       }
 
@@ -1250,10 +1272,11 @@ export default function CustomerProfilePage() {
       loadProfile();
       loadOrderHistory();
       loadMyReviews();
+      loadPublicCoupons();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [applyProfile, loadMyReviews, loadOrderHistory, loadProfile]);
+  }, [applyProfile, loadMyReviews, loadOrderHistory, loadProfile, loadPublicCoupons]);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -1784,21 +1807,81 @@ export default function CustomerProfilePage() {
           </section>
         ) : authStatus !== "authenticated" ? (
           <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-            <section className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
-              <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-                <ShieldCheck className="size-5" />
-              </div>
-              <h2 className="mt-5 text-2xl font-black text-emerald-950">
-                Đăng nhập để dùng hồ sơ mua hàng
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Đăng nhập tài khoản của bạn để dễ dàng theo dõi đơn hàng, quản lý danh sách địa chỉ nhận hàng và nhận thêm nhiều ưu đãi thành viên đặc quyền từ AgriMarket.
-              </p>
-              {error && (
-                <div className="mt-4 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-                  {error}
+            <section className="relative overflow-hidden rounded-2xl border border-emerald-100/80 bg-gradient-to-b from-[#f7faf4] to-white p-6 text-emerald-950 shadow-sm min-h-[380px] flex flex-col justify-between">
+              {/* Background decorative patterns */}
+              <div className="absolute -right-16 -top-16 size-48 rounded-full bg-emerald-100/30 blur-xl pointer-events-none" />
+              <div className="absolute -left-10 -bottom-10 size-40 rounded-full bg-emerald-50/20 blur-xl pointer-events-none" />
+
+              <div className="relative z-10 space-y-4">
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
+                  <span className="flex size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Chương trình ưu đãi
                 </div>
-              )}
+                
+                <h2 className="text-2xl font-black leading-tight text-emerald-950">
+                  Khuyến mãi từ <span className="text-emerald-600">AgriMarket</span>
+                </h2>
+                
+                <p className="text-sm leading-relaxed text-slate-600 max-w-sm">
+                  Đăng nhập tài khoản của bạn để dễ dàng mua nông sản sạch hỏa tốc, tích lũy điểm thưởng và áp dụng voucher giảm giá thực tế khi thanh toán.
+                </p>
+              </div>
+
+              {/* Discount / Advertisement announcements container */}
+              <div className="relative z-10 mt-6 space-y-3">
+                <div className="rounded-xl border border-emerald-100/80 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-800">Mã giảm giá khả dụng</p>
+                  
+                  {couponsLoading ? (
+                    <p className="text-xs text-slate-500 mt-2">Đang tải danh sách ưu đãi...</p>
+                  ) : coupons.length > 0 ? (
+                    <div className="mt-2 space-y-2 max-h-[140px] overflow-y-auto">
+                      {coupons.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between gap-2 border-b border-slate-50 pb-2 last:border-0 last:pb-0">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate">
+                              Giảm {c.discountType === "PERCENTAGE" || c.discountPercentage > 0 ? `${c.discountPercentage}%` : `${formatCurrency(c.discountAmount)}`}
+                            </p>
+                            {c.minOrderValue > 0 && (
+                              <p className="text-[10px] text-slate-500">Đơn từ {formatCurrency(c.minOrderValue)}</p>
+                            )}
+                          </div>
+                          <span className="rounded border border-emerald-200 bg-emerald-50/50 px-2 py-0.5 text-xs font-black text-emerald-700 font-mono">
+                            {c.code}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-50 pb-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800">Giảm 20% tổng giá trị đơn</p>
+                          <p className="text-[10px] text-slate-500">Đơn tối thiểu 2.000.000đ</p>
+                        </div>
+                        <span className="rounded border border-emerald-200 bg-emerald-50/50 px-2 py-0.5 text-xs font-black text-emerald-700 font-mono">
+                          GIAM20
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800">Mã giảm giá thành viên mới</p>
+                          <p className="text-[10px] text-slate-500">Giảm 5% cho đơn hàng đầu tiên</p>
+                        </div>
+                        <span className="rounded border border-emerald-200 bg-emerald-50/50 px-2 py-0.5 text-xs font-black text-emerald-700 font-mono">
+                          KK
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {error && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
+                    {error}
+                  </div>
+                )}
+              </div>
             </section>
             <AuthPanel onAuthenticated={handleAuthenticated} />
           </div>

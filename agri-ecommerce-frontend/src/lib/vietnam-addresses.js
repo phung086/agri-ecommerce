@@ -123,3 +123,73 @@ export function addressFormToShippingPayload(form = {}, addressCount = 0) {
     defaultAddress: Boolean(form.defaultAddress) || Number(addressCount) === 0,
   };
 }
+
+export function parseFullVietnamAddress(fullAddressStr = "") {
+  const form = createVietnamAddressForm();
+  if (!fullAddressStr) {
+    return form;
+  }
+
+  const parts = fullAddressStr.split(",").map((p) => p.trim());
+  if (parts.length === 0) {
+    return form;
+  }
+
+  let remainingParts = [...parts];
+
+  if (remainingParts.length > 0) {
+    const lastPart = remainingParts[remainingParts.length - 1].toLowerCase();
+    const province = VIETNAM_PROVINCES.find((p) => {
+      const pName = p.name.toLowerCase();
+      const pNameNorm = pName.replace(/^(tỉnh|thành phố)\s+/gi, "").trim();
+      const lastPartNorm = lastPart.replace(/^(tỉnh|thành phố)\s+/gi, "").trim();
+      return pNameNorm === lastPartNorm || pName === lastPart || lastPart.includes(pNameNorm);
+    });
+
+    if (province) {
+      form.provinceCode = String(province.code);
+      form.provinceName = province.name;
+      remainingParts.pop();
+
+      if (remainingParts.length > 0) {
+        const districtPart = remainingParts[remainingParts.length - 1].toLowerCase();
+        const district = (province.districts || []).find((d) => {
+          const dName = d.name.toLowerCase();
+          const dNameNorm = dName.replace(/^(quận|huyện|thị xã|thành phố)\s+/gi, "").trim();
+          const districtPartNorm = districtPart.replace(/^(quận|huyện|thị xã|thành phố)\s+/gi, "").trim();
+          return dNameNorm === districtPartNorm || dName === districtPart || districtPart.includes(dNameNorm);
+        });
+
+        if (district) {
+          form.districtCode = String(district.code);
+          form.districtName = district.name;
+          remainingParts.pop();
+
+          if (remainingParts.length > 0) {
+            const wardPart = remainingParts[remainingParts.length - 1].toLowerCase();
+            const ward = (district.wards || []).find((w) => {
+              const wName = w.name.toLowerCase();
+              const wNameNorm = wName.replace(/^(phường|xã|thị trấn)\s+/gi, "").trim();
+              const wardPartNorm = wardPart.replace(/^(phường|xã|thị trấn)\s+/gi, "").trim();
+              return wNameNorm === wardPartNorm || wName === wardPart || wardPart.includes(wNameNorm);
+            });
+
+            if (ward) {
+              form.wardCode = String(ward.code);
+              form.wardName = ward.name;
+              remainingParts.pop();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  form.address = remainingParts.join(", ");
+
+  if (!form.provinceCode) {
+    form.address = fullAddressStr;
+  }
+
+  return form;
+}
