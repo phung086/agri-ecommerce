@@ -6,7 +6,6 @@ import com.agri.ecommerce.dto.response.wishlist.WishlistResponse;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.entity.UserEntity;
 import com.agri.ecommerce.entity.WishlistEntity;
-import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.mapper.WishlistMapper;
 import com.agri.ecommerce.repository.ProductImageRepository;

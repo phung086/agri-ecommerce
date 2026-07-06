@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useRef } from "react";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   CheckCircle2,
   Clock3,
   Loader2,
+  Copy,
   RefreshCw,
   Search,
   Truck,
@@ -729,7 +731,7 @@ export default function DeliveryPage() {
                         }`}
                       >
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
-                          <span className="font-mono text-sm font-black text-slate-800">#{order.id}</span>
+                          <span className="font-mono text-sm font-black text-slate-800">{order.trackingNumber || '#' + order.id}</span>
                           <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase ${
                             isCod ? "bg-red-50 text-red-700 border border-red-100" : "bg-emerald-50 text-emerald-700 border border-emerald-100"
                           }`}>
@@ -886,7 +888,21 @@ export default function DeliveryPage() {
             {/* Modal Header */}
             <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100">
               <div>
-                <h3 className="font-black text-base text-slate-800">Chi tiết đơn giao #{selectedOrder.id}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-base text-slate-800">Chi tiết đơn giao {selectedOrder.trackingNumber || '#' + selectedOrder.id}</h3>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(selectedOrder.trackingNumber || String(selectedOrder.id));
+                      toast.success("Đã sao chép mã đơn hàng!");
+                    }}
+                    className="flex size-5 items-center justify-center rounded bg-slate-100 text-slate-500 hover:bg-slate-250 hover:text-slate-700 transition"
+                    title="Sao chép mã đơn hàng"
+                  >
+                    <Copy className="size-3" />
+                  </button>
+                </div>
                 <p className="text-xs text-slate-500">Cập nhật kết quả giao hàng và xác thực</p>
               </div>
               <button

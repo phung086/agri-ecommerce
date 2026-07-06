@@ -1,9 +1,16 @@
 spring:
   jpa:
+    open-in-view: false
     show-sql: false
     properties:
       hibernate:
         format_sql: false
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:false}
 
 logging:
   level:

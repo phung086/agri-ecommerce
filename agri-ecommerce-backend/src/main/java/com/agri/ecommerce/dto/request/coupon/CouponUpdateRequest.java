@@ -30,6 +30,9 @@ public class CouponUpdateRequest {
     @DecimalMin(value = "0.01", message = "So tien giam gia phai lon hon 0")
     private BigDecimal discountAmount;
 
+    @DecimalMin(value = "0.01", message = "Gia tri don hang toi thieu phai lon hon 0")
+    private BigDecimal minOrderValue;
+
     private LocalDateTime startsAt;
 
     private LocalDateTime expiresAt;

@@ -39,6 +39,7 @@ public class CouponServiceImpl implements CouponService {
             "discountType",
             "discountPercentage",
             "discountAmount",
+            "minOrderValue",
             "startsAt",
             "expiresAt",
             "usageLimit",
@@ -106,6 +107,7 @@ public class CouponServiceImpl implements CouponService {
                 .discountType(discountType)
                 .discountPercentage(resolveDiscountPercentage(couponType, discountType, request.getDiscountPercentage()))
                 .discountAmount(resolveDiscountAmount(couponType, discountType, request.getDiscountAmount()))
+                .minOrderValue(resolveMinOrderValue(request.getMinOrderValue()))
                 .startsAt(request.getStartsAt())
                 .expiresAt(request.getExpiresAt())
                 .usageLimit(request.getUsageLimit())
@@ -133,6 +135,7 @@ public class CouponServiceImpl implements CouponService {
         coupon.setDiscountType(discountType);
         coupon.setDiscountPercentage(resolveDiscountPercentage(couponType, discountType, request.getDiscountPercentage()));
         coupon.setDiscountAmount(resolveDiscountAmount(couponType, discountType, request.getDiscountAmount()));
+        coupon.setMinOrderValue(resolveMinOrderValue(request.getMinOrderValue()));
         coupon.setStartsAt(request.getStartsAt());
         coupon.setExpiresAt(request.getExpiresAt());
         coupon.setUsageLimit(request.getUsageLimit());
@@ -312,6 +315,10 @@ public class CouponServiceImpl implements CouponService {
         }
 
         return discountAmount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveMinOrderValue(BigDecimal minOrderValue) {
+        return minOrderValue == null ? null : minOrderValue.setScale(2, RoundingMode.HALF_UP);
     }
 
     private String normalizeCode(String code) {

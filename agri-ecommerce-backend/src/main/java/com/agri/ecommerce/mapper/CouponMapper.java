@@ -25,6 +25,7 @@ public class CouponMapper {
                 .discountType(coupon.getDiscountType())
                 .discountPercentage(coupon.getDiscountPercentage())
                 .discountAmount(coupon.getDiscountAmount())
+                .minOrderValue(coupon.getMinOrderValue())
                 .startsAt(coupon.getStartsAt())
                 .expiresAt(coupon.getExpiresAt())
                 .usageLimit(coupon.getUsageLimit())

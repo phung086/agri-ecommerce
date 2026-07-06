@@ -48,7 +48,7 @@ function getScopedAuthKeys(scope = AUTH_SCOPES.customer) {
   );
 }
 
-function getScopeFromPathname(pathname = "") {
+export function getScopeFromPathname(pathname = "") {
   if (pathname.startsWith("/admin")) {
     return AUTH_SCOPES.admin;
   }
@@ -60,7 +60,7 @@ function getScopeFromPathname(pathname = "") {
   return AUTH_SCOPES.customer;
 }
 
-function getCurrentAuthScope() {
+export function getCurrentAuthScope() {
   if (typeof window === "undefined") {
     return AUTH_SCOPES.customer;
   }

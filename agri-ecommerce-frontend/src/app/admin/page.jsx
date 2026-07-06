@@ -351,7 +351,7 @@ export default function AdminDashboardPage() {
             data={mockOrders.slice(0, 5)}
             renderRow={(order) => (
               <TableRow key={order.id}>
-                <TableCell className="px-4 font-bold">#{order.id}</TableCell>
+                <TableCell className="px-4 font-bold">{order.trackingNumber || '#' + order.id}</TableCell>
                 <TableCell className="px-4">{order.customerName}</TableCell>
                 <TableCell className="px-4">
                   <StatusBadge status={order.status} />

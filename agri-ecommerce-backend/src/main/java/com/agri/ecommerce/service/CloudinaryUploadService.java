@@ -51,8 +51,10 @@ public class CloudinaryUploadService {
 
             String secureUrl = String.valueOf(result.get("secure_url"));
             String publicId = String.valueOf(result.get("public_id"));
+            String format = String.valueOf(result.get("format"));
+            String fileName = buildFileName(publicId, format);
 
-            return new UploadedImageResponse(secureUrl, secureUrl, publicId);
+            return new UploadedImageResponse(secureUrl, secureUrl, fileName);
         } catch (IOException ex) {
             throw new BadRequestException("Khong the doc file anh de upload");
         } catch (RuntimeException ex) {
@@ -100,6 +102,18 @@ public class CloudinaryUploadService {
         } catch (IllegalArgumentException ex) {
             return Optional.empty();
         }
+    }
+
+    private String buildFileName(String publicId, String format) {
+        String baseName = hasText(publicId) ? publicId : "image";
+        int slashIndex = baseName.lastIndexOf('/');
+        if (slashIndex >= 0 && slashIndex + 1 < baseName.length()) {
+            baseName = baseName.substring(slashIndex + 1);
+        }
+
+        return hasText(format) && !"null".equalsIgnoreCase(format)
+                ? baseName + "." + format
+                : baseName;
     }
 
     private boolean hasText(String value) {

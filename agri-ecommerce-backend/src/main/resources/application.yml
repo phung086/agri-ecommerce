@@ -36,6 +36,17 @@ spring:
     enabled: ${FLYWAY_ENABLED:false}
     locations: classpath:db/migration
     baseline-on-migrate: true
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 springdoc:
   swagger-ui:
@@ -50,6 +61,14 @@ app:
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   public:
     base-url: ${APP_PUBLIC_BASE_URL:http://localhost:3000}
+  email:
+    provider: ${EMAIL_PROVIDER:smtp}
+    from: ${MAIL_FROM:${SPRING_MAIL_USERNAME:}}
+    from-name: ${MAIL_FROM_NAME:AgriMarket}
+    reply-to: ${MAIL_REPLY_TO:${SPRING_MAIL_USERNAME:}}
+    google-script:
+      url: ${GOOGLE_SCRIPT_MAIL_URL:}
+      secret: ${GOOGLE_SCRIPT_MAIL_SECRET:}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:https://agri-ecommerce*.vercel.app}
@@ -71,8 +90,13 @@ app:
   ai:
     enabled: ${AI_CHATBOT_ENABLED:false}
     provider: ${AI_PROVIDER:gemini}
-    model: ${AI_MODEL:gemini-2.5-flash}
+    model: ${AI_MODEL:gemini-flash-latest}
     gemini-api-key: ${GEMINI_API_KEY:}
     openai-api-key: ${OPENAI_API_KEY:}
     max-products-context: ${AI_MAX_PRODUCTS_CONTEXT:10}
     timeout-seconds: ${AI_TIMEOUT_SECONDS:20}
+  shipping:
+    ghn:
+      api-url: ${GHN_API_URL:https://dev-online-gateway.ghn.vn/shiip/public-api}
+      token: ${GHN_TOKEN:${GHN_API_TOKEN:}}
+      shop-id: ${GHN_SHOP_ID:}
