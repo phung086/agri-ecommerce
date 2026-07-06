@@ -57,6 +57,7 @@ export function AvatarUploadField({
   const [fileMeta, setFileMeta] = useState(null);
   const [message, setMessage] = useState("");
   const [removing, setRemoving] = useState(false);
+  const [failedImageUrl, setFailedImageUrl] = useState("");
 
   // Reset preview khi value thay đổi từ bên ngoài (ví dụ sau khi xóa)
   useEffect(() => {
@@ -165,11 +166,12 @@ export function AvatarUploadField({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-emerald-100 bg-emerald-50 text-emerald-700">
-          {imageUrl ? (
+          {imageUrl && failedImageUrl !== imageUrl ? (
             <img
               src={imageUrl}
               alt="Avatar preview"
               className="h-full w-full object-cover"
+              onError={() => setFailedImageUrl(imageUrl)}
             />
           ) : (
             <ImagePlus className="size-6" />

@@ -40,7 +40,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency, formatDate, formatNumber } from "@/lib/admin-utils";
+import {
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  getAssetUrl,
+  setImageFallback,
+} from "@/lib/admin-utils";
 import {
   AUTH_SCOPES,
   clearAuthSession,
@@ -1016,7 +1022,12 @@ export default function DeliveryPage() {
                     
                     {proofImage ? (
                       <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center">
-                        <img src={proofImage} alt="POD" className="object-cover size-full" />
+                        <img
+                          src={getAssetUrl(proofImage)}
+                          alt="POD"
+                          className="object-cover size-full"
+                          onError={setImageFallback}
+                        />
                         <button
                           onClick={() => setProofImage("")}
                           className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1.5 shadow-md hover:bg-red-700 transition"
