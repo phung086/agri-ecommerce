@@ -331,10 +331,10 @@ export function AdminShell({ children }) {
                 <h1 className="truncate text-lg font-bold tracking-normal text-emerald-950">
                   {pageTitle}
                 </h1>
-                <span className="inline-flex h-6 items-center gap-1 rounded-[8px] bg-emerald-50 px-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+                <Link href="/" className="inline-flex h-6 items-center gap-1 rounded-[8px] bg-emerald-50 px-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 transition hover:bg-emerald-100/70 hover:text-emerald-800" title="Trở lại trang mua hàng">
                   <Store className="size-3" />
                   Marketplace
-                </span>
+                </Link>
               </div>
               <p className="hidden text-sm text-muted-foreground sm:block">
                 Quản trị đơn hàng, tồn kho và trải nghiệm mua nông sản tươi.
