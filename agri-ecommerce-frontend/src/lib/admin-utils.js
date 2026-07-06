@@ -28,6 +28,8 @@ export function formatDate(value) {
   }).format(date);
 }
 
+export const DEFAULT_IMAGE_FALLBACK = "/market-assets/fresh-market-hero.png";
+
 export function getAssetUrl(path) {
   if (!path) {
     return "";
@@ -53,7 +55,7 @@ export function getAssetUrl(path) {
 
 export function getImageBackground(
   path,
-  fallback = "/market-assets/fresh-market-hero.png"
+  fallback = DEFAULT_IMAGE_FALLBACK
 ) {
   const fallbackUrl = getAssetUrl(fallback);
   const imageUrl = getAssetUrl(path);
@@ -63,6 +65,17 @@ export function getImageBackground(
   }
 
   return `url("${imageUrl}"), url("${fallbackUrl}")`;
+}
+
+export function setImageFallback(event, fallback = DEFAULT_IMAGE_FALLBACK) {
+  const image = event.currentTarget;
+
+  if (image.dataset.fallbackApplied === "true") {
+    return;
+  }
+
+  image.dataset.fallbackApplied = "true";
+  image.src = getAssetUrl(fallback);
 }
 
 export function getApiErrorMessage(error) {
