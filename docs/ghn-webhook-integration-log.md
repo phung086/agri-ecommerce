@@ -190,6 +190,39 @@ Tests run: 75, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
 
+## Smoke test production đã chạy
+
+Sau khi push lên `develop`, Railway tạo deployment mới:
+
+```text
+d926e76f-11f4-4a15-bc04-744995028fe8 | SUCCESS | 2026-07-06 15:17:33 +07:00
+```
+
+Đã gọi thử production webhook với mã vận đơn giả `CODEX-NOT-EXIST` và secret thật lấy từ `.env`.
+
+Kết quả mong đợi và thực tế:
+
+```json
+{
+  "success": true,
+  "message": "GHN webhook received",
+  "data": {
+    "processed": false,
+    "ignored": true,
+    "orderCode": "CODEX-NOT-EXIST",
+    "ghnStatus": "delivering",
+    "message": "No AgriMarket order found for GHN order code"
+  },
+  "statusCode": 200
+}
+```
+
+Ý nghĩa:
+
+- Endpoint production đã chạy.
+- `GHN_WEBHOOK_SECRET` trên Railway đã khớp.
+- Migration DB đã sẵn sàng, vì backend query được entity `orders` có các cột shipping mới.
+
 ## Ghi chú báo cáo
 
 Lỗi/giới hạn ban đầu:
