@@ -32,7 +32,7 @@ import {
   formatCurrency,
   formatDate,
   formatNumber,
-  getAssetUrl,
+  getImageBackground,
 } from "@/lib/admin-utils";
 import {
   AUTH_SCOPES,
@@ -1240,9 +1240,7 @@ export default function CheckoutPage() {
                         <div
                           className="h-20 rounded-[8px] bg-emerald-50 bg-cover bg-center"
                           style={{
-                            backgroundImage: item.thumbnail
-                              ? `url("${getAssetUrl(item.thumbnail)}")`
-                              : "none",
+                            backgroundImage: getImageBackground(item.thumbnail),
                           }}
                         />
                         <div className="min-w-0">

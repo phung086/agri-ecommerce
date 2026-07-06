@@ -32,6 +32,7 @@ import {
   getApiErrorMessage,
   getAssetUrl,
   getImageBackground,
+  setImageFallback,
 } from "@/lib/admin-utils";
 import {
   AUTH_SCOPES,
@@ -1808,6 +1809,7 @@ export default function Home() {
                                     src={imageSrc}
                                     alt={localizedItem.name}
                                     className="h-full w-full object-cover"
+                                    onError={setImageFallback}
                                   />
                                 ) : (
                                   <Leaf className="h-4 w-4 text-emerald-600" />
