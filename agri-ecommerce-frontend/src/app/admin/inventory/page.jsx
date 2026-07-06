@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { 
+import {
   Store, 
   Plus, 
   Calendar, 
@@ -16,8 +16,8 @@ import {
   TrendingDown
 } from "lucide-react";
 import { adminService } from "@/services/admin.service";
-import AdminPageHeader from "@/components/admin/admin-page-header";
-import { toast } from "react-hot-toast";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { toast } from "sonner";
 
 export default function AdminInventoryPage() {
   const [batches, setBatches] = useState([]);
