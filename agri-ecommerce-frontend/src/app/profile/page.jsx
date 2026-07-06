@@ -1788,21 +1788,46 @@ export default function CustomerProfilePage() {
           </section>
         ) : authStatus !== "authenticated" ? (
           <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-            <section className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
-              <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-                <ShieldCheck className="size-5" />
-              </div>
-              <h2 className="mt-5 text-2xl font-black text-emerald-950">
-                Đăng nhập để dùng hồ sơ mua hàng
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Đăng nhập tài khoản của bạn để dễ dàng theo dõi đơn hàng, quản lý danh sách địa chỉ nhận hàng và nhận thêm nhiều ưu đãi thành viên đặc quyền từ AgriMarket.
-              </p>
-              {error && (
-                <div className="mt-4 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-                  {error}
+            <section className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-800 to-emerald-950 p-6 text-white shadow-[0_16px_42px_rgba(15,61,38,0.07)] min-h-[380px] flex flex-col justify-between">
+              {/* Background decorative patterns */}
+              <div className="absolute -right-16 -top-16 size-48 rounded-full bg-emerald-700/20 blur-xl pointer-events-none" />
+              <div className="absolute -left-10 -bottom-10 size-40 rounded-full bg-emerald-600/10 blur-xl pointer-events-none" />
+
+              <div className="relative z-10 space-y-4">
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/25 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-400/20">
+                  <span className="flex size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Ưu đãi đặc quyền
                 </div>
-              )}
+                
+                <h2 className="text-3xl font-black leading-tight text-white">
+                  Đăng nhập để nhận <span className="text-emerald-400">Voucher 50K</span>
+                </h2>
+                
+                <p className="text-sm leading-relaxed text-emerald-100/90 max-w-sm">
+                  Đăng nhập tài khoản của bạn để dễ dàng theo dõi đơn hàng, quản lý địa chỉ nhận nông sản sạch và nhận thêm nhiều ưu đãi thành viên đặc quyền.
+                </p>
+              </div>
+
+              {/* Discount / Advertisement announcements container */}
+              <div className="relative z-10 mt-6 space-y-3">
+                <div className="rounded-xl border border-emerald-700/30 bg-emerald-900/40 p-4 backdrop-blur-md">
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-300">Khuyến mãi đang diễn ra</p>
+                  <div className="mt-2 flex items-center justify-between gap-2 border-b border-emerald-800/50 pb-2">
+                    <span className="text-xs font-bold text-emerald-100">Miễn phí vận chuyển đơn từ 250K</span>
+                    <span className="rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-white">AUTO</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-emerald-100">Giảm 10% đơn hàng đầu tiên</span>
+                    <span className="rounded border border-emerald-500/50 bg-emerald-950/80 px-1.5 py-0.5 text-[10px] font-black text-emerald-400 font-mono">AGRINEW</span>
+                  </div>
+                </div>
+                
+                {error && (
+                  <div className="rounded-lg border border-red-500/20 bg-red-950/50 p-3 text-xs font-semibold text-red-300">
+                    {error}
+                  </div>
+                )}
+              </div>
             </section>
             <AuthPanel onAuthenticated={handleAuthenticated} />
           </div>
