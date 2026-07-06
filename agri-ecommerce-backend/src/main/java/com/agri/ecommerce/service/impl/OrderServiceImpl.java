@@ -51,6 +51,7 @@ public class OrderServiceImpl implements OrderService {
     private static final String COUPON_TYPE_FREESHIP = "FREESHIP";
     private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final String PAYMENT_METHOD_VNPAY = "vnpay";
+    private static final String SHIPPING_PROVIDER_GHN = "GHN";
     private static final BigDecimal DEFAULT_SHIPPING_FEE = new BigDecimal("25000.00");
     private static final double DEFAULT_ITEM_WEIGHT_GRAMS = 500.0d;
     private static final int MAX_PAGE_SIZE = 100;
@@ -252,6 +253,7 @@ public class OrderServiceImpl implements OrderService {
             try {
                 String trackingCode = shippingCarrierService.createShippingLabel(order);
                 order.setTrackingNumber(trackingCode);
+                order.setShippingProvider(SHIPPING_PROVIDER_GHN);
                 orderRepository.save(order);
                 orderNote += ". Đã tạo vận đơn trên GHN. Mã vận đơn: " + trackingCode;
             } catch (Exception ex) {

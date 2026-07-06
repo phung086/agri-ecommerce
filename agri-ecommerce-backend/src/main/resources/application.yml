@@ -100,3 +100,4 @@ app:
       api-url: ${GHN_API_URL:https://dev-online-gateway.ghn.vn/shiip/public-api}
       token: ${GHN_TOKEN:${GHN_API_TOKEN:}}
       shop-id: ${GHN_SHOP_ID:}
+      webhook-secret: ${GHN_WEBHOOK_SECRET:}

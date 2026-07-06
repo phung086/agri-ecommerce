@@ -83,6 +83,15 @@ public class OrderEntity {
     @Column(name = "tracking_number", length = 100)
     private String trackingNumber;
 
+    @Column(name = "shipping_provider", length = 50)
+    private String shippingProvider;
+
+    @Column(name = "shipping_status", length = 100)
+    private String shippingStatus;
+
+    @Column(name = "shipping_status_updated_at")
+    private LocalDateTime shippingStatusUpdatedAt;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

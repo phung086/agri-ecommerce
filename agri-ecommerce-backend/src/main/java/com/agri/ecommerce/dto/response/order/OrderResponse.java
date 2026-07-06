@@ -63,6 +63,12 @@ public class OrderResponse {
 
     private String trackingNumber;
 
+    private String shippingProvider;
+
+    private String shippingStatus;
+
+    private LocalDateTime shippingStatusUpdatedAt;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

@@ -93,6 +93,7 @@ public class PaymentServiceImpl implements PaymentService {
     private static final String ORDER_PROCESSING = "processing";
     private static final String IN_STOCK_STATUS = "in_stock";
     private static final String OUT_OF_STOCK_STATUS = "out_of_stock";
+    private static final String SHIPPING_PROVIDER_GHN = "GHN";
 
     private final PaymentRepository paymentRepository;
 
@@ -310,6 +311,7 @@ public class PaymentServiceImpl implements PaymentService {
                 try {
                     String trackingCode = shippingCarrierService.createShippingLabel(order);
                     order.setTrackingNumber(trackingCode);
+                    order.setShippingProvider(SHIPPING_PROVIDER_GHN);
                     orderRepository.save(order);
                     ghnNote += " Đã tạo vận đơn trên GHN. Mã vận đơn: " + trackingCode;
                 } catch (Exception ex) {
