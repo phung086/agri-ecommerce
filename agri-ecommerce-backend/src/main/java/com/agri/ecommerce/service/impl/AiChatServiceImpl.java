@@ -56,6 +56,14 @@ public class AiChatServiceImpl implements AiChatService {
             + "sản phẩm đang có tại trang chủ của chúng tôi.";
 
     // System prompt định hướng chatbot
+    private static final String FALLBACK_DISABLED_EN =
+            "The AI advisor is currently disabled. You can browse available products on the home page "
+            + "or contact support for direct assistance.";
+
+    private static final String FALLBACK_ERROR_EN =
+            "Sorry, the AI advisor is busy right now. Please try again later or browse the available "
+            + "products on the home page.";
+
     private static final String SYSTEM_PROMPT = """
             You are AgriMarket AI Assistant for an agricultural e-commerce graduation project.
 
