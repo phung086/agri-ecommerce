@@ -353,7 +353,10 @@ const additionalTranslations = {
   "Xóa toàn bộ sản phẩm trong giỏ hàng?": "Remove all products from the cart?",
   "Đã xóa toàn bộ giỏ hàng.": "Cart cleared.",
   "Phí giao dự kiến": "Estimated shipping fee",
+  "Tính khi chọn địa chỉ": "Calculated after selecting an address",
+  "Tính ở checkout": "Calculated at checkout",
   "Tổng cộng": "Grand total",
+  "Tổng tạm tính": "Estimated total",
   "Xóa giỏ hàng": "Clear cart",
   "Giỏ hàng đang trống": "Your cart is empty",
   "Chọn vài món rau củ, trái cây hoặc combo tươi để bắt đầu đơn hàng.":
@@ -725,9 +728,9 @@ const additionalTranslations = {
   "Combo rau củ được cập nhật theo ngày để giảm lãng phí và giữ giá tốt.":
     "Vegetable combos updated daily to reduce waste and keep prices low.",
   "Xem tất cả ưu đãi →": "View all offers →",
-  "Phí giao tiêu chuẩn 25.000đ": "Standard delivery fee 25,000 VND",
-  "Giỏ hàng tự tính phí dự kiến để người mua chủ động trước khi thanh toán.":
-    "The cart estimates delivery fees so buyers can plan before checking out.",
+  "Phí giao tính theo GHN": "Shipping fee calculated by GHN",
+  "Checkout gọi GHN để tính phí theo địa chỉ nhận hàng và kho gửi.":
+    "Checkout calls GHN to calculate the fee from the delivery address and shop origin.",
   "Chất lượng trước tiên": "Quality first",
   "Mỗi sản phẩm hiển thị tồn kho, đơn vị bán và vùng cung ứng dễ đọc.":
     "Each product displays stock, unit, and supply region clearly.",

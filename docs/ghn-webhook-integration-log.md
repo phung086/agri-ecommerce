@@ -238,3 +238,35 @@ Cách khắc phục:
 - Map an toàn sang trạng thái nội bộ để UI hiện đúng tiến trình.
 - Thêm secret để bảo vệ endpoint public.
 - Thêm test chống duplicate/retry.
+
+## Fix phí vận chuyển GHN - 2026-07-06
+
+Vấn đề phát hiện khi kiểm thử production:
+
+- Trang giỏ hàng/trang chủ vẫn hiển thị phí giao dự kiến cố định `25.000đ`.
+- Checkout luôn ra `75.900đ` với các đơn cùng địa chỉ vì backend gọi GHN với cùng địa chỉ nhận, cùng khối lượng mặc định và origin cũ.
+- `GhnShippingCarrierServiceImpl` đang hardcode nơi gửi là quận 12, TP.HCM (`from_district_id=1454`, `from_ward_code=21211`) thay vì shop GHN `200980 - Agri Market` ở Hà Đông.
+
+Cách xử lý:
+
+- Bỏ hardcode `25.000đ` ở frontend. Giỏ hàng chỉ còn hiển thị `Tính khi chọn địa chỉ`, vì chưa chọn địa chỉ thì chưa thể có phí GHN chính xác.
+- Checkout tiếp tục gọi backend để tính phí thật theo GHN sau khi đã có địa chỉ nhận hàng.
+- Backend đọc origin từ GHN `/v2/shop/all` theo `GHN_SHOP_ID`; nếu không gọi được API thì fallback về biến môi trường:
+  - `GHN_FROM_DISTRICT_ID=1542`
+  - `GHN_FROM_WARD_CODE=1B1506`
+- Đã thêm hai biến fallback này vào `.env.example`, `application.yml`, local `.env` và Railway Variables.
+
+Cách tính phí hiện tại:
+
+- Origin: shop GHN `200980 - Agri Market` hoặc fallback Hà Đông/La Khê.
+- Destination: tỉnh/quận/phường lấy từ địa chỉ nhận hàng của khách.
+- Khối lượng: `max(tổng số lượng sản phẩm * 500g, 500g)`.
+- Kích thước mặc định gửi GHN: `15 x 15 x 10 cm`.
+- Dịch vụ GHN: `service_type_id=2` (giao chuẩn ecommerce).
+- Nếu áp coupon freeship thì backend đặt `shippingFee = 0`.
+
+Kết quả mong đợi:
+
+- Cart/trang chủ không còn hiển thị phí cố định.
+- Checkout thay đổi phí theo địa chỉ nhận và khối lượng đơn.
+- Nếu cùng một địa chỉ, cùng số lượng/khối lượng và cùng kích thước, phí GHN giống nhau là hành vi bình thường.
