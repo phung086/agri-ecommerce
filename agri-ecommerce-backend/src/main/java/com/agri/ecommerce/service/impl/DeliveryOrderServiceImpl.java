@@ -412,7 +412,7 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public void notifyArrival(Long deliveryStaffId, Long orderId) {
         OrderEntity order = findAssignedOrderById(orderId, deliveryStaffId);
         String message = "Đơn hàng #" + order.getId() + " đang chuẩn bị được giao tới bạn";
