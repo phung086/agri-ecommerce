@@ -16,6 +16,7 @@ import com.agri.ecommerce.repository.PaymentRepository;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.DeliveryOrderService;
 import com.agri.ecommerce.service.PaymentService;
+import com.agri.ecommerce.service.EmailService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -60,6 +61,8 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private final NotificationService notificationService;
 
     private final PaymentService paymentService;
+
+    private final EmailService emailService;
 
     private final OrderMapper orderMapper;
 
@@ -138,6 +141,11 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 "Đơn hàng #" + savedOrder.getId() + " đang được giao",
                 buildOrderLink(savedOrder.getId())
         );
+        emailService.sendOrderStatusUpdate(
+                savedOrder,
+                "Đang giao hàng",
+                "Đơn hàng của bạn đang được giao bởi nhân viên giao hàng của AgriMarket. Vui lòng giữ liên lạc điện thoại để nhận hàng sạch tươi ngon!"
+        );
 
         return toOrderResponse(savedOrder, true);
     }
@@ -169,6 +177,11 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 savedOrder,
                 "Đơn hàng #" + savedOrder.getId() + " đã được giao thành công",
                 buildOrderLink(savedOrder.getId())
+        );
+        emailService.sendOrderStatusUpdate(
+                savedOrder,
+                "Giao hàng thành công",
+                "Đơn hàng của bạn đã được giao thành công bởi nhân viên giao hàng của AgriMarket. Cảm ơn quý khách đã tin dùng nông sản sạch của chúng tôi!"
         );
 
         return toOrderResponse(savedOrder, true);
@@ -227,6 +240,12 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 savedOrder,
                 notifyMessage,
                 buildOrderLink(savedOrder.getId())
+        );
+        emailService.sendOrderStatusUpdate(
+                savedOrder,
+                "Cập nhật kết quả giao hàng",
+                notifyMessage + ". Chi tiết lý do: " + savedOrder.getDeliveryFailureReason() + 
+                (cleanBlank(note) != null ? " | Ghi chú từ shipper: " + note.trim() : "")
         );
 
         return toOrderResponse(savedOrder, true);
@@ -390,5 +409,21 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
         }
 
         return value.trim();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void notifyArrival(Long deliveryStaffId, Long orderId) {
+        OrderEntity order = findAssignedOrderById(orderId, deliveryStaffId);
+        String message = "Đơn hàng #" + order.getId() + " đang chuẩn bị được giao tới bạn";
+        notifyCustomer(order, message, buildOrderLink(order.getId()));
+        
+        emailService.sendOrderStatusUpdate(
+                order,
+                "Chuẩn bị giao hàng",
+                "Nhân viên giao hàng của AgriMarket đang trên đường vận chuyển đơn hàng " 
+                + (order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId()) 
+                + " của bạn. Vui lòng chuẩn bị nhận hàng và giữ liên lạc điện thoại nhé!"
+        );
     }
 }

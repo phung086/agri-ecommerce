@@ -19,4 +19,6 @@ public interface DeliveryOrderService {
     OrderResponse markDelivered(Long deliveryStaffId, Long orderId, DeliveryConfirmRequest request);
 
     OrderResponse markFailedAttempt(Long deliveryStaffId, Long orderId, DeliveryFailureRequest request);
+
+    void notifyArrival(Long deliveryStaffId, Long orderId);
 }

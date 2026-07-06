@@ -464,17 +464,18 @@ export default function DeliveryPage() {
     }, 1500);
   };
 
-  // Automated SMS notification to client
-  const sendArrivalNotification = (order) => {
-    const phone = getCustomerPhone(order);
-    if (!phone) {
-      alert("Khách hàng không có số điện thoại!");
-      return;
+  // Automated email notification to client
+  const sendArrivalNotification = async (order) => {
+    setError("");
+    setNotice("");
+    try {
+      await deliveryService.notifyArrival(order.id);
+      toast.success("Đã gửi email thông báo chuẩn bị giao hàng tới khách hàng!");
+      setNotice("Đã gửi email thông báo chuẩn bị giao hàng thành công.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Không thể gửi thông báo cho khách hàng."));
+      setError(getErrorMessage(err, "Không thể gửi thông báo cho khách hàng."));
     }
-    const message = `Xin chào ${getCustomerName(order)}, tôi là nhân viên giao hàng từ AgriMarket. Tôi đang trên đường giao đơn hàng #${order.id} trị giá ${formatCurrency(order.totalPrice)} cho quý khách. Vui lòng giữ liên lạc điện thoại nhé!`;
-    
-    // Simulate SMS sending
-    alert(`Đã gửi tin nhắn thông báo tự động tới số ${phone}:\n\n"${message}"`);
   };
 
   async function handleStartTransit(order) {
