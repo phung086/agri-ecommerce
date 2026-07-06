@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
 import {
@@ -104,6 +105,7 @@ function getErrorMessage(error, fallback) {
 }
 
 export default function DeliveryPage() {
+  const router = useRouter();
   const [authStatus, setAuthStatus] = useState("checking");
   const [currentUser, setCurrentUser] = useState(null);
   const [loginForm, setLoginForm] = useState(blankLoginForm);
@@ -505,10 +507,10 @@ export default function DeliveryPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-emerald-600 text-white shadow-md">
         <div className="mx-auto flex h-14 w-full max-w-lg items-center justify-between px-4">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition" title="Trở lại trang mua hàng">
             <Truck className="size-6" />
             <h1 className="text-lg font-black tracking-tight">AgriMarket - Shipper</h1>
-          </div>
+          </Link>
           {authStatus === "authenticated" && (
             <button
               onClick={handleLogout}
@@ -536,6 +538,32 @@ export default function DeliveryPage() {
               </span>
               <h2 className="mt-2 text-2xl font-black text-slate-800">Shipper Đăng Nhập</h2>
               <p className="text-sm text-slate-500">Khu vực kiểm soát và giao nhận đơn hàng</p>
+            </div>
+
+            <div className="mb-5">
+              <Label className="mb-2 block text-xs font-black uppercase text-slate-500">Vai trò đăng nhập</Label>
+              <div className="grid grid-cols-3 gap-2 rounded-[8px] border border-slate-100 bg-slate-50 p-1">
+                <button
+                  type="button"
+                  onClick={() => router.push("/profile")}
+                  className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
+                >
+                  Khách hàng
+                </button>
+                <button
+                  type="button"
+                  className="h-8 rounded-[6px] text-xs font-bold bg-white text-emerald-800 shadow-sm"
+                >
+                  Giao hàng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/admin/login")}
+                  className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
+                >
+                  Quản trị viên
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">

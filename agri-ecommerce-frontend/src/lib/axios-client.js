@@ -21,14 +21,17 @@ axiosClient.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     // Determine scope based on the API request URL
     const url = config.url || "";
-    let scope = getCurrentAuthScope(); // fallback to current page scope
+    const currentScope = getCurrentAuthScope();
+    let scope = currentScope; // fallback to current page scope
 
     if (url.includes("/api/admin/") || url.includes("/admin/")) {
       scope = AUTH_SCOPES.admin;
     } else if (url.includes("/api/delivery/") || url.includes("/delivery/")) {
       scope = AUTH_SCOPES.delivery;
     } else if (url.includes("/api/customer/") || url.includes("/customer/")) {
-      scope = AUTH_SCOPES.customer;
+      if (currentScope !== AUTH_SCOPES.admin && currentScope !== AUTH_SCOPES.delivery) {
+        scope = AUTH_SCOPES.customer;
+      }
     }
 
     const token = getAuthToken(scope);
@@ -46,14 +49,17 @@ axiosClient.interceptors.response.use(
   (error) => {
     if (error?.response?.status === 401) {
       const requestUrl = error.config?.url || "";
-      let scope = AUTH_SCOPES.customer;
+      const currentScope = getCurrentAuthScope();
+      let scope = currentScope;
 
       if (requestUrl.includes("/api/admin/") || requestUrl.includes("/admin/")) {
         scope = AUTH_SCOPES.admin;
       } else if (requestUrl.includes("/api/delivery/") || requestUrl.includes("/delivery/")) {
         scope = AUTH_SCOPES.delivery;
       } else if (requestUrl.includes("/api/customer/") || requestUrl.includes("/customer/")) {
-        scope = AUTH_SCOPES.customer;
+        if (currentScope !== AUTH_SCOPES.admin && currentScope !== AUTH_SCOPES.delivery) {
+          scope = AUTH_SCOPES.customer;
+        }
       } else {
         // Fallback to page pathname if url is not specific
         const pathname = typeof window !== "undefined" ? window.location.pathname : "";

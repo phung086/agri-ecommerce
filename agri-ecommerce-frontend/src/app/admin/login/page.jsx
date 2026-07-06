@@ -196,6 +196,32 @@ export default function AdminLoginPage() {
             </div>
           </div>
 
+          <div className="mb-5">
+            <Label className="mb-2 block text-xs font-black uppercase text-slate-500">Vai trò đăng nhập</Label>
+            <div className="grid grid-cols-3 gap-2 rounded-[8px] border border-slate-100 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => router.push("/profile")}
+                className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
+              >
+                Khách hàng
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/delivery")}
+                className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
+              >
+                Giao hàng
+              </button>
+              <button
+                type="button"
+                className="h-8 rounded-[6px] text-xs font-bold bg-white text-emerald-800 shadow-sm"
+              >
+                Quản trị viên
+              </button>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="admin-email">Email quản trị</Label>
