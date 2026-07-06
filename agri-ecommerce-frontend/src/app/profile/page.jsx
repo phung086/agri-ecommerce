@@ -80,6 +80,7 @@ import { orderService } from "@/services/order.service";
 import { profileService } from "@/services/profile.service";
 import { reviewService } from "@/services/review.service";
 import { shippingAddressService } from "@/services/shipping-address.service";
+import { promotionService } from "@/services/promotion.service";
 
 const blankLoginForm = {
   email: "",
@@ -1101,6 +1102,22 @@ export default function CustomerProfilePage() {
   const [activeTab, setActiveTab] = useState("profile"); // "profile", "addresses", "password", "orders"
   const [orderFilter, setOrderFilter] = useState("all"); // "all", "pending", "delivering", "completed", "canceled"
   const [phoneError, setPhoneError] = useState("");
+  const [coupons, setCoupons] = useState([]);
+  const [couponsLoading, setCouponsLoading] = useState(false);
+
+  const loadPublicCoupons = useCallback(async () => {
+    setCouponsLoading(true);
+    try {
+      const response = await promotionService.getPublicCoupons({ page: 0, size: 5 });
+      const content = readPageContent(response);
+      setCoupons(content || []);
+    } catch (err) {
+      console.warn("Failed to load public coupons:", err);
+      setCoupons([]);
+    } finally {
+      setCouponsLoading(false);
+    }
+  }, []);
 
   const profileInitial = getInitial(profile);
   const profileAvatarUrl = getAssetUrl(form.avatar || profile?.avatar);
@@ -1246,6 +1263,7 @@ export default function CustomerProfilePage() {
       if (!session?.accessToken || isAuthSessionExpired(session)) {
         clearAuthSession(AUTH_SCOPES.customer);
         setAuthStatus("unauthenticated");
+        loadPublicCoupons();
         return;
       }
 
@@ -1254,10 +1272,11 @@ export default function CustomerProfilePage() {
       loadProfile();
       loadOrderHistory();
       loadMyReviews();
+      loadPublicCoupons();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [applyProfile, loadMyReviews, loadOrderHistory, loadProfile]);
+  }, [applyProfile, loadMyReviews, loadOrderHistory, loadProfile, loadPublicCoupons]);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -1788,42 +1807,77 @@ export default function CustomerProfilePage() {
           </section>
         ) : authStatus !== "authenticated" ? (
           <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-            <section className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-800 to-emerald-950 p-6 text-white shadow-[0_16px_42px_rgba(15,61,38,0.07)] min-h-[380px] flex flex-col justify-between">
+            <section className="relative overflow-hidden rounded-2xl border border-emerald-100/80 bg-gradient-to-b from-[#f7faf4] to-white p-6 text-emerald-950 shadow-sm min-h-[380px] flex flex-col justify-between">
               {/* Background decorative patterns */}
-              <div className="absolute -right-16 -top-16 size-48 rounded-full bg-emerald-700/20 blur-xl pointer-events-none" />
-              <div className="absolute -left-10 -bottom-10 size-40 rounded-full bg-emerald-600/10 blur-xl pointer-events-none" />
+              <div className="absolute -right-16 -top-16 size-48 rounded-full bg-emerald-100/30 blur-xl pointer-events-none" />
+              <div className="absolute -left-10 -bottom-10 size-40 rounded-full bg-emerald-50/20 blur-xl pointer-events-none" />
 
               <div className="relative z-10 space-y-4">
-                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/25 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-400/20">
-                  <span className="flex size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Ưu đãi đặc quyền
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
+                  <span className="flex size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Chương trình ưu đãi
                 </div>
                 
-                <h2 className="text-3xl font-black leading-tight text-white">
-                  Đăng nhập để nhận <span className="text-emerald-400">Voucher 50K</span>
+                <h2 className="text-2xl font-black leading-tight text-emerald-950">
+                  Khuyến mãi từ <span className="text-emerald-600">AgriMarket</span>
                 </h2>
                 
-                <p className="text-sm leading-relaxed text-emerald-100/90 max-w-sm">
-                  Đăng nhập tài khoản của bạn để dễ dàng theo dõi đơn hàng, quản lý địa chỉ nhận nông sản sạch và nhận thêm nhiều ưu đãi thành viên đặc quyền.
+                <p className="text-sm leading-relaxed text-slate-600 max-w-sm">
+                  Đăng nhập tài khoản của bạn để dễ dàng mua nông sản sạch hỏa tốc, tích lũy điểm thưởng và áp dụng voucher giảm giá thực tế khi thanh toán.
                 </p>
               </div>
 
               {/* Discount / Advertisement announcements container */}
               <div className="relative z-10 mt-6 space-y-3">
-                <div className="rounded-xl border border-emerald-700/30 bg-emerald-900/40 p-4 backdrop-blur-md">
-                  <p className="text-xs font-black uppercase tracking-wider text-emerald-300">Khuyến mãi đang diễn ra</p>
-                  <div className="mt-2 flex items-center justify-between gap-2 border-b border-emerald-800/50 pb-2">
-                    <span className="text-xs font-bold text-emerald-100">Miễn phí vận chuyển đơn từ 250K</span>
-                    <span className="rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-white">AUTO</span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-emerald-100">Giảm 10% đơn hàng đầu tiên</span>
-                    <span className="rounded border border-emerald-500/50 bg-emerald-950/80 px-1.5 py-0.5 text-[10px] font-black text-emerald-400 font-mono">AGRINEW</span>
-                  </div>
+                <div className="rounded-xl border border-emerald-100/80 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-800">Mã giảm giá khả dụng</p>
+                  
+                  {couponsLoading ? (
+                    <p className="text-xs text-slate-500 mt-2">Đang tải danh sách ưu đãi...</p>
+                  ) : coupons.length > 0 ? (
+                    <div className="mt-2 space-y-2 max-h-[140px] overflow-y-auto">
+                      {coupons.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between gap-2 border-b border-slate-50 pb-2 last:border-0 last:pb-0">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate">
+                              Giảm {c.discountType === "PERCENTAGE" || c.discountPercentage > 0 ? `${c.discountPercentage}%` : `${formatCurrency(c.discountAmount)}`}
+                            </p>
+                            {c.minOrderValue > 0 && (
+                              <p className="text-[10px] text-slate-500">Đơn từ {formatCurrency(c.minOrderValue)}</p>
+                            )}
+                          </div>
+                          <span className="rounded border border-emerald-200 bg-emerald-50/50 px-2 py-0.5 text-xs font-black text-emerald-700 font-mono">
+                            {c.code}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-50 pb-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800">Giảm 20% tổng giá trị đơn</p>
+                          <p className="text-[10px] text-slate-500">Đơn tối thiểu 2.000.000đ</p>
+                        </div>
+                        <span className="rounded border border-emerald-200 bg-emerald-50/50 px-2 py-0.5 text-xs font-black text-emerald-700 font-mono">
+                          GIAM20
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800">Mã giảm giá thành viên mới</p>
+                          <p className="text-[10px] text-slate-500">Giảm 5% cho đơn hàng đầu tiên</p>
+                        </div>
+                        <span className="rounded border border-emerald-200 bg-emerald-50/50 px-2 py-0.5 text-xs font-black text-emerald-700 font-mono">
+                          KK
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 {error && (
-                  <div className="rounded-lg border border-red-500/20 bg-red-950/50 p-3 text-xs font-semibold text-red-300">
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
                     {error}
                   </div>
                 )}
