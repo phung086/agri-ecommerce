@@ -20,6 +20,8 @@ public class CouponResponse {
 
     private String discountType;
 
+    private Long productId;
+
     private Integer discountPercentage;
 
     private BigDecimal discountAmount;

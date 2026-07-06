@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminInventoryController {
 
     private final AdminInventoryService adminInventoryService;
+    private final com.agri.ecommerce.scheduler.InventoryScheduler inventoryScheduler;
 
     @Operation(summary = "Get inventory summary")
     @GetMapping("/summary")
@@ -108,6 +109,41 @@ public class AdminInventoryController {
 
         return ResponseEntity.ok(
                 ApiResponse.success("Product stock adjusted successfully", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Get list of inventory batches")
+    @GetMapping("/batches")
+    public ResponseEntity<ApiResponse<java.util.List<com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse>>> getBatches() {
+        return ResponseEntity.ok(
+                ApiResponse.success("Batches loaded successfully", adminInventoryService.getBatches(), HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Import new inventory batch")
+    @PostMapping("/batches")
+    public ResponseEntity<ApiResponse<com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse>> createBatch(
+            @Valid @RequestBody com.agri.ecommerce.dto.request.inventory.InventoryBatchCreateRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                ApiResponse.success("Batch imported successfully", adminInventoryService.createBatch(request), HttpStatus.CREATED.value())
+        );
+    }
+
+    @Operation(summary = "Get inventory transaction logs")
+    @GetMapping("/transactions")
+    public ResponseEntity<ApiResponse<java.util.List<com.agri.ecommerce.dto.response.inventory.InventoryTransactionResponse>>> getTransactions() {
+        return ResponseEntity.ok(
+                ApiResponse.success("Transactions loaded successfully", adminInventoryService.getTransactions(), HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Manually trigger inventory scan for expired and near-expiry goods")
+    @PostMapping("/scan")
+    public ResponseEntity<ApiResponse<Void>> triggerScan() {
+        inventoryScheduler.runDailyInventoryScan();
+        return ResponseEntity.ok(
+                ApiResponse.success("Inventory scan completed successfully", null, HttpStatus.OK.value())
         );
     }
 }

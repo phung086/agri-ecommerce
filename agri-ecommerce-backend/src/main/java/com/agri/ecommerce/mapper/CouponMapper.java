@@ -23,6 +23,7 @@ public class CouponMapper {
                 .code(coupon.getCode())
                 .couponType(coupon.getCouponType())
                 .discountType(coupon.getDiscountType())
+                .productId(coupon.getProductId())
                 .discountPercentage(coupon.getDiscountPercentage())
                 .discountAmount(coupon.getDiscountAmount())
                 .minOrderValue(coupon.getMinOrderValue())

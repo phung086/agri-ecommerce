@@ -23,6 +23,8 @@ public class CouponUpdateRequest {
 
     private String discountType;
 
+    private Long productId;
+
     @Min(value = 1, message = "Phan tram giam gia phai tu 1 den 100")
     @Max(value = 100, message = "Phan tram giam gia phai tu 1 den 100")
     private Integer discountPercentage;
