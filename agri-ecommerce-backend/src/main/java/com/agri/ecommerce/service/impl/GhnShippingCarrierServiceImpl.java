@@ -203,7 +203,7 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
 
             HttpEntity<FeeRequest> entity = new HttpEntity<>(feeRequest, headers);
             String url = apiUrl + "/v2/shipping-order/fee";
-            
+
             ResponseEntity<GhnResponse> response = restTemplate.exchange(
                     url, HttpMethod.POST, entity, GhnResponse.class
             );
@@ -229,7 +229,7 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             // Parse District and Ward from detailed address string
             String detailedAddress = order.getShippingAddressDetail() != null ? order.getShippingAddressDetail() : "";
             String province = order.getShippingCity() != null ? order.getShippingCity() : "";
-            
+
             String district = "";
             String ward = "";
             String streetAddress = detailedAddress;
@@ -247,8 +247,8 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             if (!trimmedParts.isEmpty() && !province.isEmpty()) {
                 String lastPartNormalized = normalizeName(trimmedParts.get(trimmedParts.size() - 1));
                 String provinceNormalized = normalizeName(province);
-                if (lastPartNormalized.equals(provinceNormalized) || 
-                    lastPartNormalized.contains(provinceNormalized) || 
+                if (lastPartNormalized.equals(provinceNormalized) ||
+                    lastPartNormalized.contains(provinceNormalized) ||
                     provinceNormalized.contains(lastPartNormalized)) {
                     trimmedParts.remove(trimmedParts.size() - 1);
                 }
@@ -321,7 +321,7 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
                 log.info("[GHN API] Created GHN shipping order successfully. Tracking number: {}", orderCode);
                 return orderCode;
             } else {
-                log.warn("[GHN API] GHN API returned error code: {}, message: {}", 
+                log.warn("[GHN API] GHN API returned error code: {}, message: {}",
                         response.getBody() != null ? response.getBody().getCode() : "null",
                         response.getBody() != null ? response.getBody().getMessage() : "null");
             }

@@ -104,10 +104,10 @@ public class EmailServiceImpl implements EmailService {
             log.info("[Email Service MOCK] 'spring.mail.username' or JavaMailSender is not configured. Logging order invoice instead.");
             log.info("[Email Service MOCK] Order ID: #{}", invoiceOrder.getId());
             log.info("[Email Service MOCK] Customer: {} ({})", invoiceOrder.getUser().getName(), recipientEmail);
-            log.info("[Email Service MOCK] Subtotal: {}, Discount: {}, Shipping: {}, Total Price: {}", 
+            log.info("[Email Service MOCK] Subtotal: {}, Discount: {}, Shipping: {}, Total Price: {}",
                     invoiceOrder.getSubtotal(), invoiceOrder.getDiscountAmount(), invoiceOrder.getShippingFee(), invoiceOrder.getTotalPrice());
             log.info("[Email Service MOCK] Items list:");
-            items.forEach(item -> log.info("  - {} x {}: {}đ", 
+            items.forEach(item -> log.info("  - {} x {}: {}đ",
                     item.getProduct() == null ? "Sản phẩm" : item.getProduct().getName(), item.getQuantity(), item.getPrice()));
             return;
         }
@@ -264,7 +264,7 @@ public class EmailServiceImpl implements EmailService {
 
     private String buildInvoiceHtml(OrderEntity order, List<OrderItemEntity> items) {
         NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
-        
+
         StringBuilder itemsHtml = new StringBuilder();
         for (OrderItemEntity item : items) {
             BigDecimal price = item.getPrice() == null ? BigDecimal.ZERO : item.getPrice();

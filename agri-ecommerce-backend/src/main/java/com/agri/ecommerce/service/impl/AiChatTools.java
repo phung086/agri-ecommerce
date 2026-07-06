@@ -32,10 +32,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AiChatTools {
 
-    public static final ThreadLocal<List<SuggestedProductResponse>> suggestedProductsHolder = 
+    public static final ThreadLocal<List<SuggestedProductResponse>> suggestedProductsHolder =
             ThreadLocal.withInitial(ArrayList::new);
 
-    public static final ThreadLocal<String> localeHolder = 
+    public static final ThreadLocal<String> localeHolder =
             ThreadLocal.withInitial(() -> "vi");
 
     private final ProductRepository productRepository;
@@ -51,7 +51,7 @@ public class AiChatTools {
     public List<Map<String, Object>> searchProducts(String keyword, String categorySlug, Double maxPrice) {
         log.info("[AI Tool] Gọi searchProducts với keyword={}, categorySlug={}, maxPrice={}", keyword, categorySlug, maxPrice);
         BigDecimal maxPriceBd = maxPrice != null ? BigDecimal.valueOf(maxPrice) : null;
-        
+
         String cleanKeyword = keyword != null && !keyword.trim().isEmpty() ? keyword.trim() : null;
         String cleanCategorySlug = categorySlug != null && !categorySlug.trim().isEmpty() ? categorySlug.trim() : null;
 

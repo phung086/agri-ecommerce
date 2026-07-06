@@ -3,6 +3,7 @@ package com.agri.ecommerce.controller.admin;
 import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.upload.UploadedImageResponse;
+import com.agri.ecommerce.service.CloudinaryUploadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -16,14 +17,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.Instant;
 import java.util.Locale;
 import java.util.Set;
-import java.util.UUID;
 
 @Tag(name = "Admin - Upload", description = "API upload file cho admin")
 @RestController
@@ -41,6 +36,8 @@ public class AdminUploadController {
             "image/gif"
     );
 
+    private final CloudinaryUploadService cloudinaryUploadService;
+
     @Operation(summary = "Upload anh danh muc hoac san pham")
     @PostMapping(value = "/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<UploadedImageResponse>> uploadImage(
@@ -50,28 +47,7 @@ public class AdminUploadController {
         validateImage(file);
 
         String folder = resolveFolder(type);
-        String extension = getExtension(file.getOriginalFilename());
-        String fileName = Instant.now().toEpochMilli() + "_" + UUID.randomUUID() + "." + extension;
-        Path targetDirectory = Path.of("uploads", folder).toAbsolutePath().normalize();
-        Path targetFile = targetDirectory.resolve(fileName).normalize();
-
-        if (!targetFile.startsWith(targetDirectory)) {
-            throw new BadRequestException("Ten file khong hop le");
-        }
-
-        try {
-            Files.createDirectories(targetDirectory);
-            Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException ex) {
-            throw new BadRequestException("Khong the luu file anh");
-        }
-
-        String relativePath = "uploads/" + folder + "/" + fileName;
-        UploadedImageResponse response = new UploadedImageResponse(
-                relativePath,
-                "/" + relativePath,
-                fileName
-        );
+        UploadedImageResponse response = cloudinaryUploadService.uploadImage(file, folder);
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Upload anh thanh cong", response, HttpStatus.CREATED.value()));

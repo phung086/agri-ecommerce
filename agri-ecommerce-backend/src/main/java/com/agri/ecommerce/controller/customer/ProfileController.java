@@ -4,8 +4,10 @@ import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.dto.request.user.ChangePasswordRequest;
 import com.agri.ecommerce.dto.request.user.UpdateProfileRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
+import com.agri.ecommerce.dto.response.upload.UploadedImageResponse;
 import com.agri.ecommerce.dto.response.user.UserResponse;
 import com.agri.ecommerce.security.UserPrincipal;
+import com.agri.ecommerce.service.CloudinaryUploadService;
 import com.agri.ecommerce.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,11 +23,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.Instant;
 import java.util.Locale;
 import java.util.Set;
-import java.util.UUID;
 
 @Tag(name = "Customer Profile", description = "API quản lý hồ sơ cá nhân của người dùng đăng nhập")
 @RestController
@@ -43,6 +42,8 @@ public class ProfileController {
     );
 
     private final UserService userService;
+
+    private final CloudinaryUploadService cloudinaryUploadService;
 
     @Operation(summary = "Đổi mật khẩu tài khoản đang đăng nhập")
     @PatchMapping("/change-password")
@@ -90,24 +91,10 @@ public class ProfileController {
     ) {
         validateAvatar(file);
 
-        String extension = getExtension(file.getOriginalFilename());
-        String fileName = Instant.now().toEpochMilli() + "_" + UUID.randomUUID() + "." + extension;
-        Path targetDirectory = Path.of("uploads", "avatars").toAbsolutePath().normalize();
-        Path targetFile = targetDirectory.resolve(fileName).normalize();
-
-        if (!targetFile.startsWith(targetDirectory)) {
-            throw new BadRequestException("Ten file khong hop le");
-        }
-
-        try {
-            Files.createDirectories(targetDirectory);
-            Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException ex) {
-            throw new BadRequestException("Khong the luu file anh dai dien");
-        }
-
-        String relativePath = "uploads/avatars/" + fileName;
-        UserResponse response = userService.updateCurrentProfileAvatar(principal.getId(), relativePath);
+        UserResponse currentProfile = userService.getCurrentProfile(principal.getId());
+        UploadedImageResponse uploadedImage = cloudinaryUploadService.uploadImage(file, "avatars");
+        UserResponse response = userService.updateCurrentProfileAvatar(principal.getId(), uploadedImage.path());
+        cloudinaryUploadService.deleteImageByUrl(currentProfile.getAvatar());
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Upload anh dai dien thanh cong", response, HttpStatus.CREATED.value()));
@@ -124,6 +111,7 @@ public class ProfileController {
 
         // Xóa record avatar trong DB trước
         UserResponse response = userService.updateCurrentProfileAvatar(principal.getId(), null);
+        cloudinaryUploadService.deleteImageByUrl(currentAvatar);
 
         // Xóa file vật lý nếu là file local (không xóa URL bên ngoài)
         if (currentAvatar != null && !currentAvatar.isBlank()

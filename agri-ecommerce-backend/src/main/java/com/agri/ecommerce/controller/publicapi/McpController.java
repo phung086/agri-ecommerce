@@ -60,7 +60,7 @@ public class McpController {
             @RequestBody Map<String, Object> request
     ) {
         log.info("[MCP Server] Nhận message từ session {}: {}", session, request);
-        
+
         Map<String, Object> response = new HashMap<>();
         response.put("jsonrpc", "2.0");
         if (request.containsKey("id")) {
@@ -75,16 +75,16 @@ public class McpController {
                 case "initialize":
                     Map<String, Object> resultInit = new HashMap<>();
                     resultInit.put("protocolVersion", "2024-11-05");
-                    
+
                     Map<String, Object> capabilities = new HashMap<>();
                     capabilities.put("tools", Map.of());
                     resultInit.put("capabilities", capabilities);
-                    
+
                     Map<String, Object> serverInfo = new HashMap<>();
                     serverInfo.put("name", "AgriMarket-MCP-Server");
                     serverInfo.put("version", "1.0.0");
                     resultInit.put("serverInfo", serverInfo);
-                    
+
                     response.put("result", resultInit);
                     break;
 
@@ -146,16 +146,16 @@ public class McpController {
                 case "tools/call":
                     String toolName = (String) params.getOrDefault("name", "");
                     Map<String, Object> arguments = (Map<String, Object>) params.getOrDefault("arguments", Map.of());
-                    
+
                     Map<String, Object> resultCall = new HashMap<>();
                     List<Map<String, Object>> contentList = new ArrayList<>();
                     Map<String, Object> contentObj = new HashMap<>();
                     contentObj.put("type", "text");
-                    
+
                     String callResultText = executeTool(toolName, arguments);
                     contentObj.put("text", callResultText);
                     contentList.add(contentObj);
-                    
+
                     resultCall.put("content", contentList);
                     response.put("result", resultCall);
                     break;

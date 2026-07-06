@@ -263,7 +263,7 @@ function AuthPanel({ onAuthenticated }) {
 
         if (payload?.accessToken) {
           saveAuthSession(payload, { remember, scope: AUTH_SCOPES.customer });
-          
+
           // 3. Tạo địa chỉ giao hàng mặc định ngay sau khi đăng nhập thành công
           try {
             await shippingAddressService.createAddress({
@@ -2013,7 +2013,7 @@ export default function CustomerProfilePage() {
                       <h3 className="font-black text-emerald-950 text-base">
                         {editingAddress ? t("Chỉnh sửa địa chỉ nhận hàng") : t("Thêm địa chỉ giao hàng mới")}
                       </h3>
-                      
+
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                           <Label htmlFor="address-fullname">{t("Họ tên người nhận")}</Label>
@@ -2035,7 +2035,7 @@ export default function CustomerProfilePage() {
                             required
                           />
                         </div>
-                        
+
                         <VietnamAddressFields
                           value={addressForm}
                           onChange={setAddressForm}
