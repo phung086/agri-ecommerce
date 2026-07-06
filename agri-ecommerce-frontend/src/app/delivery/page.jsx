@@ -125,6 +125,7 @@ export default function DeliveryPage() {
   const [loginForm, setLoginForm] = useState(blankLoginForm);
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -690,39 +691,49 @@ export default function DeliveryPage() {
           </div>
         ) : authStatus === "unauthenticated" ? (
           /* Login Form */
-          <div className="rounded-2xl bg-white p-6 shadow-xl">
+          <div className="rounded-2xl bg-white p-6 shadow-xl relative">
+            <div className="absolute right-4 top-4">
+              <button
+                type="button"
+                onClick={() => setShowRoleDropdown((prev) => !prev)}
+                className="flex size-9 items-center justify-center rounded-[8px] bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-emerald-700 transition border border-slate-100"
+                title="Chọn vai trò đăng nhập"
+              >
+                <UserCheck className="size-4" />
+              </button>
+              
+              {showRoleDropdown && (
+                <div className="absolute right-0 top-full z-50 mt-1.5 w-40 rounded-[8px] border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/profile")}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+                  >
+                    Khách hàng
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs font-bold bg-slate-50 text-emerald-800 rounded-[6px]"
+                  >
+                    Giao hàng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/admin/login")}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+                  >
+                    Quản trị viên
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="mb-6 text-center">
               <span className="inline-block rounded-full bg-emerald-50 p-3 text-emerald-600">
                 <Truck className="size-8" />
               </span>
               <h2 className="mt-2 text-2xl font-black text-slate-800">Shipper Đăng Nhập</h2>
               <p className="text-sm text-slate-500">Khu vực kiểm soát và giao nhận đơn hàng</p>
-            </div>
-
-            <div className="mb-5">
-              <Label className="mb-2 block text-xs font-black uppercase text-slate-500">Vai trò đăng nhập</Label>
-              <div className="grid grid-cols-3 gap-2 rounded-[8px] border border-slate-100 bg-slate-50 p-1">
-                <button
-                  type="button"
-                  onClick={() => router.push("/profile")}
-                  className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-                >
-                  Khách hàng
-                </button>
-                <button
-                  type="button"
-                  className="h-8 rounded-[6px] text-xs font-bold bg-white text-emerald-800 shadow-sm"
-                >
-                  Giao hàng
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/admin/login")}
-                  className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-                >
-                  Quản trị viên
-                </button>
-              </div>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">

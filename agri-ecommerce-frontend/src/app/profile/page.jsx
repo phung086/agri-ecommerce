@@ -182,6 +182,7 @@ function getShippingText(order) {
 function AuthPanel({ onAuthenticated }) {
   const router = useRouter();
   const [mode, setMode] = useState("login");
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [loginForm, setLoginForm] = useState(blankLoginForm);
   const [registerForm, setRegisterForm] = useState(blankRegisterForm);
   const [remember, setRemember] = useState(true);
@@ -331,8 +332,40 @@ function AuthPanel({ onAuthenticated }) {
             {isLogin ? "Đăng nhập hồ sơ" : "Tạo tài khoản mới"}
           </h2>
         </div>
-        <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-          <UserRound className="size-5" />
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowRoleDropdown((prev) => !prev)}
+            className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-100 transition"
+            title="Chọn vai trò đăng nhập"
+          >
+            <UserRound className="size-5" />
+          </button>
+          
+          {showRoleDropdown && (
+            <div className="absolute right-0 top-full z-50 mt-1.5 w-40 rounded-[8px] border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 text-xs font-bold bg-slate-50 text-emerald-800 rounded-[6px]"
+              >
+                Khách hàng
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/delivery")}
+                className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+              >
+                Giao hàng
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/admin/login")}
+                className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-emerald-800 rounded-[6px] transition"
+              >
+                Quản trị viên
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -360,35 +393,6 @@ function AuthPanel({ onAuthenticated }) {
           </button>
         ))}
       </div>
-
-      {/* Tabs Lựa chọn vai trò Đăng nhập đa vai trò trực tiếp */}
-      {isLogin && (
-        <div className="mb-5">
-          <Label className="mb-2 block text-xs font-black uppercase text-slate-500">Vai trò đăng nhập</Label>
-          <div className="grid grid-cols-3 gap-2 rounded-[8px] border border-slate-100 bg-slate-50 p-1">
-            <button
-              type="button"
-              className="h-8 rounded-[6px] text-xs font-bold bg-white text-emerald-800 shadow-sm"
-            >
-              Khách hàng
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/delivery")}
-              className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-            >
-              Giao hàng
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/admin/login")}
-              className="h-8 rounded-[6px] text-xs font-bold text-slate-500 hover:text-emerald-700"
-            >
-              Quản trị viên
-            </button>
-          </div>
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {!isLogin && (
