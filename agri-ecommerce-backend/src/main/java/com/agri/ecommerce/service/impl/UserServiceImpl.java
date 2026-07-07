@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.agri.ecommerce.dto.request.user.ChangePasswordRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import com.agri.ecommerce.service.LoyaltyService;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 
 @Service
@@ -27,9 +29,18 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
 
     private final PasswordEncoder passwordEncoder;
+    @Autowired
+    private LoyaltyService loyaltyService;
+
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public UserResponse getCurrentProfile(Long userId) {
+        // Tự động quét và cập nhật lại hạng thành viên dựa trên chi tiêu tích lũy trước khi trả về dữ liệu profile
+        try {
+            loyaltyService.recalculateMembershipTier(userId);
+        } catch (Exception ex) {
+            // Tránh làm gián đoạn luồng lấy thông tin cá nhân chính
+        }
         UserEntity user = findUserById(userId);
         return userMapper.toUserResponse(user);
     }
