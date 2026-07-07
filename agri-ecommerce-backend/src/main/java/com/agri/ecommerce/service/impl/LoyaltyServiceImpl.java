@@ -160,13 +160,15 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         }
 
         String newTier = DEFAULT_TIER;
-        if (totalSpent.compareTo(new BigDecimal("1000000.00")) >= 0) {
-            newTier = TIER_SILVER;
+        if (totalSpent.compareTo(new BigDecimal("4000000.00")) >= 0) {
+            newTier = TIER_PLATINUM; // Hạng Kim Cương
+        } else if (totalSpent.compareTo(new BigDecimal("2500000.00")) >= 0) {
+            newTier = TIER_GOLD; // Hạng Vàng
+        } else if (totalSpent.compareTo(new BigDecimal("1000000.00")) >= 0) {
+            newTier = TIER_SILVER; // Hạng Bạc
         } else if (totalSpent.compareTo(new BigDecimal("500000.00")) >= 0) {
             newTier = DEFAULT_TIER; // Hạng Đồng (BRONZE)
         } else {
-            newTier = "DEFAULT_OR_NONE"; // Bạn có thể đặt hạng mặc định thấp hơn nếu chưa đủ 500k, hoặc giữ BRONZE làm mặc định và gắn mốc.
-            // Để giữ logic cũ: mặc định là BRONZE. Nếu chưa tiêu đủ 500k thì vẫn là hạng mặc định
             newTier = "BRONZE";
         }
 
