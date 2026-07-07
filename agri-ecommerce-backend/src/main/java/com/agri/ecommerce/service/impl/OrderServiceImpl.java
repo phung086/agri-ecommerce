@@ -50,6 +50,7 @@ public class OrderServiceImpl implements OrderService {
     private static final String PAYMENT_FAILED = "failed";
     private static final String COUPON_TYPE_ORDER_DISCOUNT = "ORDER_DISCOUNT";
     private static final String COUPON_TYPE_FREESHIP = "FREESHIP";
+    private static final String COUPON_TYPE_PRODUCT_DISCOUNT = "PRODUCT_DISCOUNT";
     private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final String PAYMENT_METHOD_VNPAY = "vnpay";
     private static final String SHIPPING_PROVIDER_GHN = "GHN";
@@ -675,15 +676,7 @@ public class OrderServiceImpl implements OrderService {
             );
         }
 
-        if (cleanCouponCode.contains(",")) {
-            throw new BadRequestException("Chỉ có thể áp dụng một mã giảm giá cho mỗi đơn hàng");
-        }
-
-        List<String> codes = java.util.Arrays.stream(cleanCouponCode.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .distinct()
-                .toList();
+        List<String> codes = parseCouponCodes(cleanCouponCode);
 
         if (codes.isEmpty()) {
             return new CouponCalculation(
@@ -713,7 +706,7 @@ public class OrderServiceImpl implements OrderService {
                     throw new BadRequestException("Chỉ được áp dụng tối đa 1 mã miễn phí vận chuyển");
                 }
                 hasFreeship = true;
-            } else if ("PRODUCT_DISCOUNT".equals(type)) {
+            } else if (COUPON_TYPE_PRODUCT_DISCOUNT.equals(type)) {
                 if (coupon.getProductId() != null) {
                     if (discountedProductIds.contains(coupon.getProductId())) {
                         throw new BadRequestException("Sản phẩm này đã được áp dụng mã giảm giá");
@@ -740,7 +733,7 @@ public class OrderServiceImpl implements OrderService {
             couponRepository.save(coupon);
 
             validCodes.add(coupon.getCode());
-            if (primaryCoupon == null || "ORDER_DISCOUNT".equals(type)) {
+            if (primaryCoupon == null || COUPON_TYPE_ORDER_DISCOUNT.equals(type)) {
                 primaryCoupon = coupon;
             }
         }
@@ -763,19 +756,7 @@ public class OrderServiceImpl implements OrderService {
             );
         }
 
-        if (cleanCouponCode.contains(",")) {
-            return invalidCouponPreview(
-                    cleanCouponCode,
-                    "Chỉ có thể áp dụng một mã giảm giá cho mỗi đơn hàng",
-                    baseShippingFee
-            );
-        }
-
-        List<String> codes = java.util.Arrays.stream(cleanCouponCode.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .distinct()
-                .toList();
+        List<String> codes = parseCouponCodes(cleanCouponCode);
 
         if (codes.isEmpty()) {
             return new CouponPreviewCalculation(
@@ -810,7 +791,7 @@ public class OrderServiceImpl implements OrderService {
                     return invalidCouponPreview(code, "Chỉ được áp dụng tối đa 1 mã miễn phí vận chuyển", baseShippingFee);
                 }
                 hasFreeship = true;
-            } else if ("PRODUCT_DISCOUNT".equals(type)) {
+            } else if (COUPON_TYPE_PRODUCT_DISCOUNT.equals(type)) {
                 if (coupon.getProductId() != null) {
                     if (discountedProductIds.contains(coupon.getProductId())) {
                         return invalidCouponPreview(code, "Sản phẩm này đã được áp dụng mã giảm giá", baseShippingFee);
@@ -867,7 +848,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         BigDecimal eligibleAmount = subtotal;
-        if ("PRODUCT_DISCOUNT".equals(normalizeCouponType(coupon)) && coupon.getProductId() != null) {
+        if (COUPON_TYPE_PRODUCT_DISCOUNT.equals(normalizeCouponType(coupon)) && coupon.getProductId() != null) {
             eligibleAmount = checkoutItems.stream()
                     .filter(item -> item.product().getId().equals(coupon.getProductId()))
                     .map(CheckoutItem::lineTotal)
@@ -986,11 +967,13 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private String normalizeCouponType(CouponEntity coupon) {
-        return coupon.getCouponType() == null ? COUPON_TYPE_ORDER_DISCOUNT : coupon.getCouponType();
+        String couponType = cleanBlank(coupon.getCouponType());
+        return couponType == null ? COUPON_TYPE_ORDER_DISCOUNT : couponType.toUpperCase(Locale.ROOT);
     }
 
     private String normalizeDiscountType(CouponEntity coupon) {
-        return coupon.getDiscountType() == null ? "PERCENTAGE" : coupon.getDiscountType();
+        String discountType = cleanBlank(coupon.getDiscountType());
+        return discountType == null ? "PERCENTAGE" : discountType.toUpperCase(Locale.ROOT);
     }
 
     private void validateCoupon(CouponEntity coupon, BigDecimal subtotal, List<CheckoutItem> checkoutItems, UserEntity user) {
@@ -1017,7 +1000,7 @@ public class OrderServiceImpl implements OrderService {
             throw new BadRequestException("Mã giảm giá đã hết lượt sử dụng");
         }
 
-        if ("PRODUCT_DISCOUNT".equals(normalizeCouponType(coupon))) {
+        if (COUPON_TYPE_PRODUCT_DISCOUNT.equals(normalizeCouponType(coupon))) {
             if (coupon.getProductId() == null) {
                 throw new BadRequestException("Mã giảm giá sản phẩm không hợp lệ");
             }
@@ -1074,7 +1057,7 @@ public class OrderServiceImpl implements OrderService {
             return "Coupon usage limit has been reached";
         }
 
-        if ("PRODUCT_DISCOUNT".equals(normalizeCouponType(coupon))) {
+        if (COUPON_TYPE_PRODUCT_DISCOUNT.equals(normalizeCouponType(coupon))) {
             if (coupon.getProductId() == null) {
                 return "Mã giảm giá sản phẩm không hợp lệ";
             }
@@ -1129,17 +1112,26 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private void releaseCouponUsage(OrderEntity order) {
-        CouponEntity coupon = order.getCoupon();
+        List<String> couponCodes = parseCouponCodes(order.getCouponCode());
 
-        if (coupon == null) {
+        if (couponCodes.isEmpty() && order.getCoupon() != null && cleanBlank(order.getCoupon().getCode()) != null) {
+            couponCodes = List.of(order.getCoupon().getCode().trim());
+        }
+
+        if (couponCodes.isEmpty()) {
             return;
         }
 
-        int timesUsed = coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed();
-        if (timesUsed > 0) {
-            coupon.setTimesUsed(timesUsed - 1);
-            couponRepository.save(coupon);
-        }
+        couponCodes.stream()
+                .map(couponRepository::findByCodeIgnoreCase)
+                .flatMap(Optional::stream)
+                .forEach(coupon -> {
+                    int timesUsed = coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed();
+                    if (timesUsed > 0) {
+                        coupon.setTimesUsed(timesUsed - 1);
+                        couponRepository.save(coupon);
+                    }
+                });
     }
 
     private OrderStatusHistoryEntity createStatusHistory(OrderEntity order, String status, String note) {
@@ -1238,6 +1230,21 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return value.trim();
+    }
+
+    private List<String> parseCouponCodes(String couponCode) {
+        String cleanCouponCode = cleanBlank(couponCode);
+        if (cleanCouponCode == null) {
+            return List.of();
+        }
+
+        Map<String, String> uniqueCodes = new LinkedHashMap<>();
+        java.util.Arrays.stream(cleanCouponCode.split(","))
+                .map(String::trim)
+                .filter(code -> !code.isEmpty())
+                .forEach(code -> uniqueCodes.putIfAbsent(code.toUpperCase(Locale.ROOT), code));
+
+        return List.copyOf(uniqueCodes.values());
     }
 
     private record CheckoutItem(ProductEntity product, int quantity, BigDecimal price, BigDecimal lineTotal) {

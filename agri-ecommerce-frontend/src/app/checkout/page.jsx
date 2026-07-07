@@ -199,6 +199,16 @@ function getCouponBadgeText(coupon) {
   return `-${coupon?.discountPercentage || 0}%`;
 }
 
+function getCouponStackKey(coupon) {
+  const type = coupon?.couponType || "ORDER_DISCOUNT";
+
+  if (type === "PRODUCT_DISCOUNT") {
+    return `${type}:${coupon?.productId || coupon?.code || coupon?.id}`;
+  }
+
+  return type;
+}
+
 function getCouponSuccessMessage(coupon) {
   if (isFreeshipCoupon(coupon)) {
     return "Áp dụng thành công! Miễn phí vận chuyển cho đơn hàng.";
@@ -306,8 +316,11 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
       } else {
         const newCoupon = apiResp.data;
 
-        // Mot don hang chi ap dung mot voucher; ma moi se thay the ma cu.
-        const nextCoupons = [newCoupon];
+        const stackKey = getCouponStackKey(newCoupon);
+        const nextCoupons = appliedCoupons.filter(
+          (coupon) => getCouponStackKey(coupon) !== stackKey
+        );
+        nextCoupons.push(newCoupon);
 
         setInputValue("");
         setCouponSuccess(`Đã áp dụng mã ${newCoupon.code} thành công.`);
@@ -328,8 +341,10 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
     validateAndApply(coupon.code);
   }
 
-  function handleRemoveCoupon() {
-    const nextCoupons = [];
+  function handleRemoveCoupon(couponToRemove) {
+    const nextCoupons = appliedCoupons.filter(
+      (coupon) => coupon.id !== couponToRemove.id
+    );
     setCouponError("");
     setCouponSuccess("");
     onApply(nextCoupons);
@@ -427,7 +442,7 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
                         </div>
                         <div className="text-right shrink-0">
                           <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-700">
-                            {freeship ? "FreeShip" : `-${coupon.discountPercentage}%`}
+                            {getCouponBadgeText(coupon)}
                           </span>
                           {discountAmt > 0 && (
                             <p className="text-[11px] font-bold text-slate-400 mt-1">Giảm ~{formatNumber(discountAmt)}đ</p>
@@ -597,7 +612,7 @@ export default function CheckoutPage() {
     };
   }, [cartTotal, preview]);
 
-  const couponCode = appliedCoupons[0]?.code || "";
+  const couponCode = appliedCoupons.map((c) => c.code).join(",");
 
   const checkoutPayload = useMemo(
     () => ({

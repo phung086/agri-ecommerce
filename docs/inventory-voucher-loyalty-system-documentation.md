@@ -734,22 +734,19 @@ Co the trinh bay module nay theo ba lop:
 
 ## 16. Cap nhat hoan thien 2026-07-07
 
-### 16.1. Coupon thuc te va khong chong voucher
+### 16.1. Chong voucher co kiem soat (Coupon Stacking)
 
-Van de gap phai:
-- Frontend checkout tung cho phep luu nhieu coupon va gui len backend theo dang chuoi phan cach dau phay.
-- Backend co logic cong don nhieu coupon, de dan toi rui ro giam gia chong cheo va kho giai thich trong bao cao.
+Quy tac ap dung dong thoi:
+De mang lai trai nghiem mua sam chuyen nghiep va toi uu hoa quyen loi cho khach hang, he thong ho tro ap dung dong thoi (chong) nhieu ma giam gia khac loai trong mot don hang theo cac quy tac kiem soat chat che sau:
+- Toi da 1 ma Giam gia don hang / Hang thanh vien (`ORDER_DISCOUNT`).
+- Toi da 1 ma Mien phi van chuyen (`FREESHIP`).
+- Nhieu ma Giam gia san pham (`PRODUCT_DISCOUNT`) nhung cac ma nay phai ap dung cho cac san pham khac nhau trong gio hang (khong duoc trung san pham).
+- Diem Loyalty van duoc su dung ket hop binh thuong (toi da giam 20% gia tri don hang sau khi ap voucher).
 
-Huong xu ly:
-- Checkout chi gui mot `couponCode` duy nhat: `appliedCoupons[0]?.code`.
-- Khi khach chon ma moi, frontend thay the ma dang ap dung thay vi cong them.
-- Backend chan request co dau phay trong `OrderServiceImpl.calculateCoupon` va `calculateCouponPreview`.
-- Loyalty points van duoc dung kem voucher vi day la so du diem cua khach, duoc ghi nhan bang `pointsUsed` va `loyalty_transactions`, khac voi viec stack nhieu voucher.
-
-Ket qua nghiep vu:
-- Moi don hang co toi da 1 voucher.
-- Tong giam gia van minh bach: `couponDiscountAmount` + `pointsDiscount`.
-- Du lieu `orders.coupon_code` sach va de audit.
+Co che thuc hien:
+- Frontend: `CouponPicker` cho phep nguoi dung chon va ap dung nhieu ma. Khi nguoi dung nhap/chon ma moi, he thong tu dong kiem tra loai (slot) de ghi de ma cung loai (hoac ma san pham cung ID) va giu nguyen ma khac loai. Cac ma da ap hien thi thanh danh sach badge kem nut go ma doc lap. Chuoi ma duoc gop phan cach bang dau phay (vi du: `THIT10K,SILVER10,FREESHIP`) de gui len API.
+- Backend: `OrderServiceImpl` phan tach chuoi ma thanh danh sach, xac thuc dieu kien tung ma rieng biet. Sau do, tinh toan cong don so tien giam tru tuong ung mot cach chinh xac va cap nhat so luot dung cua tung ma giam gia lien quan khi tao don thanh cong.
+- Huy don: Khi huy don hang, he thong tu dong khoi phuc lai so luot su dung (`timesUsed`) cho toan bo danh sach ma giam gia da ap dung.
 
 ### 16.2. Chuan hoa ma coupon can han
 
