@@ -190,10 +190,30 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         String cleanCode = couponCode.trim().toUpperCase();
         String userTier = normalizeTier(user.getMembershipTier());
 
-        if ("PLATINUM10".equals(cleanCode)) {
+        // BRONZE5: Yêu cầu hạng BRONZE, SILVER, GOLD hoặc PLATINUM
+        if ("BRONZE5".equals(cleanCode)) {
+            return TIER_PLATINUM.equals(userTier) || TIER_GOLD.equals(userTier) || TIER_SILVER.equals(userTier) || DEFAULT_TIER.equals(userTier);
+        }
+
+        // SILVER10: Yêu cầu hạng SILVER, GOLD hoặc PLATINUM
+        if ("SILVER10".equals(cleanCode)) {
+            return TIER_PLATINUM.equals(userTier) || TIER_GOLD.equals(userTier) || TIER_SILVER.equals(userTier);
+        }
+
+        // GOLD25: Yêu cầu hạng GOLD hoặc PLATINUM
+        if ("GOLD25".equals(cleanCode)) {
+            return TIER_PLATINUM.equals(userTier) || TIER_GOLD.equals(userTier);
+        }
+
+        // PLATINUM50: Yêu cầu hạng PLATINUM (Kim Cương)
+        if ("PLATINUM50".equals(cleanCode)) {
             return TIER_PLATINUM.equals(userTier);
         }
 
+        // Tương thích ngược với các mã kiểm tra cũ
+        if ("PLATINUM10".equals(cleanCode)) {
+            return TIER_PLATINUM.equals(userTier);
+        }
         if ("GOLD5".equals(cleanCode)) {
             return TIER_GOLD.equals(userTier) || TIER_PLATINUM.equals(userTier);
         }

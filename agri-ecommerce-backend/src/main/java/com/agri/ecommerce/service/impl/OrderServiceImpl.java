@@ -759,6 +759,27 @@ public class OrderServiceImpl implements OrderService {
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         }
 
+        // Áp dụng giới hạn số tiền được giảm tối đa cho mã voucher đặc quyền theo hạng thành viên
+        // Đồng: giảm tối đa 10% của 500k = 50k
+        // Bạc: giảm tối đa 10% của 1M = 100k
+        // Vàng: giảm tối đa 10% của 2.5M = 250k
+        // Kim Cương: giảm tối đa 10% của 4M = 400k
+        String code = coupon.getCode().trim().toUpperCase();
+        BigDecimal maxCap = null;
+        if ("BRONZE5".equals(code)) {
+            maxCap = new BigDecimal("50000.00");
+        } else if ("SILVER10".equals(code)) {
+            maxCap = new BigDecimal("100000.00");
+        } else if ("GOLD25".equals(code)) {
+            maxCap = new BigDecimal("250000.00");
+        } else if ("PLATINUM50".equals(code)) {
+            maxCap = new BigDecimal("400000.00");
+        }
+
+        if (maxCap != null && discountAmount.compareTo(maxCap) > 0) {
+            discountAmount = maxCap;
+        }
+
         if (discountAmount.compareTo(eligibleAmount) > 0) {
             discountAmount = eligibleAmount;
         }
