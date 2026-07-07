@@ -675,17 +675,74 @@ public class OrderServiceImpl implements OrderService {
             );
         }
 
-        CouponEntity coupon = couponRepository.findByCodeIgnoreCaseForUpdate(cleanCouponCode)
-                .orElseThrow(() -> new BadRequestException("Mã giảm giá không tồn tại"));
-        validateCoupon(coupon, subtotal, checkoutItems, user);
+        List<String> codes = java.util.Arrays.stream(cleanCouponCode.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .toList();
 
-        BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal, checkoutItems);
-        BigDecimal shippingFee = calculateShippingFee(coupon, baseShippingFee);
+        if (codes.isEmpty()) {
+            return new CouponCalculation(
+                    null,
+                    null,
+                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    baseShippingFee
+            );
+        }
 
-        coupon.setTimesUsed((coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed()) + 1);
-        couponRepository.save(coupon);
+        BigDecimal totalDiscount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal currentShippingFee = baseShippingFee;
+        CouponEntity primaryCoupon = null;
+        List<String> validCodes = new java.util.ArrayList<>();
+        
+        boolean hasOrderDiscount = false;
+        boolean hasFreeship = false;
+        java.util.Set<Long> discountedProductIds = new java.util.HashSet<>();
 
-        return new CouponCalculation(coupon, coupon.getCode(), discountAmount, shippingFee);
+        for (String code : codes) {
+            CouponEntity coupon = couponRepository.findByCodeIgnoreCaseForUpdate(code)
+                    .orElseThrow(() -> new BadRequestException("Mã giảm giá '" + code + "' không tồn tại"));
+            
+            String type = normalizeCouponType(coupon);
+            if (COUPON_TYPE_FREESHIP.equals(type)) {
+                if (hasFreeship) {
+                    throw new BadRequestException("Chỉ được áp dụng tối đa 1 mã miễn phí vận chuyển");
+                }
+                hasFreeship = true;
+            } else if ("PRODUCT_DISCOUNT".equals(type)) {
+                if (coupon.getProductId() != null) {
+                    if (discountedProductIds.contains(coupon.getProductId())) {
+                        throw new BadRequestException("Sản phẩm này đã được áp dụng mã giảm giá");
+                    }
+                    discountedProductIds.add(coupon.getProductId());
+                }
+            } else {
+                if (hasOrderDiscount) {
+                    throw new BadRequestException("Chỉ được áp dụng tối đa 1 mã giảm giá đơn hàng");
+                }
+                hasOrderDiscount = true;
+            }
+
+            validateCoupon(coupon, subtotal, checkoutItems, user);
+
+            BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal, checkoutItems);
+            totalDiscount = totalDiscount.add(discountAmount);
+
+            if (COUPON_TYPE_FREESHIP.equals(type)) {
+                currentShippingFee = calculateShippingFee(coupon, baseShippingFee);
+            }
+
+            coupon.setTimesUsed((coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed()) + 1);
+            couponRepository.save(coupon);
+
+            validCodes.add(coupon.getCode());
+            if (primaryCoupon == null || "ORDER_DISCOUNT".equals(type)) {
+                primaryCoupon = coupon;
+            }
+        }
+
+        String combinedCode = String.join(",", validCodes);
+        return new CouponCalculation(primaryCoupon, combinedCode, totalDiscount, currentShippingFee);
     }
 
     private CouponPreviewCalculation calculateCouponPreview(String couponCode, BigDecimal subtotal, BigDecimal baseShippingFee, List<CheckoutItem> checkoutItems, UserEntity user) {
@@ -702,27 +759,82 @@ public class OrderServiceImpl implements OrderService {
             );
         }
 
-        Optional<CouponEntity> couponOptional = couponRepository.findByCodeIgnoreCase(cleanCouponCode);
-        if (couponOptional.isEmpty()) {
-            return invalidCouponPreview(cleanCouponCode, "Coupon does not exist", baseShippingFee);
+        List<String> codes = java.util.Arrays.stream(cleanCouponCode.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .toList();
+
+        if (codes.isEmpty()) {
+            return new CouponPreviewCalculation(
+                    null,
+                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    baseShippingFee,
+                    false,
+                    true,
+                    "No coupon applied"
+            );
         }
 
-        CouponEntity coupon = couponOptional.get();
-        String invalidMessage = getCouponInvalidMessage(coupon, subtotal, checkoutItems, user);
-        if (invalidMessage != null) {
-            return invalidCouponPreview(coupon.getCode(), invalidMessage, baseShippingFee);
+        BigDecimal totalDiscount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal currentShippingFee = baseShippingFee;
+        List<String> validCodes = new java.util.ArrayList<>();
+        
+        boolean hasOrderDiscount = false;
+        boolean hasFreeship = false;
+        java.util.Set<Long> discountedProductIds = new java.util.HashSet<>();
+
+        for (String code : codes) {
+            Optional<CouponEntity> couponOptional = couponRepository.findByCodeIgnoreCase(code);
+            if (couponOptional.isEmpty()) {
+                return invalidCouponPreview(code, "Mã giảm giá '" + code + "' không tồn tại", baseShippingFee);
+            }
+
+            CouponEntity coupon = couponOptional.get();
+            
+            String type = normalizeCouponType(coupon);
+            if (COUPON_TYPE_FREESHIP.equals(type)) {
+                if (hasFreeship) {
+                    return invalidCouponPreview(code, "Chỉ được áp dụng tối đa 1 mã miễn phí vận chuyển", baseShippingFee);
+                }
+                hasFreeship = true;
+            } else if ("PRODUCT_DISCOUNT".equals(type)) {
+                if (coupon.getProductId() != null) {
+                    if (discountedProductIds.contains(coupon.getProductId())) {
+                        return invalidCouponPreview(code, "Sản phẩm này đã được áp dụng mã giảm giá", baseShippingFee);
+                    }
+                    discountedProductIds.add(coupon.getProductId());
+                }
+            } else {
+                if (hasOrderDiscount) {
+                    return invalidCouponPreview(code, "Chỉ được áp dụng tối đa 1 mã giảm giá đơn hàng", baseShippingFee);
+                }
+                hasOrderDiscount = true;
+            }
+
+            String invalidMessage = getCouponInvalidMessage(coupon, subtotal, checkoutItems, user);
+            if (invalidMessage != null) {
+                return invalidCouponPreview(coupon.getCode(), invalidMessage, baseShippingFee);
+            }
+
+            BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal, checkoutItems);
+            totalDiscount = totalDiscount.add(discountAmount);
+
+            if (COUPON_TYPE_FREESHIP.equals(type)) {
+                currentShippingFee = calculateShippingFee(coupon, baseShippingFee);
+            }
+
+            validCodes.add(coupon.getCode());
         }
 
-        BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal, checkoutItems);
-        BigDecimal shippingFee = calculateShippingFee(coupon, baseShippingFee);
-
+        String combinedCode = String.join(",", validCodes);
         return new CouponPreviewCalculation(
-                coupon.getCode(),
-                discountAmount,
-                shippingFee,
+                combinedCode,
+                totalDiscount,
+                currentShippingFee,
                 true,
                 true,
-                "Coupon can be applied"
+                "Áp dụng thành công các mã giảm giá"
         );
     }
 
