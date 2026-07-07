@@ -857,11 +857,14 @@ public class OrderServiceImpl implements OrderService {
             throw new BadRequestException("Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này");
         }
 
-        if (coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(LocalDateTime.now())) {
+        // Đồng bộ múi giờ UTC+7 cho thời gian hiện tại
+        LocalDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDateTime();
+
+        if (coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(now)) {
             throw new BadRequestException("Coupon has not started");
         }
 
-        if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(now)) {
             throw new BadRequestException("Mã giảm giá đã hết hạn");
         }
 
@@ -911,11 +914,14 @@ public class OrderServiceImpl implements OrderService {
             return "Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này";
         }
 
-        if (coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(LocalDateTime.now())) {
+        // Đồng bộ múi giờ UTC+7 cho thời gian hiện tại
+        LocalDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDateTime();
+
+        if (coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(now)) {
             return "Coupon has not started";
         }
 
-        if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(now)) {
             return "Coupon has expired";
         }
 
