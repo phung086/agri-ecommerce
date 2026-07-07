@@ -21,6 +21,7 @@ import {
   Tag,
   TicketPercent,
   X,
+  Coins,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -48,6 +49,7 @@ import { cartService } from "@/services/cart.service";
 import { orderService } from "@/services/order.service";
 import { promotionService } from "@/services/promotion.service";
 import { shippingAddressService } from "@/services/shipping-address.service";
+import { profileService } from "@/services/profile.service";
 import vietnamAddresses from "@/data/vietnam-addresses.json";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
@@ -511,6 +513,8 @@ export default function CheckoutPage() {
   const [addressBookVersion, setAddressBookVersion] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [appliedCoupon, setAppliedCoupon] = useState(null); // CouponResponse | null
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [usePoints, setUsePoints] = useState(false);
   const [addressForm, setAddressForm] = useState(() =>
     createBlankAddressForm()
   );
@@ -579,12 +583,25 @@ export default function CheckoutPage() {
   const summary = useMemo(() => {
     const subtotal = Number(preview?.subtotal ?? cartTotal);
     const discountAmount = Number(preview?.discountAmount ?? 0);
+    const couponDiscountAmount = Number(
+      preview?.couponDiscountAmount ?? discountAmount
+    );
+    const pointsDiscount = Number(preview?.pointsDiscount ?? 0);
+    const pointsUsed = Number(preview?.pointsUsed ?? 0);
     const shippingFee = Number(preview?.shippingFee ?? 0);
     const totalPrice = Number(
       preview?.totalPrice ?? subtotal - discountAmount + shippingFee
     );
 
-    return { subtotal, discountAmount, shippingFee, totalPrice };
+    return {
+      subtotal,
+      discountAmount,
+      couponDiscountAmount,
+      pointsDiscount,
+      pointsUsed,
+      shippingFee,
+      totalPrice,
+    };
   }, [cartTotal, preview]);
 
   const couponCode = appliedCoupon?.code ?? "";
@@ -594,8 +611,9 @@ export default function CheckoutPage() {
       shippingAddressId: selectedAddressId ? Number(selectedAddressId) : null,
       paymentMethod,
       couponCode: couponCode.trim() || undefined,
+      usePoints,
     }),
-    [couponCode, paymentMethod, selectedAddressId]
+    [couponCode, paymentMethod, selectedAddressId, usePoints]
   );
   const checkoutQuoteReady =
     Boolean(preview) &&
@@ -692,15 +710,17 @@ export default function CheckoutPage() {
       }
 
       try {
-        const [cartResponse, addressResponse] = await Promise.all([
+        const [cartResponse, addressResponse, profileResponse] = await Promise.all([
           cartService.getCart(),
           shippingAddressService.getAddresses(),
+          profileService.getProfile(),
         ]);
         const nextAddresses = Array.isArray(addressResponse)
           ? addressResponse
           : [];
         const defaultAddress =
           nextAddresses.find((a) => a.defaultAddress) || nextAddresses[0];
+        const profileData = profileResponse?.data ?? profileResponse;
 
         if (!cancelled) {
           setCart(cartResponse);
@@ -708,6 +728,7 @@ export default function CheckoutPage() {
           setSelectedAddressId(
             defaultAddress?.id ? String(defaultAddress.id) : ""
           );
+          setLoyaltyPoints(profileData?.loyaltyPoints || 0);
           setShowAddressForm(nextAddresses.length === 0);
           setAddressForm(createBlankAddressForm());
           setPreview(null);
@@ -1607,6 +1628,35 @@ export default function CheckoutPage() {
                     }}
                   />
 
+                  {/* ── POINTS REDEMPTION ───────────────────────────────── */}
+                  {loyaltyPoints > 0 && (
+                    <div className="flex items-center justify-between rounded-[8px] border border-amber-200 bg-amber-50/50 p-3 shadow-sm transition-all duration-350 hover:border-amber-300">
+                      <div className="flex items-center gap-2">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                          <Coins className="size-4.5" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-black text-amber-900 uppercase tracking-wider">Dùng xu tích lũy</p>
+                          <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                            Sử dụng <span className="font-bold text-amber-700">{formatNumber(loyaltyPoints)} Xu</span> giảm trừ trực tiếp
+                          </p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={usePoints}
+                          onChange={(e) => {
+                            setUsePoints(e.target.checked);
+                            setPreview(null); // Reset preview to recalculate totals
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
+                    </div>
+                  )}
+
                   {/* ── ORDER TOTALS ────────────────────────────────────── */}
                   <div className="rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4">
                     <div className="space-y-2 text-sm font-semibold text-slate-600">
@@ -1615,38 +1665,45 @@ export default function CheckoutPage() {
                         <span>{formatCurrency(summary.subtotal)}</span>
                       </div>
 
-                      {/* Discount row — highlighted only when nonzero */}
-                      <div
-                        className={`flex justify-between transition-all duration-300 ${
-                          hasServerDiscount
-                            ? "font-black text-emerald-700"
-                            : ""
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5">
-                          {hasServerDiscount && (
-                            <BadgePercent className="size-3.5" />
-                          )}
-                          Giảm giá
-                          {appliedCoupon &&
-                            hasServerDiscount && (
-                            <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                              {getCouponBadgeText(appliedCoupon)}
-                            </span>
-                          )}
-                        </span>
-                        <span
-                          className={
-                            hasServerDiscount
-                              ? "text-emerald-700"
-                              : ""
-                          }
-                        >
-                          {checkoutQuoteReady
-                            ? `-${formatCurrency(summary.discountAmount)}`
-                            : pendingAmountLabel}
-                        </span>
-                      </div>
+                      {/* Coupon Discount row */}
+                      {(() => {
+                        const couponDiscountEst = checkoutQuoteReady
+                          ? summary.couponDiscountAmount
+                          : 0;
+                        const pointsDiscountEst = checkoutQuoteReady
+                          ? summary.pointsDiscount
+                          : 0;
+
+                        return (
+                          <>
+                            {couponDiscountEst > 0 && (
+                              <div className="flex justify-between font-black text-emerald-700">
+                                <span className="flex items-center gap-1.5">
+                                  <BadgePercent className="size-3.5" />
+                                  Mã giảm giá
+                                  {appliedCoupon && (
+                                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                                      {getCouponBadgeText(appliedCoupon)}
+                                    </span>
+                                  )}
+                                </span>
+                                <span>-{formatCurrency(couponDiscountEst)}</span>
+                              </div>
+                            )}
+
+                            {/* Loyalty Points Discount row */}
+                            {usePoints && pointsDiscountEst > 0 && (
+                              <div className="flex justify-between text-amber-700 font-black">
+                                <span className="flex items-center gap-1.5">
+                                  <Coins className="size-3.5 text-amber-500" />
+                                  Dùng {formatNumber(summary.pointsUsed)} xu tích lũy
+                                </span>
+                                <span>-{formatCurrency(pointsDiscountEst)}</span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
 
                       <div className="flex justify-between">
                         <span>Phí giao hàng</span>

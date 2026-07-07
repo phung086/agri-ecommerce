@@ -115,12 +115,19 @@ class OrderServiceImplTest {
     @Mock
     private EmailService emailService;
 
+    @Mock
+    private LoyaltyService loyaltyService;
+
     @InjectMocks
     private OrderServiceImpl orderService;
 
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(orderService, "emailService", emailService);
+        ReflectionTestUtils.setField(orderService, "loyaltyService", loyaltyService);
+        when(loyaltyService.validateTierCoupon(any(UserEntity.class), any())).thenReturn(true);
+        when(loyaltyService.deductPointsForCheckout(any(Long.class), any(Integer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(1, Integer.class));
     }
 
     @Test
@@ -202,7 +209,7 @@ class OrderServiceImplTest {
         OrderEntity order = order("pending");
         PaymentEntity payment = payment(order, "pending");
         OrderItemEntity item = orderItem(order, product, 2);
-        when(orderRepository.findByIdAndUser_Id(100L, 1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdAndUserIdForUpdate(100L, 1L)).thenReturn(Optional.of(order));
         when(paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(payment));
         when(orderItemRepository.findByOrder_IdOrderByIdAsc(100L)).thenReturn(List.of(item));
         when(productRepository.findAllByIdInForUpdate(anyIdCollection())).thenReturn(List.of(product));
@@ -229,7 +236,7 @@ class OrderServiceImplTest {
     @Test
     void cancelOrder_whenStatusIsNotPending_shouldThrowException() {
         // Given
-        when(orderRepository.findByIdAndUser_Id(100L, 1L)).thenReturn(Optional.of(order("confirmed")));
+        when(orderRepository.findByIdAndUserIdForUpdate(100L, 1L)).thenReturn(Optional.of(order("confirmed")));
 
         // When / Then
         assertThatThrownBy(() -> orderService.cancelOrder(1L, 100L, null))
@@ -242,7 +249,7 @@ class OrderServiceImplTest {
         // Given
         OrderEntity order = order("pending");
         PaymentEntity payment = payment(order, "completed");
-        when(orderRepository.findByIdAndUser_Id(100L, 1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdAndUserIdForUpdate(100L, 1L)).thenReturn(Optional.of(order));
         when(paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(payment));
 
         // When / Then
@@ -443,5 +450,41 @@ class OrderServiceImplTest {
                 .quantity(quantity)
                 .price(product.getPrice())
                 .build();
+    }
+
+    @Test
+    void checkout_withUsePoints_shouldDeductPointsAndReduceTotalPrice() {
+        CheckoutRequest request = checkoutRequest("cash");
+        request.setUsePoints(true);
+
+        UserEntity user = user();
+        user.setLoyaltyPoints(5000); // 5000 points available
+
+        ProductEntity product = product("in_stock", 20);
+        CartItemEntity item = cartItem(product, 2); // 2 * 50,000 = 100,000 subtotal
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(shippingAddressRepository.findByIdAndUser_Id(any(), eq(1L))).thenReturn(Optional.of(address()));
+        when(cartItemRepository.findByUser_IdOrderByCreatedAtDesc(1L)).thenReturn(List.of(item));
+        when(productRepository.findAllByIdInForUpdate(any())).thenReturn(List.of(product));
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentRepository.save(any(PaymentEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderStatusHistoryRepository.save(any(OrderStatusHistoryEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderMapper.toOrderResponse(any(OrderEntity.class), anyList(), any(PaymentEntity.class), anyList()))
+                .thenAnswer(invocation -> {
+                    OrderEntity order = invocation.getArgument(0);
+                    return OrderResponse.builder()
+                            .pointsUsed(order.getPointsUsed())
+                            .discountAmount(order.getDiscountAmount())
+                            .totalPrice(order.getTotalPrice())
+                            .build();
+                });
+
+        OrderResponse response = orderService.checkout(1L, request);
+
+        verify(loyaltyService).deductPointsForCheckout(eq(1L), eq(5000));
+        assertThat(response.getPointsUsed()).isEqualTo(5000);
+        assertThat(response.getDiscountAmount()).isEqualByComparingTo("5000.00");
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("120000.00");
     }
 }

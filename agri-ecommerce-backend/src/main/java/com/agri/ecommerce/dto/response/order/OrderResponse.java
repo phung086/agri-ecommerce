@@ -72,4 +72,8 @@ public class OrderResponse {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    private Integer pointsUsed;
+
+    private Integer pointsEarned;
 }

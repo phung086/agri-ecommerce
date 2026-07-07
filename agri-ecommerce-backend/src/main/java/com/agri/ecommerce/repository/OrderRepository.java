@@ -23,6 +23,10 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
     @EntityGraph(attributePaths = {"shippingAddress"})
     Optional<OrderEntity> findByIdAndUser_Id(Long id, Long userId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select orderEntity from OrderEntity orderEntity where orderEntity.id = :id and orderEntity.user.id = :userId")
+    Optional<OrderEntity> findByIdAndUserIdForUpdate(@Param("id") Long id, @Param("userId") Long userId);
+
     boolean existsByShippingAddress_Id(Long shippingAddressId);
 
     @Override
@@ -47,4 +51,7 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
 
     @Query("select orderEntity.status, count(orderEntity.id) from OrderEntity orderEntity group by orderEntity.status")
     List<Object[]> countOrdersByStatus();
+
+    @Query("select coalesce(sum(o.totalPrice), 0) from OrderEntity o where o.user.id = :userId and o.status = 'delivered' and o.createdAt >= :startDate")
+    java.math.BigDecimal calculateTotalSpendingSince(@Param("userId") Long userId, @Param("startDate") LocalDateTime startDate);
 }

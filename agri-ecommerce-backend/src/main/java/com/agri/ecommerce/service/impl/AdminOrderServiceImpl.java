@@ -15,6 +15,7 @@ import com.agri.ecommerce.repository.*;
 import com.agri.ecommerce.service.AdminOrderService;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.PaymentService;
+import com.agri.ecommerce.service.LoyaltyService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -99,6 +100,8 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private final OrderMapper orderMapper;
 
     private final UserMapper userMapper;
+
+    private final LoyaltyService loyaltyService;
 
     @Override
     @Transactional(readOnly = true)
@@ -258,14 +261,20 @@ public class AdminOrderServiceImpl implements AdminOrderService {
             order.setDispatchedAt(LocalDateTime.now());
         }
 
-        if (STATUS_DELIVERED.equals(nextStatus)) {
-            order.setDeliveredAt(LocalDateTime.now());
+        if (STATUS_DELIVERED.equals(nextStatus) || STATUS_COMPLETED.equals(nextStatus)) {
+            if (STATUS_DELIVERED.equals(nextStatus)) {
+                order.setDeliveredAt(LocalDateTime.now());
+            }
             paymentService.completeCashPaymentIfPending(order.getId());
+            loyaltyService.awardPointsForPurchase(order.getUser().getId(), order.getId(), order.getTotalPrice());
         }
 
         if (STATUS_CANCELED.equals(nextStatus)) {
             restoreInventoryAndCoupon(order);
             settlePaymentForCanceledOrder(order, note);
+            if (order.getPointsUsed() != null && order.getPointsUsed() > 0) {
+                loyaltyService.refundPointsForCancellation(order.getUser().getId(), order.getPointsUsed());
+            }
         }
 
         orderStatusHistoryRepository.save(createStatusHistory(order, nextStatus, note));

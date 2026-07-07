@@ -18,6 +18,7 @@ import com.agri.ecommerce.service.OrderService;
 import com.agri.ecommerce.service.PaymentService;
 import com.agri.ecommerce.service.ShippingCarrierService;
 import com.agri.ecommerce.service.EmailService;
+import com.agri.ecommerce.service.LoyaltyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -94,6 +95,8 @@ public class OrderServiceImpl implements OrderService {
 
     private final VnpayProperties vnpayProperties;
 
+    private final LoyaltyService loyaltyService;
+
     @Autowired
     private EmailService emailService;
 
@@ -126,7 +129,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public CheckoutPreviewResponse previewCheckout(Long userId, CheckoutRequest request) {
-        findUserById(userId);
+        UserEntity user = findUserById(userId);
         ShippingAddressEntity shippingAddress = findShippingAddressByIdAndUserId(request.getShippingAddressId(), userId);
         String paymentMethod = normalizePaymentMethod(request.getPaymentMethod());
         List<CartItemEntity> cartItems = cartItemRepository.findByUser_IdOrderByCreatedAtDesc(userId);
@@ -142,6 +145,9 @@ public class OrderServiceImpl implements OrderService {
                     .totalQuantity(0)
                     .subtotal(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                     .discountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .couponDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .pointsDiscount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .pointsUsed(0)
                     .shippingFee(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                     .totalPrice(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                     .items(List.of())
@@ -174,12 +180,25 @@ public class OrderServiceImpl implements OrderService {
                 })
                 .toList();
         BigDecimal baseShippingFee = calculateBaseShippingFee(shippingAddress, totalQuantity);
-        CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal, baseShippingFee, checkoutItems);
+        CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal, baseShippingFee, checkoutItems, user);
+
+        int pointsToRedeem = calculateRedeemablePoints(request, user, subtotal);
+        BigDecimal pointsDiscount = pointsToMoney(pointsToRedeem);
+
         BigDecimal totalPrice = subtotal
                 .subtract(couponCalculation.discountAmount())
+                .subtract(pointsDiscount)
                 .add(couponCalculation.shippingFee())
                 .setScale(2, RoundingMode.HALF_UP);
+        if (totalPrice.compareTo(BigDecimal.ZERO) < 0) {
+            totalPrice = BigDecimal.ZERO;
+        }
+
         List<String> warnings = buildCheckoutPreviewWarnings(previewItems, couponCalculation);
+        if (pointsDiscount.compareTo(BigDecimal.ZERO) > 0) {
+            warnings = new ArrayList<>(warnings);
+            warnings.add("Đã áp dụng giảm giá " + pointsToRedeem + " xu tích lũy");
+        }
 
         return CheckoutPreviewResponse.builder()
                 .canCheckout(allItemsAvailable && couponCalculation.checkoutAllowed())
@@ -190,7 +209,10 @@ public class OrderServiceImpl implements OrderService {
                 .shippingAddress(shippingAddressMapper.toShippingAddressResponse(shippingAddress))
                 .totalQuantity(totalQuantity)
                 .subtotal(subtotal)
-                .discountAmount(couponCalculation.discountAmount())
+                .discountAmount(couponCalculation.discountAmount().add(pointsDiscount))
+                .couponDiscountAmount(couponCalculation.discountAmount())
+                .pointsDiscount(pointsDiscount)
+                .pointsUsed(pointsToRedeem)
                 .shippingFee(couponCalculation.shippingFee())
                 .totalPrice(totalPrice)
                 .items(previewItems)
@@ -221,11 +243,20 @@ public class OrderServiceImpl implements OrderService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         int totalQuantity = checkoutItems.stream().mapToInt(CheckoutItem::quantity).sum();
         BigDecimal baseShippingFee = calculateBaseShippingFee(shippingAddress, totalQuantity);
-        CouponCalculation couponCalculation = calculateCoupon(request.getCouponCode(), subtotal, baseShippingFee, checkoutItems);
+        CouponCalculation couponCalculation = calculateCoupon(request.getCouponCode(), subtotal, baseShippingFee, checkoutItems, user);
+        int pointsToRedeem = calculateRedeemablePoints(request, user, subtotal);
+        int pointsUsed = pointsToRedeem > 0
+                ? loyaltyService.deductPointsForCheckout(userId, pointsToRedeem)
+                : 0;
+        BigDecimal pointsDiscount = pointsToMoney(pointsUsed);
         BigDecimal totalPrice = subtotal
                 .subtract(couponCalculation.discountAmount())
+                .subtract(pointsDiscount)
                 .add(couponCalculation.shippingFee())
                 .setScale(2, RoundingMode.HALF_UP);
+        if (totalPrice.compareTo(BigDecimal.ZERO) < 0) {
+            totalPrice = BigDecimal.ZERO;
+        }
 
         OrderEntity order = orderRepository.save(OrderEntity.builder()
                 .user(user)
@@ -235,12 +266,14 @@ public class OrderServiceImpl implements OrderService {
                 .shippingAddressDetail(shippingAddress.getAddress())
                 .shippingCity(shippingAddress.getCity())
                 .subtotal(subtotal)
-                .discountAmount(couponCalculation.discountAmount())
+                .discountAmount(couponCalculation.discountAmount().add(pointsDiscount))
                 .shippingFee(couponCalculation.shippingFee())
                 .coupon(couponCalculation.coupon())
                 .couponCode(couponCalculation.couponCode())
                 .totalPrice(totalPrice)
                 .status(ORDER_PENDING)
+                .pointsUsed(pointsUsed)
+                .pointsEarned(0)
                 .build());
 
         List<OrderItemEntity> orderItems = checkoutItems.stream()
@@ -317,7 +350,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse cancelOrder(Long userId, Long orderId, OrderStatusNoteRequest request) {
-        OrderEntity order = findOrderByIdAndUserId(orderId, userId);
+        OrderEntity order = findOrderByIdAndUserIdForUpdate(orderId, userId);
 
         if (!ORDER_PENDING.equals(order.getStatus())) {
             throw new BadRequestException("Chỉ có thể hủy đơn hàng đang chờ xử lý");
@@ -334,6 +367,10 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus(ORDER_CANCELED);
         OrderEntity savedOrder = orderRepository.save(order);
+
+        if (savedOrder.getPointsUsed() != null && savedOrder.getPointsUsed() > 0) {
+            loyaltyService.refundPointsForCancellation(userId, savedOrder.getPointsUsed());
+        }
 
         if (payment != null && PAYMENT_PENDING.equals(payment.getStatus())) {
             payment.setStatus(PAYMENT_FAILED);
@@ -357,7 +394,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse completeOrder(Long userId, Long orderId, OrderStatusNoteRequest request) {
-        OrderEntity order = findOrderByIdAndUserId(orderId, userId);
+        OrderEntity order = findOrderByIdAndUserIdForUpdate(orderId, userId);
 
         if (!ORDER_DELIVERED.equals(order.getStatus())) {
             throw new BadRequestException("Chỉ có thể xác nhận hoàn tất đơn hàng đã giao");
@@ -365,6 +402,8 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus(ORDER_COMPLETED);
         OrderEntity savedOrder = orderRepository.save(order);
+
+        loyaltyService.awardPointsForPurchase(userId, orderId, savedOrder.getTotalPrice());
 
         paymentService.completeCashPaymentIfPending(orderId);
 
@@ -624,7 +663,7 @@ public class OrderServiceImpl implements OrderService {
         productRepository.saveAll(productsById.values());
     }
 
-    private CouponCalculation calculateCoupon(String couponCode, BigDecimal subtotal, BigDecimal baseShippingFee, List<CheckoutItem> checkoutItems) {
+    private CouponCalculation calculateCoupon(String couponCode, BigDecimal subtotal, BigDecimal baseShippingFee, List<CheckoutItem> checkoutItems, UserEntity user) {
         String cleanCouponCode = cleanBlank(couponCode);
 
         if (cleanCouponCode == null) {
@@ -638,7 +677,7 @@ public class OrderServiceImpl implements OrderService {
 
         CouponEntity coupon = couponRepository.findByCodeIgnoreCaseForUpdate(cleanCouponCode)
                 .orElseThrow(() -> new BadRequestException("Mã giảm giá không tồn tại"));
-        validateCoupon(coupon, subtotal, checkoutItems);
+        validateCoupon(coupon, subtotal, checkoutItems, user);
 
         BigDecimal discountAmount = calculateDiscountAmount(coupon, subtotal, checkoutItems);
         BigDecimal shippingFee = calculateShippingFee(coupon, baseShippingFee);
@@ -649,7 +688,7 @@ public class OrderServiceImpl implements OrderService {
         return new CouponCalculation(coupon, coupon.getCode(), discountAmount, shippingFee);
     }
 
-    private CouponPreviewCalculation calculateCouponPreview(String couponCode, BigDecimal subtotal, BigDecimal baseShippingFee, List<CheckoutItem> checkoutItems) {
+    private CouponPreviewCalculation calculateCouponPreview(String couponCode, BigDecimal subtotal, BigDecimal baseShippingFee, List<CheckoutItem> checkoutItems, UserEntity user) {
         String cleanCouponCode = cleanBlank(couponCode);
 
         if (cleanCouponCode == null) {
@@ -669,7 +708,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         CouponEntity coupon = couponOptional.get();
-        String invalidMessage = getCouponInvalidMessage(coupon, subtotal, checkoutItems);
+        String invalidMessage = getCouponInvalidMessage(coupon, subtotal, checkoutItems, user);
         if (invalidMessage != null) {
             return invalidCouponPreview(coupon.getCode(), invalidMessage, baseShippingFee);
         }
@@ -762,6 +801,30 @@ public class OrderServiceImpl implements OrderService {
         return amount.setScale(2, RoundingMode.HALF_UP);
     }
 
+    private int calculateRedeemablePoints(CheckoutRequest request, UserEntity user, BigDecimal subtotal) {
+        if (!Boolean.TRUE.equals(request.getUsePoints()) || subtotal == null || subtotal.compareTo(BigDecimal.ZERO) <= 0) {
+            return 0;
+        }
+
+        int userPoints = Math.max(user.getLoyaltyPoints() == null ? 0 : user.getLoyaltyPoints(), 0);
+        if (userPoints <= 0) {
+            return 0;
+        }
+
+        int maxAllowed = subtotal.multiply(new BigDecimal("0.20"))
+                .setScale(0, RoundingMode.DOWN)
+                .intValue();
+        return Math.min(userPoints, maxAllowed);
+    }
+
+    private BigDecimal pointsToMoney(int points) {
+        if (points <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return BigDecimal.valueOf(points).setScale(2, RoundingMode.HALF_UP);
+    }
+
     private String getAddressSegmentFromEnd(String address, int offsetFromEnd) {
         if (address == null || address.trim().isEmpty()) {
             return null;
@@ -785,9 +848,13 @@ public class OrderServiceImpl implements OrderService {
         return coupon.getDiscountType() == null ? "PERCENTAGE" : coupon.getDiscountType();
     }
 
-    private void validateCoupon(CouponEntity coupon, BigDecimal subtotal, List<CheckoutItem> checkoutItems) {
+    private void validateCoupon(CouponEntity coupon, BigDecimal subtotal, List<CheckoutItem> checkoutItems, UserEntity user) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             throw new BadRequestException("Mã giảm giá đã bị vô hiệu hóa");
+        }
+
+        if (!loyaltyService.validateTierCoupon(user, coupon.getCode())) {
+            throw new BadRequestException("Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này");
         }
 
         if (coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(LocalDateTime.now())) {
@@ -835,9 +902,13 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private String getCouponInvalidMessage(CouponEntity coupon, BigDecimal subtotal, List<CheckoutItem> checkoutItems) {
+    private String getCouponInvalidMessage(CouponEntity coupon, BigDecimal subtotal, List<CheckoutItem> checkoutItems, UserEntity user) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             return "Coupon is inactive";
+        }
+
+        if (!loyaltyService.validateTierCoupon(user, coupon.getCode())) {
+            return "Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này";
         }
 
         if (coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(LocalDateTime.now())) {
@@ -992,6 +1063,11 @@ public class OrderServiceImpl implements OrderService {
 
     private OrderEntity findOrderByIdAndUserId(Long orderId, Long userId) {
         return orderRepository.findByIdAndUser_Id(orderId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với id: " + orderId));
+    }
+
+    private OrderEntity findOrderByIdAndUserIdForUpdate(Long orderId, Long userId) {
+        return orderRepository.findByIdAndUserIdForUpdate(orderId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với id: " + orderId));
     }
 

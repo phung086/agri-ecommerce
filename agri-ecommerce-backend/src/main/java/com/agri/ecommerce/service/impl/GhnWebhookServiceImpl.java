@@ -10,6 +10,7 @@ import com.agri.ecommerce.service.EmailService;
 import com.agri.ecommerce.service.GhnWebhookService;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.PaymentService;
+import com.agri.ecommerce.service.LoyaltyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -96,6 +97,7 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
     private final NotificationService notificationService;
     private final PaymentService paymentService;
     private final EmailService emailService;
+    private final LoyaltyService loyaltyService;
 
     @Override
     @Transactional
@@ -199,6 +201,13 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
                 order.setDeliveredAt(LocalDateTime.now());
             }
             paymentService.completeCashPaymentIfPending(order.getId());
+            loyaltyService.awardPointsForPurchase(order.getUser().getId(), order.getId(), order.getTotalPrice());
+        }
+
+        if (STATUS_CANCELED.equals(nextInternalStatus)
+                && order.getPointsUsed() != null
+                && order.getPointsUsed() > 0) {
+            loyaltyService.refundPointsForCancellation(order.getUser().getId(), order.getPointsUsed());
         }
     }
 

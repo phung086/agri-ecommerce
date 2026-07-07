@@ -54,6 +54,8 @@ public class OrderMapper {
                 .shippingStatusUpdatedAt(order.getShippingStatusUpdatedAt())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
+                .pointsUsed(order.getPointsUsed())
+                .pointsEarned(order.getPointsEarned())
                 .build();
     }
 
