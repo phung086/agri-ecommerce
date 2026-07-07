@@ -283,6 +283,17 @@ public class EmailServiceImpl implements EmailService {
         String recipientPhone = order.getShippingPhone() != null ? order.getShippingPhone() : (order.getUser().getPhoneNumber() != null ? order.getUser().getPhoneNumber() : "N/A");
         String fullAddress = order.getShippingAddressDetail() != null ? order.getShippingAddressDetail() + ", " + order.getShippingCity() : (order.getShippingAddress() != null ? order.getShippingAddress().getAddress() + ", " + order.getShippingAddress().getCity() : "N/A");
 
+        String formattedCreatedAt = "";
+        if (order.getCreatedAt() != null) {
+            try {
+                java.time.ZonedDateTime zonedDateTime = order.getCreatedAt().atZone(java.time.ZoneId.of("UTC"))
+                        .withZoneSameInstant(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+                formattedCreatedAt = zonedDateTime.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
+            } catch (Exception ex) {
+                formattedCreatedAt = String.valueOf(order.getCreatedAt());
+            }
+        }
+
         return "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);'>"
                 + "  <div style='text-align: center; margin-bottom: 20px;'>"
                 + "    <h2 style='color: #2e7d32; margin: 0;'>AgriMarket - Thực phẩm sạch & hữu cơ</h2>"
@@ -290,7 +301,7 @@ public class EmailServiceImpl implements EmailService {
                 + "  </div>"
                 + "  <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>"
                 + "  <h3 style='color: #333;'>Thông tin hóa đơn đặt hàng " + (order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId()) + "</h3>"
-                + "  <p style='font-size: 14px;'><strong>Ngày đặt hàng:</strong> " + escapeHtml(order.getCreatedAt()) + "</p>"
+                + "  <p style='font-size: 14px;'><strong>Ngày đặt hàng:</strong> " + escapeHtml(formattedCreatedAt) + "</p>"
                 + "  <div style='background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-size: 14px;'>"
                 + "    <h4 style='margin-top: 0; color: #2e7d32;'>Thông tin nhận hàng:</h4>"
                 + "    <p style='margin: 5px 0;'><strong>Người nhận:</strong> " + escapeHtml(recipientName) + "</p>"
