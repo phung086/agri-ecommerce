@@ -152,6 +152,10 @@ function getErrorMessage(error, fallback) {
 /** Derive a display label from the coupon code */
 function deriveLabel(code = "") {
   const map = {
+    BRONZE5: "Đặc quyền thành viên Đồng",
+    SILVER10: "Đặc quyền thành viên Bạc",
+    GOLD25: "Đặc quyền thành viên Vàng",
+    PLATINUM50: "Đặc quyền thành viên Kim cương",
     SUMMER: "Ưu đãi mùa hè",
     WINTER: "Ưu đãi mùa đông",
     SPRING: "Ưu đãi mùa xuân",
