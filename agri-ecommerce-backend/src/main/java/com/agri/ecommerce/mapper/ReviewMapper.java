@@ -22,6 +22,7 @@ public class ReviewMapper {
                 .productSlug(product == null ? null : product.getSlug())
                 .rating(review.getRating())
                 .comment(review.getComment())
+                .imageUrl(review.getImageUrl())
                 .createdAt(review.getCreatedAt())
                 .updatedAt(review.getUpdatedAt())
                 .build();

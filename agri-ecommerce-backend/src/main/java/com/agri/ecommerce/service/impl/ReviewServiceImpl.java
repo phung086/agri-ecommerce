@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Locale;
 import java.util.Set;
 
 @Service
@@ -93,6 +94,7 @@ public class ReviewServiceImpl implements ReviewService {
                 .product(product)
                 .rating(request.getRating())
                 .comment(cleanBlank(request.getComment()))
+                .imageUrl(cleanImageUrl(request.getImageUrl()))
                 .build();
 
         ReviewEntity savedReview = reviewRepository.save(review);
@@ -107,6 +109,7 @@ public class ReviewServiceImpl implements ReviewService {
 
         review.setRating(request.getRating());
         review.setComment(cleanBlank(request.getComment()));
+        review.setImageUrl(cleanImageUrl(request.getImageUrl()));
 
         return reviewMapper.toReviewResponse(reviewRepository.save(review));
     }
@@ -288,5 +291,19 @@ public class ReviewServiceImpl implements ReviewService {
         }
 
         return value.trim();
+    }
+
+    private String cleanImageUrl(String value) {
+        String cleanValue = cleanBlank(value);
+        if (cleanValue == null) {
+            return null;
+        }
+
+        String lowerValue = cleanValue.toLowerCase(Locale.ROOT);
+        if (!lowerValue.startsWith("https://") && !lowerValue.startsWith("http://")) {
+            throw new BadRequestException("Link ảnh đánh giá không hợp lệ");
+        }
+
+        return cleanValue;
     }
 }

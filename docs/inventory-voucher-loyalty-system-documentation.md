@@ -731,3 +731,73 @@ Co the trinh bay module nay theo ba lop:
 5. Chong spam diem review:
    - Co the chi cong diem mot lan moi san pham moi don hang.
    - Co the them gioi han diem review moi ngay.
+
+## 16. Cap nhat hoan thien 2026-07-07
+
+### 16.1. Coupon thuc te va khong chong voucher
+
+Van de gap phai:
+- Frontend checkout tung cho phep luu nhieu coupon va gui len backend theo dang chuoi phan cach dau phay.
+- Backend co logic cong don nhieu coupon, de dan toi rui ro giam gia chong cheo va kho giai thich trong bao cao.
+
+Huong xu ly:
+- Checkout chi gui mot `couponCode` duy nhat: `appliedCoupons[0]?.code`.
+- Khi khach chon ma moi, frontend thay the ma dang ap dung thay vi cong them.
+- Backend chan request co dau phay trong `OrderServiceImpl.calculateCoupon` va `calculateCouponPreview`.
+- Loyalty points van duoc dung kem voucher vi day la so du diem cua khach, duoc ghi nhan bang `pointsUsed` va `loyalty_transactions`, khac voi viec stack nhieu voucher.
+
+Ket qua nghiep vu:
+- Moi don hang co toi da 1 voucher.
+- Tong giam gia van minh bach: `couponDiscountAmount` + `pointsDiscount`.
+- Du lieu `orders.coupon_code` sach va de audit.
+
+### 16.2. Chuan hoa ma coupon can han
+
+Van de gap phai:
+- Mot so ma cu dang co ten truc dien nhu `XA_HANG_*`, khong than thien voi khach.
+
+Huong xu ly:
+- `InventoryScheduler` tiep tuc tao ma theo chien dich mem hon:
+  - `TUOI_NGON_*` cho rau/cu/qua.
+  - `BEP_NHA_*` cho nhom ca/thit/hai san.
+  - `MON_NGON_*` cho nhom khac.
+- Them migration `V16__professionalize_auto_coupon_codes.sql` de doi cac ma legacy `XA_HANG_%` sang `TUOI_NGON_<productId>_<couponId>`.
+- Checkout frontend bo sung label hien thi cho cac prefix tren.
+
+### 16.3. Review co anh thuc te
+
+Thay doi database:
+- Them migration `V15__add_review_image_url.sql`.
+- Bang `reviews` co them cot `image_url VARCHAR(1024) NULL`.
+
+Thay doi backend:
+- `ReviewEntity`, `ReviewRequest`, `ReviewUpdateRequest`, `ReviewResponse`, `ReviewMapper` bo sung `imageUrl`.
+- `ReviewServiceImpl` validate `imageUrl` phai la URL `http/https`.
+- Them `CustomerUploadController`:
+  - Endpoint: `POST /api/customer/uploads/review-images`.
+  - Role: `CUSTOMER`.
+  - File hop le: JPG, PNG, WEBP, toi da 5MB.
+  - Upload len Cloudinary folder `agri-ecommerce/reviews`.
+
+Thay doi frontend:
+- `review.service.js` them `uploadReviewImage(file)`.
+- Trang profile/order history cho khach upload anh khi viet danh gia.
+- Anh duoc upload truoc len Cloudinary, sau do submit review gui `imageUrl`.
+- Trang chi tiet san pham hien thi anh trong tung review neu co.
+
+### 16.4. Email xac nhan va hoa don
+
+Van de gap phai:
+- Email invoice truoc do chi gom mot dong "Khuyen mai", chua noi ro ma voucher va xu tich luy.
+
+Huong xu ly:
+- `EmailServiceImpl.buildInvoiceText` bo sung:
+  - Ma giam gia neu co.
+  - Xu da dung neu co.
+  - Xu du kien nhan khi don hoan tat.
+- `buildInvoiceHtml` bo sung cac dong tuong ung trong phan tong ket thanh toan.
+- Xu du kien duoc tinh theo cung cong thuc loyalty hien tai: 1% tong thanh toan.
+
+Ket qua:
+- Khach nhan email co the biet don da dung ma nao, dung bao nhieu xu, va se nhan bao nhieu xu khi don hoan tat.
+- Phu hop de chup minh chung trong bao cao va demo.

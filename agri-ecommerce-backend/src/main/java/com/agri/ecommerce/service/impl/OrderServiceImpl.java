@@ -675,6 +675,10 @@ public class OrderServiceImpl implements OrderService {
             );
         }
 
+        if (cleanCouponCode.contains(",")) {
+            throw new BadRequestException("Chỉ có thể áp dụng một mã giảm giá cho mỗi đơn hàng");
+        }
+
         List<String> codes = java.util.Arrays.stream(cleanCouponCode.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -756,6 +760,14 @@ public class OrderServiceImpl implements OrderService {
                     false,
                     true,
                     "No coupon applied"
+            );
+        }
+
+        if (cleanCouponCode.contains(",")) {
+            return invalidCouponPreview(
+                    cleanCouponCode,
+                    "Chỉ có thể áp dụng một mã giảm giá cho mỗi đơn hàng",
+                    baseShippingFee
             );
         }
 

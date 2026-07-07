@@ -32,6 +32,9 @@ public class ReviewEntity {
     @Column(length = 255)
     private String comment;
 
+    @Column(name = "image_url", length = 1024)
+    private String imageUrl;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

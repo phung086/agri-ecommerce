@@ -254,10 +254,21 @@ public class EmailServiceImpl implements EmailService {
         NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
         String orderReference = order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId();
         String recipientName = order.getShippingName() != null ? order.getShippingName() : order.getUser().getName();
+        String couponLine = hasText(order.getCouponCode()) ? "Mã giảm giá: " + order.getCouponCode().trim() + "\n" : "";
+        String pointsUsedLine = order.getPointsUsed() != null && order.getPointsUsed() > 0
+                ? "Xu đã dùng: " + order.getPointsUsed() + "\n"
+                : "";
+        int estimatedPointsEarned = estimatePurchasePoints(order.getTotalPrice());
+        String pointsEarnedLine = estimatedPointsEarned > 0
+                ? "Xu dự kiến nhận khi đơn hoàn tất: " + estimatedPointsEarned + "\n"
+                : "";
 
         return "Cam on ban da dat hang tai AgriMarket.\n"
                 + "Ma don hang: " + orderReference + "\n"
                 + "Nguoi nhan: " + recipientName + "\n"
+                + couponLine
+                + pointsUsedLine
+                + pointsEarnedLine
                 + "Tong cong: " + currencyFormat.format(order.getTotalPrice()) + "\n"
                 + "Don hang cua ban dang cho xu ly va se duoc cap nhat khi giao hang.";
     }
@@ -282,6 +293,20 @@ public class EmailServiceImpl implements EmailService {
         String recipientName = order.getShippingName() != null ? order.getShippingName() : order.getUser().getName();
         String recipientPhone = order.getShippingPhone() != null ? order.getShippingPhone() : (order.getUser().getPhoneNumber() != null ? order.getUser().getPhoneNumber() : "N/A");
         String fullAddress = order.getShippingAddressDetail() != null ? order.getShippingAddressDetail() + ", " + order.getShippingCity() : (order.getShippingAddress() != null ? order.getShippingAddress().getAddress() + ", " + order.getShippingAddress().getCity() : "N/A");
+        String couponCode = hasText(order.getCouponCode()) ? order.getCouponCode().trim() : "";
+        int pointsUsed = order.getPointsUsed() == null ? 0 : order.getPointsUsed();
+        int pointsEarned = order.getPointsEarned() != null && order.getPointsEarned() > 0
+                ? order.getPointsEarned()
+                : estimatePurchasePoints(order.getTotalPrice());
+        String couponRow = hasText(couponCode)
+                ? "    <p style='margin: 5px 0;'><strong>Mã giảm giá:</strong> " + escapeHtml(couponCode) + "</p>"
+                : "";
+        String pointsUsedRow = pointsUsed > 0
+                ? "    <p style='margin: 5px 0; color: #b45309;'><strong>Xu tích lũy đã dùng:</strong> " + pointsUsed + " xu</p>"
+                : "";
+        String pointsEarnedRow = pointsEarned > 0
+                ? "    <p style='margin: 5px 0; color: #047857;'><strong>Xu tích lũy dự kiến nhận:</strong> " + pointsEarned + " xu</p>"
+                : "";
 
         String formattedCreatedAt = "";
         if (order.getCreatedAt() != null) {
@@ -323,8 +348,11 @@ public class EmailServiceImpl implements EmailService {
                 + "  </table>"
                 + "  <div style='text-align: right; font-size: 14px; line-height: 1.6;'>"
                 + "    <p style='margin: 5px 0;'><strong>Tạm tính:</strong> " + currencyFormat.format(order.getSubtotal()) + "</p>"
+                + couponRow
+                + pointsUsedRow
                 + "    <p style='margin: 5px 0; color: #d32f2f;'><strong>Khuyến mãi:</strong> -" + currencyFormat.format(order.getDiscountAmount()) + "</p>"
                 + "    <p style='margin: 5px 0;'><strong>Phí giao hàng:</strong> " + currencyFormat.format(order.getShippingFee()) + "</p>"
+                + pointsEarnedRow
                 + "    <hr style='border: 0; border-top: 1px solid #eee; margin: 10px 0;'>"
                 + "    <p style='margin: 5px 0; font-size: 16px; color: #2e7d32;'><strong>Tổng cộng:</strong> " + currencyFormat.format(order.getTotalPrice()) + "</p>"
                 + "  </div>"
@@ -346,6 +374,14 @@ public class EmailServiceImpl implements EmailService {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");
+    }
+
+    private int estimatePurchasePoints(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return 0;
+        }
+
+        return amount.multiply(new BigDecimal("0.01")).intValue();
     }
 
     @Async

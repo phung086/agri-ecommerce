@@ -23,6 +23,7 @@ import {
   X,
   Coins,
   Truck,
+  TriangleAlert,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -168,6 +169,9 @@ function deriveLabel(code = "") {
     COMBO: "Combo tiết kiệm",
     FREE: "Giao hàng miễn phí",
     FLASH: "Flash Sale",
+    TUOI_NGON: "Ưu đãi tươi ngon",
+    BEP_NHA: "Ưu đãi bếp nhà",
+    MON_NGON: "Ưu đãi món ngon",
   };
   const upper = code.toUpperCase();
   for (const [key, label] of Object.entries(map)) {
@@ -301,11 +305,9 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
         setCouponError(apiResp.message || "Mã giảm giá không hợp lệ.");
       } else {
         const newCoupon = apiResp.data;
-        const newType = newCoupon.couponType || "ORDER_DISCOUNT";
 
-        // Thêm coupon mới và thay thế coupon cũ cùng loại
-        const nextCoupons = appliedCoupons.filter(c => (c.couponType || "ORDER_DISCOUNT") !== newType);
-        nextCoupons.push(newCoupon);
+        // Mot don hang chi ap dung mot voucher; ma moi se thay the ma cu.
+        const nextCoupons = [newCoupon];
 
         setInputValue("");
         setCouponSuccess(`Đã áp dụng mã ${newCoupon.code} thành công.`);
@@ -326,8 +328,8 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
     validateAndApply(coupon.code);
   }
 
-  function handleRemoveCoupon(couponToRemove) {
-    const nextCoupons = appliedCoupons.filter(c => c.id !== couponToRemove.id);
+  function handleRemoveCoupon() {
+    const nextCoupons = [];
     setCouponError("");
     setCouponSuccess("");
     onApply(nextCoupons);
@@ -595,7 +597,7 @@ export default function CheckoutPage() {
     };
   }, [cartTotal, preview]);
 
-  const couponCode = appliedCoupons.map((c) => c.code).join(",");
+  const couponCode = appliedCoupons[0]?.code || "";
 
   const checkoutPayload = useMemo(
     () => ({

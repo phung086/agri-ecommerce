@@ -21,4 +21,7 @@ public class ReviewRequest {
 
     @Size(max = 255, message = "Nội dung đánh giá không được vượt quá 255 ký tự")
     private String comment;
+
+    @Size(max = 1024, message = "Link ảnh đánh giá không được vượt quá 1024 ký tự")
+    private String imageUrl;
 }

@@ -740,6 +740,13 @@ export default function ProductDetailPage() {
                             {review.comment}
                           </p>
                         )}
+                        {review.imageUrl && (
+                          <img
+                            src={review.imageUrl}
+                            alt="Ảnh đánh giá sản phẩm"
+                            className="mt-3 h-28 w-28 rounded-[8px] border border-emerald-100 object-cover"
+                          />
+                        )}
                       </article>
                     ))}
                   </div>

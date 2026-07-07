@@ -16,6 +16,7 @@ import {
   Eye,
   EyeOff,
   Home,
+  ImagePlus,
   Leaf,
   LockKeyhole,
   LogOut,
@@ -34,6 +35,7 @@ import {
   UserRound,
   Coins,
   Award,
+  X,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -113,6 +115,8 @@ const blankPasswordForm = {
 const defaultReviewDraft = {
   rating: 5,
   comment: "",
+  imageUrl: "",
+  imageFileName: "",
 };
 
 function unwrapApiData(response) {
@@ -557,11 +561,14 @@ function PurchaseHistorySection({
   reviews,
   reviewDrafts,
   reviewSubmittingId,
+  reviewImageUploadingId,
   expandedOrderId,
   orderDetailLoading,
   onRefresh,
   onToggleOrder,
   onUpdateReviewDraft,
+  onUploadReviewImage,
+  onRemoveReviewImage,
   onSubmitReview,
 }) {
   const { t } = useLanguage();
@@ -746,6 +753,8 @@ function PurchaseHistorySection({
                               defaultReviewDraft;
                             const submitting =
                               reviewSubmittingId === String(item.productId);
+                            const uploadingReviewImage =
+                              reviewImageUploadingId === String(item.productId);
 
                             return (
                               <div
@@ -794,6 +803,13 @@ function PurchaseHistorySection({
                                       <p className="mt-2 text-sm font-semibold text-amber-950">
                                         {existingReview.comment}
                                       </p>
+                                    )}
+                                    {existingReview.imageUrl && (
+                                      <img
+                                        src={existingReview.imageUrl}
+                                        alt="Ảnh đánh giá sản phẩm"
+                                        className="mt-3 h-24 w-24 rounded-[8px] border border-amber-100 object-cover"
+                                      />
                                     )}
                                   </div>
                                 )}
@@ -857,6 +873,49 @@ function PurchaseHistorySection({
                                       className="mt-3 bg-white"
                                       placeholder="Chia sẻ cảm nhận sau khi nhận hàng..."
                                     />
+                                    <div className="mt-3 rounded-[8px] border border-dashed border-emerald-200 bg-white p-3">
+                                      {draft.imageUrl ? (
+                                        <div className="flex items-center gap-3">
+                                          <img
+                                            src={draft.imageUrl}
+                                            alt="Ảnh đánh giá sản phẩm"
+                                            className="h-20 w-20 rounded-[8px] object-cover"
+                                          />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="truncate text-xs font-bold text-emerald-800">
+                                              {draft.imageFileName || "Ảnh đã tải lên"}
+                                            </p>
+                                            <button
+                                              type="button"
+                                              className="mt-2 inline-flex h-8 items-center gap-1 rounded-[8px] border border-rose-100 px-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                                              onClick={() => onRemoveReviewImage(item.productId)}
+                                              disabled={uploadingReviewImage || submitting}
+                                            >
+                                              <X className="size-3.5" />
+                                              Xóa ảnh
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-emerald-700">
+                                          <ImagePlus className="size-4" />
+                                          {uploadingReviewImage ? "Đang tải ảnh..." : "Thêm ảnh thực tế của sản phẩm"}
+                                          <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            className="sr-only"
+                                            disabled={uploadingReviewImage || submitting}
+                                            onChange={(event) => {
+                                              const file = event.target.files?.[0];
+                                              event.target.value = "";
+                                              if (file) {
+                                                onUploadReviewImage(item.productId, file);
+                                              }
+                                            }}
+                                          />
+                                        </label>
+                                      )}
+                                    </div>
                                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                       <span className="text-xs font-semibold text-muted-foreground">
                                         {(draft.comment || "").length}/255 ký tự
@@ -864,7 +923,7 @@ function PurchaseHistorySection({
                                       <Button
                                         type="submit"
                                         className="h-9 bg-emerald-600 text-sm font-bold hover:bg-emerald-700"
-                                        disabled={submitting}
+                                        disabled={submitting || uploadingReviewImage}
                                       >
                                         <Send className="size-4" />
                                         {submitting ? "Đang gửi..." : "Gửi đánh giá"}
@@ -1099,6 +1158,7 @@ export default function CustomerProfilePage() {
   const [reviews, setReviews] = useState([]);
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [reviewSubmittingId, setReviewSubmittingId] = useState("");
+  const [reviewImageUploadingId, setReviewImageUploadingId] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
   const [activeTab, setActiveTab] = useState("profile"); // "profile", "addresses", "password", "orders"
@@ -1638,6 +1698,59 @@ export default function CustomerProfilePage() {
     }));
   }
 
+  async function uploadReviewImage(productId, file) {
+    const key = String(productId);
+
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (!allowedTypes.has(file.type)) {
+      setOrdersError("Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP cho đánh giá.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setOrdersError("Ảnh đánh giá không được vượt quá 5MB.");
+      return;
+    }
+
+    setReviewImageUploadingId(key);
+    setOrdersError("");
+
+    try {
+      const uploadedImage = await reviewService.uploadReviewImage(file);
+      setReviewDrafts((current) => ({
+        ...current,
+        [key]: {
+          ...defaultReviewDraft,
+          ...(current[key] || {}),
+          imageUrl: uploadedImage?.url || uploadedImage?.path || "",
+          imageFileName: uploadedImage?.fileName || file.name,
+        },
+      }));
+    } catch (err) {
+      setOrdersError(err?.message || "Không thể tải ảnh đánh giá.");
+    } finally {
+      setReviewImageUploadingId("");
+    }
+  }
+
+  function removeReviewImage(productId) {
+    const key = String(productId);
+
+    setReviewDrafts((current) => ({
+      ...current,
+      [key]: {
+        ...defaultReviewDraft,
+        ...(current[key] || {}),
+        imageUrl: "",
+        imageFileName: "",
+      },
+    }));
+  }
+
   async function submitReview(event, item) {
     event.preventDefault();
 
@@ -1665,6 +1778,7 @@ export default function CustomerProfilePage() {
         productId,
         rating,
         comment: String(draft.comment || "").trim(),
+        imageUrl: draft.imageUrl || undefined,
       });
 
       setReviews((current) => [createdReview, ...current]);
@@ -2392,6 +2506,7 @@ export default function CustomerProfilePage() {
                     reviews={reviews}
                     reviewDrafts={reviewDrafts}
                     reviewSubmittingId={reviewSubmittingId}
+                    reviewImageUploadingId={reviewImageUploadingId}
                     expandedOrderId={expandedOrderId}
                     orderDetailLoading={orderDetailLoading}
                     onRefresh={() => {
@@ -2400,6 +2515,8 @@ export default function CustomerProfilePage() {
                     }}
                     onToggleOrder={handleToggleOrder}
                     onUpdateReviewDraft={updateReviewDraft}
+                    onUploadReviewImage={uploadReviewImage}
+                    onRemoveReviewImage={removeReviewImage}
                     onSubmitReview={submitReview}
                   />
                 </div>
