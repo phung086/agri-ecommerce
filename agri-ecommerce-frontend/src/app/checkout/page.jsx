@@ -255,7 +255,7 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
     promotionService
       .getPublicCoupons({ size: 50 })
       .then((page) => setAllCoupons(page?.content ?? []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   /* Close dropdown when clicking outside */
@@ -301,7 +301,7 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
       } else {
         const newCoupon = apiResp.data;
         const newType = newCoupon.couponType || "ORDER_DISCOUNT";
-        
+
         // Thêm coupon mới và thay thế coupon cũ cùng loại
         const nextCoupons = appliedCoupons.filter(c => (c.couponType || "ORDER_DISCOUNT") !== newType);
         nextCoupons.push(newCoupon);
@@ -334,7 +334,7 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="coupon-code">Mã giảm giá (Có thể áp dụng nhiều mã khác loại)</Label>
+      <Label htmlFor="coupon-code">Mã giảm giá</Label>
 
       <div ref={containerRef} className="relative">
         {/* Input row */}
@@ -446,8 +446,8 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
           <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã đã áp dụng:</p>
           <div className="flex flex-wrap gap-2">
             {appliedCoupons.map((coupon) => (
-              <div 
-                key={coupon.id} 
+              <div
+                key={coupon.id}
                 className="flex items-center gap-1.5 rounded-[8px] border border-emerald-200 bg-emerald-50 pl-2.5 pr-1 py-1 shadow-sm"
               >
                 <div className="flex flex-col">
@@ -455,8 +455,8 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }
                     {coupon.code}
                   </span>
                   <span className="text-[9px] font-bold text-slate-400 mt-0.5">
-                    {coupon.couponType === "FREESHIP" ? "Miễn phí vận chuyển" : 
-                     coupon.couponType === "PRODUCT_DISCOUNT" ? "Giảm giá sản phẩm" : "Giảm giá đơn hàng"}
+                    {coupon.couponType === "FREESHIP" ? "Miễn phí vận chuyển" :
+                      coupon.couponType === "PRODUCT_DISCOUNT" ? "Giảm giá sản phẩm" : "Giảm giá đơn hàng"}
                   </span>
                 </div>
                 <button
@@ -608,7 +608,7 @@ export default function CheckoutPage() {
   const checkoutQuoteReady =
     Boolean(preview) &&
     String(previewShippingAddress?.id || "") ===
-      String(checkoutPayload.shippingAddressId || "");
+    String(checkoutPayload.shippingAddressId || "");
   const hasServerDiscount = checkoutQuoteReady && summary.discountAmount > 0;
   const hasServerFreeShipping =
     checkoutQuoteReady && cartItems.length > 0 && summary.shippingFee === 0;
@@ -1303,11 +1303,10 @@ export default function CheckoutPage() {
                       return (
                         <label
                           key={address.id}
-                          className={`cursor-pointer rounded-[8px] border p-4 transition ${
-                            active
+                          className={`cursor-pointer rounded-[8px] border p-4 transition ${active
                               ? "border-emerald-500 bg-emerald-50"
                               : "border-emerald-100 bg-white hover:border-emerald-200"
-                          }`}
+                            }`}
                         >
                           <input
                             type="radio"
@@ -1413,158 +1412,157 @@ export default function CheckoutPage() {
 
                 {/* Add address form */}
                 {showAddressForm && (
-                <div className="mt-5 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 font-black text-emerald-950">
-                      <Plus className="size-4" />
-                      Thêm địa chỉ mới
+                  <div className="mt-5 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 font-black text-emerald-950">
+                        <Plus className="size-4" />
+                        Thêm địa chỉ mới
+                      </div>
+                      {addresses.length > 0 && (
+                        <button
+                          type="button"
+                          className="flex size-8 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 transition hover:bg-emerald-50"
+                          onClick={closeAddressForm}
+                          title="Đóng form thêm địa chỉ"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      )}
                     </div>
-                    {addresses.length > 0 && (
-                      <button
-                        type="button"
-                        className="flex size-8 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 transition hover:bg-emerald-50"
-                        onClick={closeAddressForm}
-                        title="Đóng form thêm địa chỉ"
-                      >
-                        <X className="size-4" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="address-full-name">Người nhận</Label>
-                      <Input
-                        id="address-full-name"
-                        value={addressForm.fullName}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="address-full-name">Người nhận</Label>
+                        <Input
+                          id="address-full-name"
+                          value={addressForm.fullName}
+                          onChange={(e) =>
+                            updateAddressForm("fullName", e.target.value)
+                          }
+                          required={showAddressForm}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="address-phone">Số điện thoại</Label>
+                        <Input
+                          id="address-phone"
+                          ref={phoneInputRef}
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={10}
+                          value={addressForm.phone}
+                          onChange={(e) => handlePhoneChange(e.target.value)}
+                          aria-invalid={Boolean(phoneError)}
+                          aria-describedby="address-phone-helper"
+                          className={
+                            phoneError
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                              : undefined
+                          }
+                          pattern={PHONE_PATTERN_SOURCE}
+                          title={PHONE_ERROR_MESSAGE}
+                          placeholder="0987654321"
+                          required={showAddressForm}
+                        />
+                        <p
+                          id="address-phone-helper"
+                          className={`text-xs font-semibold ${phoneError ? "text-red-600" : "text-slate-500"
+                            }`}
+                        >
+                          {phoneError ||
+                            "Nhập 10 chữ số, bắt đầu bằng số 0."}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="address-province">Tỉnh/thành phố</Label>
+                        <select
+                          id="address-province"
+                          value={addressForm.provinceCode}
+                          onChange={(e) => handleProvinceChange(e.target.value)}
+                          required={showAddressForm}
+                          className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                        >
+                          <option value="">Chọn tỉnh/thành phố</option>
+                          {VIETNAM_PROVINCES.map((province) => (
+                            <option key={province.code} value={province.code}>
+                              {getProvinceLabel(province)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="address-district">Quận/huyện</Label>
+                        <select
+                          id="address-district"
+                          value={addressForm.districtCode}
+                          onChange={(e) => handleDistrictChange(e.target.value)}
+                          disabled={!selectedProvinceForForm}
+                          required={showAddressForm}
+                          className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                        >
+                          <option value="">Chọn quận/huyện</option>
+                          {districtOptions.map((district) => (
+                            <option key={district.code} value={district.code}>
+                              {district.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="address-ward">Phường/xã</Label>
+                        <select
+                          id="address-ward"
+                          value={addressForm.wardCode}
+                          onChange={(e) => handleWardChange(e.target.value)}
+                          disabled={!selectedDistrictForForm}
+                          required={showAddressForm}
+                          className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                        >
+                          <option value="">Chọn phường/xã</option>
+                          {wardOptions.map((ward) => (
+                            <option key={ward.code} value={ward.code}>
+                              {ward.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="address-detail">Địa chỉ chi tiết</Label>
+                        <Textarea
+                          id="address-detail"
+                          value={addressForm.address}
+                          onChange={(e) =>
+                            updateAddressForm("address", e.target.value)
+                          }
+                          rows={3}
+                          required={showAddressForm}
+                        />
+                      </div>
+                    </div>
+                    <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={addressForm.defaultAddress}
                         onChange={(e) =>
-                          updateAddressForm("fullName", e.target.value)
+                          updateAddressForm("defaultAddress", e.target.checked)
                         }
-                        required={showAddressForm}
+                        className="size-4 rounded border-emerald-200 text-emerald-600"
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address-phone">Số điện thoại</Label>
-                      <Input
-                        id="address-phone"
-                        ref={phoneInputRef}
-                        type="tel"
-                        inputMode="numeric"
-                        maxLength={10}
-                        value={addressForm.phone}
-                        onChange={(e) => handlePhoneChange(e.target.value)}
-                        aria-invalid={Boolean(phoneError)}
-                        aria-describedby="address-phone-helper"
-                        className={
-                          phoneError
-                            ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                            : undefined
-                        }
-                        pattern={PHONE_PATTERN_SOURCE}
-                        title={PHONE_ERROR_MESSAGE}
-                        placeholder="0987654321"
-                        required={showAddressForm}
-                      />
-                      <p
-                        id="address-phone-helper"
-                        className={`text-xs font-semibold ${
-                          phoneError ? "text-red-600" : "text-slate-500"
-                        }`}
-                      >
-                        {phoneError ||
-                          "Nhập 10 chữ số, bắt đầu bằng số 0."}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address-province">Tỉnh/thành phố</Label>
-                      <select
-                        id="address-province"
-                        value={addressForm.provinceCode}
-                        onChange={(e) => handleProvinceChange(e.target.value)}
-                        required={showAddressForm}
-                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                      >
-                        <option value="">Chọn tỉnh/thành phố</option>
-                        {VIETNAM_PROVINCES.map((province) => (
-                          <option key={province.code} value={province.code}>
-                            {getProvinceLabel(province)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address-district">Quận/huyện</Label>
-                      <select
-                        id="address-district"
-                        value={addressForm.districtCode}
-                        onChange={(e) => handleDistrictChange(e.target.value)}
-                        disabled={!selectedProvinceForForm}
-                        required={showAddressForm}
-                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                      >
-                        <option value="">Chọn quận/huyện</option>
-                        {districtOptions.map((district) => (
-                          <option key={district.code} value={district.code}>
-                            {district.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="address-ward">Phường/xã</Label>
-                      <select
-                        id="address-ward"
-                        value={addressForm.wardCode}
-                        onChange={(e) => handleWardChange(e.target.value)}
-                        disabled={!selectedDistrictForForm}
-                        required={showAddressForm}
-                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                      >
-                        <option value="">Chọn phường/xã</option>
-                        {wardOptions.map((ward) => (
-                          <option key={ward.code} value={ward.code}>
-                            {ward.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="address-detail">Địa chỉ chi tiết</Label>
-                      <Textarea
-                        id="address-detail"
-                        value={addressForm.address}
-                        onChange={(e) =>
-                          updateAddressForm("address", e.target.value)
-                        }
-                        rows={3}
-                        required={showAddressForm}
-                      />
-                    </div>
+                      Đặt làm địa chỉ mặc định
+                    </label>
+                    <Button
+                      type="button"
+                      className="mt-4 bg-slate-950 font-bold hover:bg-emerald-700"
+                      disabled={savingAddress}
+                      onClick={handleSaveAddress}
+                    >
+                      {savingAddress ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Plus className="size-4" />
+                      )}
+                      Thêm địa chỉ
+                    </Button>
                   </div>
-                  <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={addressForm.defaultAddress}
-                      onChange={(e) =>
-                        updateAddressForm("defaultAddress", e.target.checked)
-                      }
-                      className="size-4 rounded border-emerald-200 text-emerald-600"
-                    />
-                    Đặt làm địa chỉ mặc định
-                  </label>
-                  <Button
-                    type="button"
-                    className="mt-4 bg-slate-950 font-bold hover:bg-emerald-700"
-                    disabled={savingAddress}
-                    onClick={handleSaveAddress}
-                  >
-                    {savingAddress ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Plus className="size-4" />
-                    )}
-                    Thêm địa chỉ
-                  </Button>
-                </div>
                 )}
               </section>
             </div>
@@ -1598,11 +1596,11 @@ export default function CheckoutPage() {
                         setPreview(null);
                       }}
                       className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                      >
-                        <option value="cash">Thanh toán khi nhận hàng</option>
-                        <option value="vnpay">VNPay Sandbox</option>
-                        <option value="paypal">PayPal</option>
-                      </select>
+                    >
+                      <option value="cash">Thanh toán khi nhận hàng</option>
+                      <option value="vnpay">VNPay Sandbox</option>
+                      <option value="paypal">PayPal</option>
+                    </select>
                   </div>
 
                   {/* ── COUPON PICKER ───────────────────────────────────── */}
@@ -1669,11 +1667,11 @@ export default function CheckoutPage() {
                                 <span className="flex items-center gap-1.5">
                                   <BadgePercent className="size-3.5" />
                                   Mã giảm giá
-                                  {appliedCoupon && (
-                                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                                      {getCouponBadgeText(appliedCoupon)}
+                                  {appliedCoupons.map((coupon) => (
+                                    <span key={coupon.id} className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                                      {coupon.code}
                                     </span>
-                                  )}
+                                  ))}
                                 </span>
                                 <span>-{formatCurrency(couponDiscountEst)}</span>
                               </div>
@@ -1699,8 +1697,8 @@ export default function CheckoutPage() {
                           {!checkoutQuoteReady
                             ? pendingAmountLabel
                             : summary.shippingFee === 0 && cartItems.length > 0
-                            ? "Miễn phí"
-                            : formatCurrency(summary.shippingFee)}
+                              ? "Miễn phí"
+                              : formatCurrency(summary.shippingFee)}
                         </span>
                       </div>
 
@@ -1855,9 +1853,8 @@ export default function CheckoutPage() {
                   />
                   <p
                     id="edit-address-phone-helper"
-                    className={`text-xs font-semibold ${
-                      editPhoneError ? "text-red-600" : "text-slate-500"
-                    }`}
+                    className={`text-xs font-semibold ${editPhoneError ? "text-red-600" : "text-slate-500"
+                      }`}
                   >
                     {editPhoneError ||
                       "Nhập 10 chữ số, bắt đầu bằng số 0."}
