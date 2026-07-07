@@ -179,7 +179,7 @@ export function AvatarUploadField({
         </div>
         <div className="min-w-0 flex-1 text-sm">
           <p className="font-semibold text-slate-700">
-            {fileMeta?.name || value || "Chưa chọn ảnh"}
+            {fileMeta?.name || (value ? "Ảnh hiện tại" : "Chưa chọn ảnh")}
           </p>
           <p className="mt-1 text-xs font-medium text-slate-500">
             {fileMeta ? formatFileSize(fileMeta.size) : "JPG, JPEG, PNG, WEBP - tối đa 5MB"}

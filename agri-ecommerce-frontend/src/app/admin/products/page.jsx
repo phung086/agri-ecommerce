@@ -77,17 +77,27 @@ function readPageContent(response) {
   return Array.isArray(response) ? response : [];
 }
 
-function buildImages(value, thumbnail) {
-  const images = value
+function readImageList(value) {
+  return String(value || "")
     .split("\n")
     .map((image) => image.trim())
     .filter(Boolean);
+}
+
+function buildImages(value, thumbnail) {
+  const images = readImageList(value);
 
   if (thumbnail && !images.includes(thumbnail)) {
     return [thumbnail, ...images];
   }
 
   return images;
+}
+
+function getAdditionalImages(form) {
+  return readImageList(form.images).filter(
+    (image) => image && image !== form.thumbnail
+  );
 }
 
 function buildProductPayload(form) {
@@ -227,13 +237,84 @@ export default function AdminProductsPage() {
 
     try {
       const uploadedImage = await adminService.uploadImage(file, "product");
-      updateForm("thumbnail", uploadedImage.path);
+      const imagePath = uploadedImage?.path || uploadedImage?.url || "";
+      if (imagePath) {
+        setForm((current) => ({
+          ...current,
+          thumbnail: imagePath,
+          images: readImageList(current.images)
+            .filter((image) => image !== current.thumbnail && image !== imagePath)
+            .join("\n"),
+        }));
+      }
       setNotice("Đã tải ảnh sản phẩm lên server.");
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
       setUploadingImage(false);
     }
+  }
+
+  async function handleAdditionalImageFiles(fileList) {
+    const files = Array.from(fileList || []);
+
+    if (files.length === 0) {
+      return;
+    }
+
+    setUploadingImage(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const uploadedPaths = [];
+
+      for (const file of files) {
+        const uploadedImage = await adminService.uploadImage(file, "product");
+        const imagePath = uploadedImage?.path || uploadedImage?.url || "";
+
+        if (imagePath) {
+          uploadedPaths.push(imagePath);
+        }
+      }
+
+      if (uploadedPaths.length > 0) {
+        setForm((current) => {
+          const nextImages = [...readImageList(current.images), ...uploadedPaths]
+            .filter((image, index, images) => images.indexOf(image) === index);
+
+          return {
+            ...current,
+            images: nextImages.join("\n"),
+          };
+        });
+      }
+
+      setNotice("Đã tải ảnh bổ sung lên server.");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  function removeThumbnail() {
+    setForm((current) => ({
+      ...current,
+      thumbnail: "",
+      images: readImageList(current.images)
+        .filter((image) => image !== current.thumbnail)
+        .join("\n"),
+    }));
+  }
+
+  function removeAdditionalImage(imagePath) {
+    setForm((current) => ({
+      ...current,
+      images: readImageList(current.images)
+        .filter((image) => image !== imagePath)
+        .join("\n"),
+    }));
   }
 
   async function refreshProducts() {
@@ -385,7 +466,7 @@ export default function AdminProductsPage() {
         <StatCard
           title="Có ảnh"
           value={formatNumber(productStats.withImage)}
-          description="Có thumbnail lưu trong DB"
+          description="Có ảnh đại diện"
           icon={ImagePlus}
           tone="rose"
         />
@@ -645,26 +726,19 @@ export default function AdminProductsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="product-thumbnail">Ảnh đại diện</Label>
-                <Input
-                  id="product-thumbnail"
-                  value={form.thumbnail}
-                  onChange={(event) =>
-                    updateForm("thumbnail", event.target.value)
-                  }
-                  placeholder="uploads/products/example.jpg"
-                />
+                <Label htmlFor="product-thumbnail-file">Ảnh đại diện</Label>
                 <Input
                   id="product-thumbnail-file"
                   type="file"
                   accept="image/*"
                   disabled={uploadingImage}
-                  onChange={(event) =>
-                    handleThumbnailFile(event.target.files?.[0] || null)
-                  }
+                  onChange={(event) => {
+                    handleThumbnailFile(event.target.files?.[0] || null);
+                    event.target.value = "";
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Chọn ảnh từ máy để tải lên server và tự điền đường dẫn.
+                  Chọn ảnh từ máy để tải lên server.
                 </p>
                 {uploadingImage && (
                   <p className="text-xs font-medium text-emerald-700">
@@ -675,28 +749,82 @@ export default function AdminProductsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
-              <div className="space-y-2">
-                <Label htmlFor="product-images">
-                  Ảnh bổ sung, mỗi dòng một đường dẫn
-                </Label>
-                <Textarea
-                  id="product-images"
-                  value={form.images}
-                  onChange={(event) => updateForm("images", event.target.value)}
-                  rows={4}
-                  placeholder="uploads/products/example-1.jpg"
-                />
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="product-images-file">Ảnh bổ sung</Label>
+                  <Input
+                    id="product-images-file"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={uploadingImage}
+                    onChange={(event) => {
+                      handleAdditionalImageFiles(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Có thể chọn nhiều ảnh, hệ thống chỉ hiển thị ảnh xem trước.
+                  </p>
+                </div>
+
+                {getAdditionalImages(form).length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {getAdditionalImages(form).map((image) => (
+                      <div
+                        key={image}
+                        className="relative aspect-square overflow-hidden rounded-lg border bg-muted bg-cover bg-center"
+                        role="img"
+                        aria-label="Ảnh bổ sung của sản phẩm"
+                        style={{ backgroundImage: getImageBackground(image) }}
+                      >
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon-xs"
+                          className="absolute right-1 top-1 bg-background/90"
+                          onClick={() => removeAdditionalImage(image)}
+                        >
+                          <Trash2 className="size-3" />
+                          <span className="sr-only">Xóa ảnh bổ sung</span>
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div
-                className="h-32 rounded-lg border bg-muted bg-cover bg-center"
-                role="img"
-                aria-label="Ảnh sản phẩm đang chọn"
-                style={{
-                  backgroundImage: form.thumbnail
-                    ? getImageBackground(form.thumbnail)
-                    : "none",
-                }}
-              />
+
+              <div className="space-y-2">
+                <Label>Ảnh đại diện hiện tại</Label>
+                <div
+                  className="relative h-32 rounded-lg border bg-muted bg-cover bg-center"
+                  role="img"
+                  aria-label="Ảnh sản phẩm đang chọn"
+                  style={{
+                    backgroundImage: form.thumbnail
+                      ? getImageBackground(form.thumbnail)
+                      : "none",
+                  }}
+                >
+                  {!form.thumbnail && (
+                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                      <ImageIcon className="size-6" />
+                    </div>
+                  )}
+                  {form.thumbnail && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon-xs"
+                      className="absolute right-1 top-1 bg-background/90"
+                      onClick={removeThumbnail}
+                    >
+                      <Trash2 className="size-3" />
+                      <span className="sr-only">Xóa ảnh đại diện</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">
