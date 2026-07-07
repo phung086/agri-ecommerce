@@ -220,8 +220,27 @@ function getEstimatedDiscountAmount(coupon, subtotal) {
   return Math.round((subtotal * Number(coupon.discountPercentage || 0)) / 100);
 }
 
+function checkCouponTierAllowed(couponCode = "", userTier = "BRONZE") {
+  const code = couponCode.trim().toUpperCase();
+  const tier = (userTier || "BRONZE").trim().toUpperCase();
+
+  if (code === "SILVER10") {
+    return ["SILVER", "GOLD", "PLATINUM"].includes(tier);
+  }
+  if (code === "GOLD25") {
+    return ["GOLD", "PLATINUM"].includes(tier);
+  }
+  if (code === "PLATINUM50" || code === "PLATINUM10") {
+    return ["PLATINUM"].includes(tier);
+  }
+  if (code === "GOLD5") {
+    return ["GOLD", "PLATINUM"].includes(tier);
+  }
+  return true;
+}
+
 /* ─── Coupon Autocomplete widget ──────────────────────────────────────────── */
-function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
+function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal, membershipTier }) {
   const [inputValue, setInputValue] = useState(appliedCoupon?.code ?? "");
   const [allCoupons, setAllCoupons] = useState([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -267,16 +286,20 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
     };
   }, [appliedCoupon]);
 
-  /* Filter coupons by input */
+  /* Filter coupons by input and membership tier */
   const filtered = useMemo(() => {
+    const tierAllowed = allCoupons.filter((c) => checkCouponTierAllowed(c.code, membershipTier));
+    console.log("[DEBUG] User Membership Tier in CouponPicker:", membershipTier);
+    console.log("[DEBUG] Coupons allowed for this tier:", tierAllowed.map(c => c.code));
+    
     const q = inputValue.trim().toLowerCase();
-    if (!q) return allCoupons;
-    return allCoupons.filter(
+    if (!q) return tierAllowed;
+    return tierAllowed.filter(
       (c) =>
         c.code.toLowerCase().includes(q) ||
         deriveLabel(c.code).toLowerCase().includes(q)
     );
-  }, [inputValue, allCoupons]);
+  }, [inputValue, allCoupons, membershipTier]);
 
   async function validateAndApply(code) {
     const trimmed = (code || inputValue).trim();
@@ -518,6 +541,7 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [appliedCoupon, setAppliedCoupon] = useState(null); // CouponResponse | null
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [membershipTier, setMembershipTier] = useState("BRONZE");
   const [usePoints, setUsePoints] = useState(false);
   const [addressForm, setAddressForm] = useState(() =>
     createBlankAddressForm()
@@ -733,6 +757,7 @@ export default function CheckoutPage() {
             defaultAddress?.id ? String(defaultAddress.id) : ""
           );
           setLoyaltyPoints(profileData?.loyaltyPoints || 0);
+          setMembershipTier(profileData?.membershipTier || "BRONZE");
           setShowAddressForm(nextAddresses.length === 0);
           setAddressForm(createBlankAddressForm());
           setPreview(null);
@@ -1622,6 +1647,7 @@ export default function CheckoutPage() {
                   <CouponPicker
                     appliedCoupon={appliedCoupon}
                     subtotal={summary.subtotal}
+                    membershipTier={membershipTier}
                     onApply={(coupon) => {
                       setAppliedCoupon(coupon);
                       setPreview(null); // reset preview so totals recalculate
