@@ -325,6 +325,116 @@ class OrderServiceImplTest {
         assertThat(response.getTotalPrice().setScale(0)).isEqualTo(new BigDecimal("116000"));
     }
 
+    @Test
+    void checkout_withProductOrderFreeshipAndPoints_shouldStackControlledDiscounts() {
+        CheckoutRequest request = checkoutRequest("cash");
+        request.setCouponCode("MEAT10K,SILVER10,FREESHIP");
+        request.setUsePoints(true);
+
+        UserEntity user = user();
+        user.setLoyaltyPoints(40000);
+        ProductEntity meat = ProductEntity.builder()
+                .id(1L)
+                .name("Thit heo")
+                .price(new BigDecimal("100000.00"))
+                .stock(5)
+                .status("in_stock")
+                .build();
+        ProductEntity fish = ProductEntity.builder()
+                .id(2L)
+                .name("Ca basa")
+                .price(new BigDecimal("50000.00"))
+                .stock(5)
+                .status("in_stock")
+                .build();
+
+        CouponEntity productCoupon = CouponEntity.builder()
+                .code("MEAT10K")
+                .couponType("PRODUCT_DISCOUNT")
+                .discountType("FIXED_AMOUNT")
+                .discountAmount(new BigDecimal("10000.00"))
+                .discountPercentage(0)
+                .productId(1L)
+                .active(true)
+                .timesUsed(0)
+                .usageLimit(100)
+                .startsAt(java.time.LocalDateTime.now().minusDays(1))
+                .expiresAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        CouponEntity tierCoupon = CouponEntity.builder()
+                .code("SILVER10")
+                .couponType("ORDER_DISCOUNT")
+                .discountType("PERCENTAGE")
+                .discountPercentage(10)
+                .minOrderValue(new BigDecimal("100000.00"))
+                .active(true)
+                .timesUsed(0)
+                .usageLimit(100)
+                .startsAt(java.time.LocalDateTime.now().minusDays(1))
+                .expiresAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        CouponEntity freeshipCoupon = CouponEntity.builder()
+                .code("FREESHIP")
+                .couponType("FREESHIP")
+                .discountType("FIXED_AMOUNT")
+                .discountPercentage(0)
+                .discountAmount(BigDecimal.ZERO)
+                .active(true)
+                .timesUsed(0)
+                .usageLimit(100)
+                .startsAt(java.time.LocalDateTime.now().minusDays(1))
+                .expiresAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(shippingAddressRepository.findByIdAndUser_Id(20L, 1L)).thenReturn(Optional.of(address()));
+        when(cartItemRepository.findByUser_IdOrderByCreatedAtDesc(1L))
+                .thenReturn(List.of(cartItem(meat, 1), cartItem(fish, 1)));
+        when(productRepository.findAllByIdInForUpdate(anyIdCollection())).thenReturn(List.of(meat, fish));
+        when(shippingCarrierService.calculateShippingFee(any(), any(), any(), any(Double.class)))
+                .thenReturn(new BigDecimal("30000.00"));
+        when(couponRepository.findByCodeIgnoreCaseForUpdate("MEAT10K")).thenReturn(Optional.of(productCoupon));
+        when(couponRepository.findByCodeIgnoreCaseForUpdate("SILVER10")).thenReturn(Optional.of(tierCoupon));
+        when(couponRepository.findByCodeIgnoreCaseForUpdate("FREESHIP")).thenReturn(Optional.of(freeshipCoupon));
+        when(shippingCarrierService.createShippingLabel(any(OrderEntity.class))).thenReturn("GHN-STACK");
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> {
+            OrderEntity order = invocation.getArgument(0);
+            if (order.getId() == null) {
+                order.setId(100L);
+            }
+            return order;
+        });
+        when(orderItemRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentRepository.save(any(PaymentEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderStatusHistoryRepository.save(any(OrderStatusHistoryEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderMapper.toOrderResponse(any(OrderEntity.class), anyList(), any(PaymentEntity.class), anyList()))
+                .thenAnswer(invocation -> {
+                    OrderEntity order = invocation.getArgument(0);
+                    return OrderResponse.builder()
+                            .id(order.getId())
+                            .couponCode(order.getCouponCode())
+                            .discountAmount(order.getDiscountAmount())
+                            .shippingFee(order.getShippingFee())
+                            .pointsUsed(order.getPointsUsed())
+                            .totalPrice(order.getTotalPrice())
+                            .trackingNumber(order.getTrackingNumber())
+                            .build();
+                });
+
+        OrderResponse response = orderService.checkout(1L, request);
+
+        assertThat(response.getCouponCode()).isEqualTo("MEAT10K,SILVER10,FREESHIP");
+        assertThat(response.getDiscountAmount()).isEqualByComparingTo("55000.00");
+        assertThat(response.getShippingFee()).isEqualByComparingTo("0.00");
+        assertThat(response.getPointsUsed()).isEqualTo(30000);
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("95000.00");
+        assertThat(response.getTrackingNumber()).isEqualTo("GHN-STACK");
+        assertThat(productCoupon.getTimesUsed()).isEqualTo(1);
+        assertThat(tierCoupon.getTimesUsed()).isEqualTo(1);
+        assertThat(freeshipCoupon.getTimesUsed()).isEqualTo(1);
+    }
+
     @SuppressWarnings("unchecked")
     private Collection<Long> anyIdCollection() {
         return any(Collection.class);

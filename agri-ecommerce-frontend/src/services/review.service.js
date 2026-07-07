@@ -25,7 +25,13 @@ export const reviewService = {
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await axiosClient.post("/customer/reviews/images", formData);
+    const response = await axiosClient.post(
+      "/customer/uploads/review-images",
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      }
+    );
     return unwrapApiData(response);
   },
 

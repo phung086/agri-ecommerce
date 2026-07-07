@@ -731,3 +731,70 @@ Co the trinh bay module nay theo ba lop:
 5. Chong spam diem review:
    - Co the chi cong diem mot lan moi san pham moi don hang.
    - Co the them gioi han diem review moi ngay.
+
+## 16. Cap nhat hoan thien 2026-07-07
+
+### 16.1. Chong voucher co kiem soat (Coupon Stacking)
+
+Quy tac ap dung dong thoi:
+De mang lai trai nghiem mua sam chuyen nghiep va toi uu hoa quyen loi cho khach hang, he thong ho tro ap dung dong thoi (chong) nhieu ma giam gia khac loai trong mot don hang theo cac quy tac kiem soat chat che sau:
+- Toi da 1 ma Giam gia don hang / Hang thanh vien (`ORDER_DISCOUNT`).
+- Toi da 1 ma Mien phi van chuyen (`FREESHIP`).
+- Nhieu ma Giam gia san pham (`PRODUCT_DISCOUNT`) nhung cac ma nay phai ap dung cho cac san pham khac nhau trong gio hang (khong duoc trung san pham).
+- Diem Loyalty van duoc su dung ket hop binh thuong (toi da giam 20% gia tri don hang sau khi ap voucher).
+
+Co che thuc hien:
+- Frontend: `CouponPicker` cho phep nguoi dung chon va ap dung nhieu ma. Khi nguoi dung nhap/chon ma moi, he thong tu dong kiem tra loai (slot) de ghi de ma cung loai (hoac ma san pham cung ID) va giu nguyen ma khac loai. Cac ma da ap hien thi thanh danh sach badge kem nut go ma doc lap. Chuoi ma duoc gop phan cach bang dau phay (vi du: `THIT10K,SILVER10,FREESHIP`) de gui len API.
+- Backend: `OrderServiceImpl` phan tach chuoi ma thanh danh sach, xac thuc dieu kien tung ma rieng biet. Sau do, tinh toan cong don so tien giam tru tuong ung mot cach chinh xac va cap nhat so luot dung cua tung ma giam gia lien quan khi tao don thanh cong.
+- Huy don: Khi huy don hang, he thong tu dong khoi phuc lai so luot su dung (`timesUsed`) cho toan bo danh sach ma giam gia da ap dung.
+
+### 16.2. Chuan hoa ma coupon can han
+
+Van de gap phai:
+- Mot so ma cu dang co ten truc dien nhu `XA_HANG_*`, khong than thien voi khach.
+
+Huong xu ly:
+- `InventoryScheduler` tiep tuc tao ma theo chien dich mem hon:
+  - `TUOI_NGON_*` cho rau/cu/qua.
+  - `BEP_NHA_*` cho nhom ca/thit/hai san.
+  - `MON_NGON_*` cho nhom khac.
+- Them migration `V16__professionalize_auto_coupon_codes.sql` de doi cac ma legacy `XA_HANG_%` sang `TUOI_NGON_<productId>_<couponId>`.
+- Checkout frontend bo sung label hien thi cho cac prefix tren.
+
+### 16.3. Review co anh thuc te
+
+Thay doi database:
+- Them migration `V15__add_review_image_url.sql`.
+- Bang `reviews` co them cot `image_url VARCHAR(1024) NULL`.
+
+Thay doi backend:
+- `ReviewEntity`, `ReviewRequest`, `ReviewUpdateRequest`, `ReviewResponse`, `ReviewMapper` bo sung `imageUrl`.
+- `ReviewServiceImpl` validate `imageUrl` phai la URL `http/https`.
+- Them `CustomerUploadController`:
+  - Endpoint: `POST /api/customer/uploads/review-images`.
+  - Role: `CUSTOMER`.
+  - File hop le: JPG, PNG, WEBP, toi da 5MB.
+  - Upload len Cloudinary folder `agri-ecommerce/reviews`.
+
+Thay doi frontend:
+- `review.service.js` them `uploadReviewImage(file)`.
+- Trang profile/order history cho khach upload anh khi viet danh gia.
+- Anh duoc upload truoc len Cloudinary, sau do submit review gui `imageUrl`.
+- Trang chi tiet san pham hien thi anh trong tung review neu co.
+
+### 16.4. Email xac nhan va hoa don
+
+Van de gap phai:
+- Email invoice truoc do chi gom mot dong "Khuyen mai", chua noi ro ma voucher va xu tich luy.
+
+Huong xu ly:
+- `EmailServiceImpl.buildInvoiceText` bo sung:
+  - Ma giam gia neu co.
+  - Xu da dung neu co.
+  - Xu du kien nhan khi don hoan tat.
+- `buildInvoiceHtml` bo sung cac dong tuong ung trong phan tong ket thanh toan.
+- Xu du kien duoc tinh theo cung cong thuc loyalty hien tai: 1% tong thanh toan.
+
+Ket qua:
+- Khach nhan email co the biet don da dung ma nao, dung bao nhieu xu, va se nhan bao nhieu xu khi don hoan tat.
+- Phu hop de chup minh chung trong bao cao va demo.
