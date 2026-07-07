@@ -148,13 +148,10 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         UserEntity user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay nguoi dung"));
 
-        // Tính chi tiêu từ đầu tháng này (UTC+7)
-        java.time.ZonedDateTime nowZoned = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
-        LocalDateTime startOfMonth = nowZoned.withDayOfMonth(1)
-                .withHour(0).withMinute(0).withSecond(0).withNano(0)
-                .toLocalDateTime();
+        // Tính chi tiêu tích lũy từ trước đến nay (lấy toàn bộ lịch sử cũ)
+        LocalDateTime allTimeStart = LocalDateTime.of(2000, 1, 1, 0, 0);
 
-        BigDecimal totalSpent = orderRepository.calculateTotalSpendingSince(userId, startOfMonth);
+        BigDecimal totalSpent = orderRepository.calculateTotalSpendingSince(userId, allTimeStart);
         if (totalSpent == null) {
             totalSpent = BigDecimal.ZERO;
         }
