@@ -566,7 +566,7 @@ function PurchaseHistorySection({
 }) {
   const { t } = useLanguage();
   const completedOrders = orders.filter(isCompletedOrder).length;
-  const totalSpent = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
+  const totalSpent = orders.filter(isCompletedOrder).reduce((sum, order) => sum + getOrderTotal(order), 0);
 
   return (
     <section className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
@@ -616,7 +616,7 @@ function PurchaseHistorySection({
         <div className="rounded-[8px] border border-amber-100 bg-amber-50 p-3">
           <div className="flex items-center gap-2 text-amber-700">
             <CreditCard className="size-4" />
-            <span className="text-xs font-black uppercase">{t("Giá trị hiển thị")}</span>
+            <span className="text-xs font-black uppercase">{t("Tổng chi tiêu")}</span>
           </div>
           <p className="mt-2 text-2xl font-black text-amber-950">
             {formatCurrency(totalSpent)}
