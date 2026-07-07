@@ -255,255 +255,431 @@ function checkCouponTierAllowed(couponCode = "", userTier = "BRONZE") {
 }
 
 /* ─── Coupon Autocomplete widget ──────────────────────────────────────────── */
-function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier }) {
-  const [inputValue, setInputValue] = useState("");
+function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, cartItems = [] }) {
+  const [isOpen, setIsOpen] = useState(false);
   const [allCoupons, setAllCoupons] = useState([]);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [selectedCoupons, setSelectedCoupons] = useState([]);
+  const [manualCode, setManualCode] = useState("");
+  const [manualError, setManualError] = useState("");
+  const [manualSuccess, setManualSuccess] = useState("");
   const [validating, setValidating] = useState(false);
-  const [couponError, setCouponError] = useState("");
-  const [couponSuccess, setCouponSuccess] = useState("");
-  const inputRef = useRef(null);
-  const containerRef = useRef(null);
 
   /* Load all available coupons once */
   useEffect(() => {
     promotionService
       .getPublicCoupons({ size: 50 })
       .then((page) => setAllCoupons(page?.content ?? []))
-      .catch(() => { });
+      .catch(() => {});
   }, []);
 
-  /* Close dropdown when clicking outside */
+  // Khi mở dialog, clone appliedCoupons sang selectedCoupons
   useEffect(() => {
-    function handler(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setDropdownOpen(false);
+    if (isOpen) {
+      setSelectedCoupons([...appliedCoupons]);
+      setManualCode("");
+      setManualError("");
+      setManualSuccess("");
+    }
+  }, [isOpen, appliedCoupons]);
+
+  // Phân loại các coupon có trong hệ thống
+  const { freeshipCoupons, orderCoupons, productCoupons } = useMemo(() => {
+    const freeship = [];
+    const order = [];
+    const product = [];
+
+    allCoupons.forEach((c) => {
+      const type = c.couponType || "ORDER_DISCOUNT";
+      if (type === "FREESHIP" || isFreeshipCoupon(c)) {
+        freeship.push(c);
+      } else if (type === "PRODUCT_DISCOUNT") {
+        product.push(c);
+      } else {
+        order.push(c);
+      }
+    });
+
+    return { freeshipCoupons: freeship, orderCoupons: order, productCoupons: product };
+  }, [allCoupons]);
+
+  // Kiểm tra trạng thái hợp lệ và lý do vô hiệu hóa của coupon
+  function getCouponStatusInfo(coupon) {
+    // 1. Kiểm tra hạng thành viên
+    if (!checkCouponTierAllowed(coupon.code, membershipTier)) {
+      const required = coupon.code.startsWith("SILVER") ? "Bạc" : coupon.code.startsWith("GOLD") ? "Vàng" : "Kim Cương";
+      return { disabled: true, reason: `Yêu cầu hạng: ${required} trở lên` };
+    }
+    // 2. Kiểm tra giá trị đơn tối thiểu
+    if (coupon.minOrderValue > 0 && subtotal < coupon.minOrderValue) {
+      return { disabled: true, reason: `Chưa đạt đơn tối thiểu ${formatNumber(coupon.minOrderValue)}đ` };
+    }
+    // 3. Kiểm tra sản phẩm trong giỏ hàng (với PRODUCT_DISCOUNT)
+    if (coupon.couponType === "PRODUCT_DISCOUNT" && coupon.productId != null) {
+      const hasProduct = cartItems.some(item => Number(item.product?.id) === Number(coupon.productId));
+      if (!hasProduct) {
+        return { disabled: true, reason: "Giỏ hàng không chứa sản phẩm áp dụng mã" };
       }
     }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+    return { disabled: false, reason: null };
+  }
 
-  // Lọc bỏ những voucher đã được áp dụng khỏi danh sách dropdown
-  const filtered = useMemo(() => {
-    const appliedCodes = new Set(appliedCoupons.map((c) => c.code.toUpperCase()));
-    const tierAllowed = allCoupons.filter(
-      (c) => checkCouponTierAllowed(c.code, membershipTier) && !appliedCodes.has(c.code.toUpperCase())
-    );
-    const q = inputValue.trim().toLowerCase();
-    if (!q) return tierAllowed;
-    return tierAllowed.filter(
-      (c) =>
-        c.code.toLowerCase().includes(q) ||
-        deriveLabel(c.code).toLowerCase().includes(q)
-    );
-  }, [inputValue, allCoupons, membershipTier, appliedCoupons]);
+  // Toggle tick chọn coupon
+  function handleToggleCoupon(coupon) {
+    const info = getCouponStatusInfo(coupon);
+    if (info.disabled) return;
 
-  async function validateAndApply(code) {
-    const trimmed = (code || inputValue).trim();
-    if (!trimmed) return;
+    const isSelected = selectedCoupons.some(c => c.id === coupon.id);
+    if (isSelected) {
+      // Bỏ chọn
+      setSelectedCoupons(selectedCoupons.filter(c => c.id !== coupon.id));
+    } else {
+      // Chọn mã mới: Lọc bỏ các mã cùng loại/slot rồi push mã mới
+      const newKey = getCouponStackKey(coupon);
+      let next = selectedCoupons.filter(c => getCouponStackKey(c) !== newKey);
+      next.push(coupon);
+      setSelectedCoupons(next);
+    }
+  }
 
-    setDropdownOpen(false);
+  // Nhập mã thủ công và tự động tick chọn
+  async function handleApplyManual() {
+    const code = manualCode.trim();
+    if (!code) return;
+
     setValidating(true);
-    setCouponError("");
-    setCouponSuccess("");
+    setManualError("");
+    setManualSuccess("");
 
     try {
-      const apiResp = await promotionService.validateCouponCode(trimmed);
-
+      const apiResp = await promotionService.validateCouponCode(code);
       if (!apiResp.success || !apiResp.data) {
-        setCouponError(apiResp.message || "Mã giảm giá không hợp lệ.");
+        setManualError(apiResp.message || "Mã giảm giá không hợp lệ.");
       } else {
-        const newCoupon = apiResp.data;
+        const coupon = apiResp.data;
+        const info = getCouponStatusInfo(coupon);
+        if (info.disabled) {
+          setManualError(`Không thể áp dụng: ${info.reason}`);
+          return;
+        }
 
-        const stackKey = getCouponStackKey(newCoupon);
-        const nextCoupons = appliedCoupons.filter(
-          (coupon) => getCouponStackKey(coupon) !== stackKey
-        );
-        nextCoupons.push(newCoupon);
+        // Tự động add vào danh sách allCoupons nếu chưa có để hiển thị
+        if (!allCoupons.some(c => c.id === coupon.id)) {
+          setAllCoupons(prev => [coupon, ...prev]);
+        }
 
-        setInputValue("");
-        setCouponSuccess(`Đã áp dụng mã ${newCoupon.code} thành công.`);
-        onApply(nextCoupons);
+        // Tick chọn
+        const newKey = getCouponStackKey(coupon);
+        const next = selectedCoupons.filter(c => getCouponStackKey(c) !== newKey);
+        next.push(coupon);
+        setSelectedCoupons(next);
+
+        setManualCode("");
+        setManualSuccess(`Đã áp dụng mã ${coupon.code} thành công.`);
       }
     } catch (err) {
-      setCouponError(
-        err?.message || "Mã giảm giá không tồn tại hoặc đã hết hạn."
-      );
+      setManualError(err?.message || "Mã giảm giá không hợp lệ hoặc đã hết hạn.");
     } finally {
       setValidating(false);
     }
   }
 
-  function handleSelect(coupon) {
-    setInputValue("");
-    setDropdownOpen(false);
-    validateAndApply(coupon.code);
+  function handleConfirm() {
+    onApply(selectedCoupons);
+    setIsOpen(false);
   }
 
   function handleRemoveCoupon(couponToRemove) {
-    const nextCoupons = appliedCoupons.filter(
-      (coupon) => coupon.id !== couponToRemove.id
-    );
-    setCouponError("");
-    setCouponSuccess("");
+    const nextCoupons = appliedCoupons.filter(c => c.id !== couponToRemove.id);
     onApply(nextCoupons);
   }
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor="coupon-code">Mã giảm giá</Label>
-
-      <div ref={containerRef} className="relative">
-        {/* Input row */}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <TicketPercent className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-emerald-500" />
-            <input
-              ref={inputRef}
-              id="coupon-code"
-              type="text"
-              value={inputValue}
-              placeholder="Nhập hoặc chọn mã giảm giá..."
-              className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white pl-9 pr-4 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-              onChange={(e) => {
-                setInputValue(e.target.value);
-                setCouponError("");
-                setCouponSuccess("");
-                setDropdownOpen(true);
-              }}
-              onFocus={() => setDropdownOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  validateAndApply();
-                }
-                if (e.key === "Escape") setDropdownOpen(false);
-              }}
-            />
-          </div>
-
-          <button
-            type="button"
-            disabled={validating || !inputValue.trim()}
-            onClick={() => validateAndApply()}
-            className="flex h-10 items-center gap-1.5 rounded-[8px] bg-slate-950 px-3 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {validating ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <BadgePercent className="size-3.5" />
-            )}
-            Áp dụng
-          </button>
-        </div>
-
-        {/* Dropdown */}
-        {dropdownOpen && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-[8px] border border-emerald-100 bg-white shadow-[0_16px_42px_rgba(15,61,38,0.12)]">
-            <div className="flex items-center gap-2 border-b border-emerald-50 px-3 py-2 text-xs font-semibold text-slate-400">
-              <Search className="size-3" />
-              {filtered.length} voucher khả dụng
-            </div>
-
-            <ul className="max-h-64 overflow-y-auto py-1">
-              {filtered.length === 0 ? (
-                <li className="px-4 py-3 text-sm font-semibold text-slate-400">
-                  Không tìm thấy voucher phù hợp.
-                </li>
-              ) : (
-                filtered.map((coupon) => {
-                  const label = deriveLabel(coupon.code);
-                  const freeship = isFreeshipCoupon(coupon);
-                  const discountAmt =
-                    subtotal > 0 ? getEstimatedDiscountAmount(coupon, subtotal) : null;
-
-                  return (
-                    <li key={coupon.id}>
-                      <button
-                        type="button"
-                        onClick={() => handleSelect(coupon)}
-                        className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-emerald-50"
-                      >
-                        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-emerald-100 text-emerald-700">
-                          {freeship ? <Truck className="size-4" /> : <Tag className="size-4" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-black text-slate-800 truncate">{label}</p>
-                          <p className="font-mono text-xs font-bold text-emerald-600 mt-0.5">{coupon.code}</p>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px] font-semibold text-slate-400">
-                            {coupon.minOrderValue > 0 && (
-                              <span>Đơn tối thiểu {formatNumber(coupon.minOrderValue)}đ</span>
-                            )}
-                            {coupon.expiresAt && (
-                              <span>HSD: {formatDate(coupon.expiresAt).split(' ')[0]}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-700">
-                            {getCouponBadgeText(coupon)}
-                          </span>
-                          {discountAmt > 0 && (
-                            <p className="text-[11px] font-bold text-slate-400 mt-1">Giảm ~{formatNumber(discountAmt)}đ</p>
-                          )}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })
-              )}
-            </ul>
-          </div>
-        )}
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-black text-slate-800">Mã giảm giá</Label>
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="text-xs font-black text-emerald-600 hover:text-emerald-700 transition flex items-center gap-1.5"
+        >
+          <TicketPercent className="size-4" />
+          Chọn hoặc nhập mã
+        </button>
       </div>
 
-      {/* Applied coupons list */}
-      {appliedCoupons.length > 0 && (
-        <div className="mt-3 space-y-2">
-          <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã đã áp dụng:</p>
-          <div className="flex flex-wrap gap-2">
-            {appliedCoupons.map((coupon) => (
-              <div
-                key={coupon.id}
-                className="flex items-center gap-1.5 rounded-[8px] border border-emerald-200 bg-emerald-50 pl-2.5 pr-1 py-1 shadow-sm"
-              >
-                <div className="flex flex-col">
-                  <span className="font-mono text-xs font-black text-emerald-800 tracking-wider">
-                    {coupon.code}
-                  </span>
-                  <span className="text-[9px] font-bold text-slate-400 mt-0.5">
-                    {coupon.couponType === "FREESHIP" ? "Miễn phí vận chuyển" :
-                      coupon.couponType === "PRODUCT_DISCOUNT" ? "Giảm giá sản phẩm" : "Giảm giá đơn hàng"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveCoupon(coupon)}
-                  title={`Gỡ mã ${coupon.code}`}
-                  className="flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-emerald-100 hover:text-emerald-800 transition"
-                >
-                  <X className="size-3.5" />
-                </button>
+      {/* Applied coupons badges list */}
+      {appliedCoupons.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {appliedCoupons.map((coupon) => (
+            <div
+              key={coupon.id}
+              className="flex items-center gap-1.5 rounded-[8px] border border-emerald-200 bg-emerald-50 pl-2.5 pr-1.5 py-1.5 shadow-sm"
+            >
+              <div className="flex flex-col">
+                <span className="font-mono text-xs font-black text-emerald-800 tracking-wider">
+                  {coupon.code}
+                </span>
+                <span className="text-[9px] font-bold text-slate-400 mt-0.5">
+                  {coupon.couponType === "FREESHIP" ? "Miễn phí vận chuyển" :
+                    coupon.couponType === "PRODUCT_DISCOUNT" ? "Giảm giá sản phẩm" : "Giảm giá đơn hàng"}
+                </span>
               </div>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={() => handleRemoveCoupon(coupon)}
+                title={`Gỡ mã ${coupon.code}`}
+                className="flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-emerald-100 hover:text-emerald-800 transition"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div 
+          onClick={() => setIsOpen(true)}
+          className="cursor-pointer border border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/20 rounded-[8px] p-3 text-center transition-all"
+        >
+          <p className="text-xs font-semibold text-slate-500 flex items-center justify-center gap-1.5">
+            <TicketPercent className="size-4 text-emerald-500" />
+            Nhấn vào đây để chọn mã giảm giá & freeship!
+          </p>
         </div>
       )}
 
-      {/* Error and Success Messages */}
-      {couponError && (
-        <p className="mt-2 flex items-center gap-1 text-xs font-bold text-rose-600 animate-shake">
-          <TriangleAlert className="size-3.5 shrink-0" />
-          {couponError}
-        </p>
-      )}
-      {couponSuccess && !couponError && (
-        <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-          <CheckCircle2 className="size-3.5" />
-          {couponSuccess}
-        </p>
-      )}
+      {/* Coupon Selection Dialog */}
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden bg-slate-50">
+          <div className="p-5 bg-white border-b border-slate-100">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <TicketPercent className="size-5 text-emerald-500" />
+                AgriMarket Voucher
+              </DialogTitle>
+            </DialogHeader>
+
+            {/* Manual input code */}
+            <div className="mt-4 flex gap-2">
+              <input
+                type="text"
+                value={manualCode}
+                placeholder="Nhập mã giảm giá..."
+                className="h-10 flex-1 rounded-[8px] border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                onChange={(e) => {
+                  setManualCode(e.target.value);
+                  setManualError("");
+                  setManualSuccess("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleApplyManual();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={validating || !manualCode.trim()}
+                onClick={handleApplyManual}
+                className="h-10 px-4 rounded-[8px] bg-slate-950 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {validating ? <Loader2 className="size-3.5 animate-spin" /> : "Áp dụng"}
+              </button>
+            </div>
+            {manualError && (
+              <p className="mt-1.5 text-xs font-bold text-rose-600 flex items-center gap-1">
+                <TriangleAlert className="size-3.5" />
+                {manualError}
+              </p>
+            )}
+            {manualSuccess && (
+              <p className="mt-1.5 text-xs font-bold text-emerald-600 flex items-center gap-1">
+                <CheckCircle2 className="size-3.5" />
+                {manualSuccess}
+              </p>
+            )}
+          </div>
+
+          {/* Voucher list wrapper */}
+          <div className="max-h-[350px] overflow-y-auto p-5 space-y-5">
+            {/* Freeship Section */}
+            {freeshipCoupons.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã vận chuyển (Chọn tối đa 1)</p>
+                <div className="grid gap-2.5">
+                  {freeshipCoupons.map((coupon) => {
+                    const status = getCouponStatusInfo(coupon);
+                    const isSelected = selectedCoupons.some(c => c.id === coupon.id);
+                    return (
+                      <CouponCard
+                        key={coupon.id}
+                        coupon={coupon}
+                        isSelected={isSelected}
+                        disabled={status.disabled}
+                        disabledReason={status.reason}
+                        onToggle={() => handleToggleCoupon(coupon)}
+                        icon={<Truck className="size-5" />}
+                        themeColor="bg-sky-500"
+                        subtotal={subtotal}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Order discount Section */}
+            {orderCoupons.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã đơn hàng & VIP (Chọn tối đa 1)</p>
+                <div className="grid gap-2.5">
+                  {orderCoupons.map((coupon) => {
+                    const status = getCouponStatusInfo(coupon);
+                    const isSelected = selectedCoupons.some(c => c.id === coupon.id);
+                    return (
+                      <CouponCard
+                        key={coupon.id}
+                        coupon={coupon}
+                        isSelected={isSelected}
+                        disabled={status.disabled}
+                        disabledReason={status.reason}
+                        onToggle={() => handleToggleCoupon(coupon)}
+                        icon={<TicketPercent className="size-5" />}
+                        themeColor="bg-amber-500"
+                        subtotal={subtotal}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Product discount Section */}
+            {productCoupons.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã sản phẩm (Chọn chồng nhiều mã khác sản phẩm)</p>
+                <div className="grid gap-2.5">
+                  {productCoupons.map((coupon) => {
+                    const status = getCouponStatusInfo(coupon);
+                    const isSelected = selectedCoupons.some(c => c.id === coupon.id);
+                    return (
+                      <CouponCard
+                        key={coupon.id}
+                        coupon={coupon}
+                        isSelected={isSelected}
+                        disabled={status.disabled}
+                        disabledReason={status.reason}
+                        onToggle={() => handleToggleCoupon(coupon)}
+                        icon={<Tag className="size-5" />}
+                        themeColor="bg-emerald-500"
+                        subtotal={subtotal}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {allCoupons.length === 0 && (
+              <div className="text-center py-6">
+                <TicketPercent className="size-8 text-slate-300 mx-auto" />
+                <p className="text-sm font-semibold text-slate-400 mt-2">Hiện tại không có voucher nào khả dụng.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer controls */}
+          <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">
+              Đã chọn <span className="text-emerald-600 font-black">{selectedCoupons.length}</span> mã
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="h-9 px-4 rounded-[8px] border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-600 transition"
+              >
+                Trở lại
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="h-9 px-5 rounded-[8px] bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white transition"
+              >
+                Đồng ý
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Thẻ card render voucher cực kỳ đẹp mắt
+function CouponCard({ coupon, isSelected, disabled, disabledReason, onToggle, icon, themeColor, subtotal }) {
+  const label = deriveLabel(coupon.code);
+  const discountAmt = subtotal > 0 ? getEstimatedDiscountAmount(coupon, subtotal) : 0;
+
+  return (
+    <div
+      onClick={() => !disabled && onToggle()}
+      className={`relative flex rounded-[12px] border bg-white overflow-hidden min-h-[90px] shadow-sm select-none transition-all duration-200 ${
+        disabled
+          ? "opacity-50 cursor-not-allowed border-slate-100 bg-slate-50"
+          : isSelected
+          ? "border-emerald-500 ring-2 ring-emerald-500/10 cursor-pointer"
+          : "border-slate-100 hover:border-slate-200 cursor-pointer"
+      }`}
+    >
+      {/* Left side ticket style */}
+      <div className={`w-20 shrink-0 flex flex-col items-center justify-center text-white ${disabled ? "bg-slate-400" : themeColor} px-2`}>
+        {icon}
+        <span className="text-[10px] font-black tracking-widest mt-1 uppercase">{coupon.couponType === "FREESHIP" ? "Ship" : "Save"}</span>
+      </div>
+
+      {/* Ticket circle hole effect */}
+      <div className="absolute left-[76px] top-1/2 -translate-y-1/2 flex flex-col justify-between h-5 w-2 z-10">
+        <div className="w-2 h-2.5 rounded-r-full bg-slate-50 border-r border-t border-b border-slate-100"></div>
+        <div className="w-2 h-2.5 rounded-r-full bg-slate-50 border-r border-t border-b border-slate-100"></div>
+      </div>
+
+      {/* Right Content */}
+      <div className="flex-1 p-3 pl-5 flex flex-col justify-between min-w-0">
+        <div>
+          <div className="flex items-start justify-between gap-2">
+            <h4 className="text-sm font-black text-slate-800 truncate">{label}</h4>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              disabled={disabled}
+              onChange={() => {}} // Div handle click
+              className="size-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+          </div>
+          <p className="font-mono text-xs font-black text-emerald-600 mt-0.5 tracking-wider uppercase">{coupon.code}</p>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px] font-bold text-slate-400">
+          {disabledReason ? (
+            <span className="text-rose-500 flex items-center gap-1 font-black">
+              <TriangleAlert className="size-3" />
+              {disabledReason}
+            </span>
+          ) : (
+            <>
+              {coupon.minOrderValue > 0 ? (
+                <span>Đơn tối thiểu {formatNumber(coupon.minOrderValue)}đ</span>
+              ) : (
+                <span>Mọi giá trị đơn hàng</span>
+              )}
+              {discountAmt > 0 && (
+                <span className="text-emerald-700 font-black">Giảm ~{formatNumber(discountAmt)}đ</span>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1626,6 +1802,7 @@ export default function CheckoutPage() {
                     appliedCoupons={appliedCoupons}
                     subtotal={summary.subtotal}
                     membershipTier={membershipTier}
+                    cartItems={cartItems}
                     onApply={(nextCoupons) => {
                       setAppliedCoupons(nextCoupons);
                       setPreview(null); // reset preview so totals recalculate
