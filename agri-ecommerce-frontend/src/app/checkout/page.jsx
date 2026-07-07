@@ -289,6 +289,9 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal, membershipTi
   /* Filter coupons by input and membership tier */
   const filtered = useMemo(() => {
     const tierAllowed = allCoupons.filter((c) => checkCouponTierAllowed(c.code, membershipTier));
+    console.log("[DEBUG] User Membership Tier in CouponPicker:", membershipTier);
+    console.log("[DEBUG] Coupons allowed for this tier:", tierAllowed.map(c => c.code));
+    
     const q = inputValue.trim().toLowerCase();
     if (!q) return tierAllowed;
     return tierAllowed.filter(
