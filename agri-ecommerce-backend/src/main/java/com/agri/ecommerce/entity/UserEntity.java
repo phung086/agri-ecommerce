@@ -50,6 +50,12 @@ public class UserEntity {
     @Column(name = "google_id", length = 255)
     private String googleId;
 
+    @Column(name = "loyalty_points")
+    private Integer loyaltyPoints;
+
+    @Column(name = "membership_tier")
+    private String membershipTier;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -64,6 +70,14 @@ public class UserEntity {
 
         if (this.status == null) {
             this.status = UserStatus.active;
+        }
+
+        if (this.loyaltyPoints == null) {
+            this.loyaltyPoints = 0;
+        }
+
+        if (this.membershipTier == null) {
+            this.membershipTier = "BRONZE";
         }
     }
 

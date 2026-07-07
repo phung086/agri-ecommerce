@@ -30,6 +30,12 @@ public class CheckoutPreviewResponse {
 
     private BigDecimal discountAmount;
 
+    private BigDecimal couponDiscountAmount;
+
+    private BigDecimal pointsDiscount;
+
+    private Integer pointsUsed;
+
     private BigDecimal shippingFee;
 
     private BigDecimal totalPrice;

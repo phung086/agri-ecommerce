@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface CouponRepository extends JpaRepository<CouponEntity, Long>, JpaSpecificationExecutor<CouponEntity> {
@@ -22,6 +23,21 @@ public interface CouponRepository extends JpaRepository<CouponEntity, Long>, Jpa
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select coupon from CouponEntity coupon where lower(coupon.code) = lower(:code)")
     Optional<CouponEntity> findByCodeIgnoreCaseForUpdate(@Param("code") String code);
+
+    @Query("""
+            select coupon
+            from CouponEntity coupon
+            where coupon.productId = :productId
+              and coupon.couponType = 'PRODUCT_DISCOUNT'
+              and (
+                   lower(coupon.code) like 'xa_hang_%'
+                or lower(coupon.code) like 'tuoi_ngon_%'
+                or lower(coupon.code) like 'bep_nha_%'
+                or lower(coupon.code) like 'mon_ngon_%'
+              )
+            order by coupon.createdAt desc
+            """)
+    List<CouponEntity> findInventoryAutoCouponsByProductId(@Param("productId") Long productId);
 
     long countByActiveTrue();
 

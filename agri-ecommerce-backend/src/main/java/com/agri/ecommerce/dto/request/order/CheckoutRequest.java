@@ -19,4 +19,6 @@ public class CheckoutRequest {
 
     @Size(max = 255, message = "Mã giảm giá không được vượt quá 255 ký tự")
     private String couponCode;
+
+    private Boolean usePoints;
 }

@@ -31,7 +31,8 @@ public class ControllerTestSecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/forgot-password",
                                 "/api/auth/reset-password",
-                                "/api/public/**"
+                                "/api/public/**",
+                                "/api/webhooks/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

@@ -553,7 +553,6 @@ function CartDrawer({
   cart,
   cartOpen,
   subtotal,
-  shippingFee,
   grandTotal,
   cartNotice,
   cartError,
@@ -692,10 +691,10 @@ function CartDrawer({
                 </div>
                 <div className="flex justify-between">
                   <span>Phí giao dự kiến</span>
-                  <span>{shippingFee === 0 ? "Miễn phí" : formatCurrency(shippingFee)}</span>
+                  <span>Tính ở checkout</span>
                 </div>
                 <div className="flex justify-between border-t border-emerald-100 pt-3 text-base font-black text-slate-950">
-                  <span>Tổng cộng</span>
+                  <span>Tổng tạm tính</span>
                   <span>{formatCurrency(grandTotal)}</span>
                 </div>
               </div>
@@ -1351,8 +1350,7 @@ export default function Home() {
     [cart]
   );
 
-  const shippingFee = subtotal === 0 ? 0 : 25000;
-  const grandTotal = subtotal + shippingFee;
+  const grandTotal = subtotal;
   const totalProductPages = Math.max(
     1,
     Math.ceil(Number(totalProducts || 0) / PRODUCTS_PAGE_SIZE)
@@ -2404,9 +2402,9 @@ export default function Home() {
         </Link>
         <div className="rounded-[8px] bg-amber-400 p-5 text-amber-950">
           <CircleDollarSign className="size-7" />
-          <h3 className="mt-5 text-xl font-black">Phí giao tiêu chuẩn 25.000đ</h3>
+          <h3 className="mt-5 text-xl font-black">Phí giao tính theo GHN</h3>
           <p className="mt-2 text-sm leading-6 text-amber-950/75">
-            Giỏ hàng tự tính phí dự kiến để người mua chủ động trước khi thanh toán.
+            Checkout gọi GHN để tính phí theo địa chỉ nhận hàng và kho gửi.
           </p>
         </div>
         <div className="rounded-[8px] bg-slate-950 p-5 text-white">
@@ -2432,7 +2430,6 @@ export default function Home() {
         cart={cart}
         cartOpen={cartOpen}
         subtotal={subtotal}
-        shippingFee={shippingFee}
         grandTotal={grandTotal}
         cartNotice={cartNotice}
         cartError={cartError}

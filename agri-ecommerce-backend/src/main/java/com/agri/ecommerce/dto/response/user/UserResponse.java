@@ -26,4 +26,8 @@ public class UserResponse {
     private Long roleId;
 
     private String roleName;
+
+    private Integer loyaltyPoints;
+
+    private String membershipTier;
 }

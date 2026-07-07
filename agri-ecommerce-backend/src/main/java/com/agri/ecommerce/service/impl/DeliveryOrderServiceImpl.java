@@ -17,6 +17,7 @@ import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.DeliveryOrderService;
 import com.agri.ecommerce.service.PaymentService;
 import com.agri.ecommerce.service.EmailService;
+import com.agri.ecommerce.service.LoyaltyService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -65,6 +66,8 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private final EmailService emailService;
 
     private final OrderMapper orderMapper;
+
+    private final LoyaltyService loyaltyService;
 
     @Override
     @Transactional(readOnly = true)
@@ -168,6 +171,8 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
         OrderEntity savedOrder = orderRepository.save(order);
         paymentService.completeCashPaymentIfPending(savedOrder.getId());
 
+        loyaltyService.awardPointsForPurchase(savedOrder.getUser().getId(), savedOrder.getId(), savedOrder.getTotalPrice());
+
         orderStatusHistoryRepository.save(createStatusHistory(
                 savedOrder,
                 STATUS_DELIVERED,
@@ -224,6 +229,10 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
 
         order.setStatus(nextStatus);
         OrderEntity savedOrder = orderRepository.save(order);
+
+        if ("canceled".equals(nextStatus) && savedOrder.getPointsUsed() != null && savedOrder.getPointsUsed() > 0) {
+            loyaltyService.refundPointsForCancellation(savedOrder.getUser().getId(), savedOrder.getPointsUsed());
+        }
 
         String historyNote = "Lý do: " + order.getDeliveryFailureReason();
         if (cleanBlank(note) != null) {

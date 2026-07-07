@@ -21,6 +21,8 @@ public class UserMapper {
                 .address(user.getAddress())
                 .roleId(role == null ? null : role.getId())
                 .roleName(role == null ? null : role.getName())
+                .loyaltyPoints(user.getLoyaltyPoints())
+                .membershipTier(user.getMembershipTier())
                 .build();
     }
 }

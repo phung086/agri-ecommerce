@@ -17,6 +17,7 @@ import com.agri.ecommerce.repository.ProductRepository;
 import com.agri.ecommerce.repository.ReviewRepository;
 import com.agri.ecommerce.repository.UserRepository;
 import com.agri.ecommerce.service.ReviewService;
+import com.agri.ecommerce.service.LoyaltyService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -45,6 +46,8 @@ public class ReviewServiceImpl implements ReviewService {
     private final OrderItemRepository orderItemRepository;
 
     private final ReviewMapper reviewMapper;
+
+    private final LoyaltyService loyaltyService;
 
     @Override
     @Transactional(readOnly = true)
@@ -92,7 +95,9 @@ public class ReviewServiceImpl implements ReviewService {
                 .comment(cleanBlank(request.getComment()))
                 .build();
 
-        return reviewMapper.toReviewResponse(reviewRepository.save(review));
+        ReviewEntity savedReview = reviewRepository.save(review);
+        loyaltyService.awardPointsForReview(userId, product.getName());
+        return reviewMapper.toReviewResponse(savedReview);
     }
 
     @Override

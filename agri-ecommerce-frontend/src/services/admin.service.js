@@ -203,4 +203,24 @@ export const adminService = {
     const response = await axiosClient.delete(`/admin/contacts/${contactId}`);
     return unwrapApiData(response);
   },
+
+  getBatches: async () => {
+    const response = await axiosClient.get("/admin/inventory/batches");
+    return unwrapApiData(response);
+  },
+
+  createBatch: async (payload) => {
+    const response = await axiosClient.post("/admin/inventory/batches", payload);
+    return unwrapApiData(response);
+  },
+
+  getTransactions: async () => {
+    const response = await axiosClient.get("/admin/inventory/transactions");
+    return unwrapApiData(response);
+  },
+
+  triggerScan: async () => {
+    const response = await axiosClient.post("/admin/inventory/scan");
+    return unwrapApiData(response);
+  },
 };

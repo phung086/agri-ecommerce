@@ -58,6 +58,7 @@ const blankCouponForm = {
   discountPercentage: "",
   discountAmount: "",
   minOrderValue: "",
+  productId: "",
   startsAt: "",
   expiresAt: "",
   usageLimit: "",
@@ -66,6 +67,7 @@ const blankCouponForm = {
 
 const COUPON_TYPE_LABELS = {
   ORDER_DISCOUNT: "Giảm giá đơn hàng",
+  PRODUCT_DISCOUNT: "Giảm giá sản phẩm",
   FREESHIP: "Freeship",
 };
 
@@ -114,6 +116,7 @@ function buildCouponPayload(form) {
     code: form.code.trim().toUpperCase(),
     couponType,
     discountType,
+    productId: couponType === "PRODUCT_DISCOUNT" && form.productId ? Number(form.productId) : null,
     startsAt: toApiDateTime(form.startsAt),
     expiresAt: toApiDateTime(form.expiresAt),
     usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
@@ -121,10 +124,10 @@ function buildCouponPayload(form) {
     active: Boolean(form.active),
   };
 
-  if (couponType === "ORDER_DISCOUNT" && discountType === "FIXED_AMOUNT") {
+  if ((couponType === "ORDER_DISCOUNT" || couponType === "PRODUCT_DISCOUNT") && discountType === "FIXED_AMOUNT") {
     payload.discountPercentage = null;
     payload.discountAmount = Number(form.discountAmount || 0);
-  } else if (couponType === "ORDER_DISCOUNT") {
+  } else if (couponType === "ORDER_DISCOUNT" || couponType === "PRODUCT_DISCOUNT") {
     payload.discountPercentage = Number(form.discountPercentage || 0);
     payload.discountAmount = null;
   } else {
@@ -153,6 +156,7 @@ function getCouponDiscountLabel(coupon) {
 
 export default function AdminCouponsPage() {
   const [coupons, setCoupons] = useState([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
@@ -173,9 +177,11 @@ export default function AdminCouponsPage() {
 
       try {
         const response = await adminService.getCoupons(COUPON_FETCH_PARAMS);
+        const productsResponse = await adminService.getProducts({ size: 100 });
 
         if (mounted) {
           setCoupons(readPageContent(response));
+          setProducts(productsResponse?.content || productsResponse || []);
         }
       } catch (err) {
         if (mounted) {
@@ -267,6 +273,7 @@ export default function AdminCouponsPage() {
       discountPercentage: String(coupon.discountPercentage ?? ""),
       discountAmount: String(coupon.discountAmount ?? ""),
       minOrderValue: String(coupon.minOrderValue ?? ""),
+      productId: coupon.productId || "",
       startsAt: toDateInput(coupon.startsAt),
       expiresAt: toDateInput(coupon.expiresAt),
       usageLimit: String(coupon.usageLimit ?? ""),
@@ -578,11 +585,32 @@ export default function AdminCouponsPage() {
                   className="h-8 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
                 >
                   <option value="ORDER_DISCOUNT">Giảm giá đơn hàng</option>
+                  <option value="PRODUCT_DISCOUNT">Giảm giá sản phẩm</option>
                   <option value="FREESHIP">Freeship</option>
                 </select>
               </div>
 
-              {form.couponType === "ORDER_DISCOUNT" && (
+              {form.couponType === "PRODUCT_DISCOUNT" && (
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="coupon-product">Sản phẩm áp dụng</Label>
+                  <select
+                    id="coupon-product"
+                    value={form.productId}
+                    onChange={(event) => updateForm("productId", event.target.value)}
+                    required
+                    className="h-8 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
+                  >
+                    <option value="">-- Chọn sản phẩm --</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(form.couponType === "ORDER_DISCOUNT" || form.couponType === "PRODUCT_DISCOUNT") && (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="coupon-discount-type">Kiểu giảm</Label>

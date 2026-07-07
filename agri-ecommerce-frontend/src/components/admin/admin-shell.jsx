@@ -60,6 +60,12 @@ const navItems = [
     icon: PackageCheck,
   },
   {
+    href: "/admin/inventory",
+    label: "Quản lý Kho",
+    description: "Nhập xuất, hạn sử dụng",
+    icon: Store,
+  },
+  {
     href: "/admin/orders",
     label: "Đơn hàng",
     description: "Giỏ hàng, thanh toán",

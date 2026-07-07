@@ -353,7 +353,10 @@ const additionalTranslations = {
   "Xóa toàn bộ sản phẩm trong giỏ hàng?": "Remove all products from the cart?",
   "Đã xóa toàn bộ giỏ hàng.": "Cart cleared.",
   "Phí giao dự kiến": "Estimated shipping fee",
+  "Tính khi chọn địa chỉ": "Calculated after selecting an address",
+  "Tính ở checkout": "Calculated at checkout",
   "Tổng cộng": "Grand total",
+  "Tổng tạm tính": "Estimated total",
   "Xóa giỏ hàng": "Clear cart",
   "Giỏ hàng đang trống": "Your cart is empty",
   "Chọn vài món rau củ, trái cây hoặc combo tươi để bắt đầu đơn hàng.":
@@ -725,9 +728,9 @@ const additionalTranslations = {
   "Combo rau củ được cập nhật theo ngày để giảm lãng phí và giữ giá tốt.":
     "Vegetable combos updated daily to reduce waste and keep prices low.",
   "Xem tất cả ưu đãi →": "View all offers →",
-  "Phí giao tiêu chuẩn 25.000đ": "Standard delivery fee 25,000 VND",
-  "Giỏ hàng tự tính phí dự kiến để người mua chủ động trước khi thanh toán.":
-    "The cart estimates delivery fees so buyers can plan before checking out.",
+  "Phí giao tính theo GHN": "Shipping fee calculated by GHN",
+  "Checkout gọi GHN để tính phí theo địa chỉ nhận hàng và kho gửi.":
+    "Checkout calls GHN to calculate the fee from the delivery address and shop origin.",
   "Chất lượng trước tiên": "Quality first",
   "Mỗi sản phẩm hiển thị tồn kho, đơn vị bán và vùng cung ứng dễ đọc.":
     "Each product displays stock, unit, and supply region clearly.",
@@ -812,7 +815,9 @@ const additionalTranslations = {
     "To keep your account secure, do not share your password with anyone",
   "để tiếp tục mua sắm.": "to continue shopping.",
   "Đi tuyến Trần Hưng Đạo $\\rightarrow$ Cửa Đại $\\rightarrow$ Hai Bà Trưng để rút ngắn 2.5km di chuyển.":
-    "Take the Tran Hung Dao $\\rightarrow$ Cua Dai $\\rightarrow$ Hai Ba Trung route to shorten the trip by 2.5 km.",
+    "Take the Tran Hung Dao → Cua Dai → Hai Ba Trung route to shorten the trip by 2.5 km.",
+  "Đi tuyến Trần Hưng Đạo → Cửa Đại → Hai Bà Trưng để rút ngắn 2.5km di chuyển.":
+    "Take the Tran Hung Dao → Cua Dai → Hai Ba Trung route to shorten the trip by 2.5 km.",
   "Địa chỉ chi tiết nhận hàng": "Detailed shipping address",
   "Địa chỉ email": "Email address",
   "Địa chỉ giao hàng mặc định (Việt Nam)": "Default shipping address (Vietnam)",
@@ -938,6 +943,8 @@ const additionalTranslations = {
   "Thông tin thanh toán": "Payment information",
   "Tiền mặt cần nộp về công ty": "Cash to remit to the company",
   "Tìm mã đơn, tên khách, địa chỉ...": "Search order code, customer name, or address...",
+  "Tìm mã đơn, tên khách, số điện thoại, địa chỉ...":
+    "Search order code, customer name, phone number, or address...",
   "Tìm theo danh mục, giá hoặc tên sản phẩm đang có trong kho.":
     "Search by category, price, or product name currently in stock.",
   "Tìm theo mã đơn, khách hàng, địa chỉ": "Search by order code, customer, or address",
@@ -946,6 +953,7 @@ const additionalTranslations = {
   "Tìm theo tên, email, số điện thoại, nội dung":
     "Search by name, email, phone, or content",
   "Tổng đơn hàng giao thành công": "Total successful deliveries",
+  "Tổng sản phẩm": "Product total",
   "Tổng tiền thu hộ (COD):": "Total COD collected:",
   "Trạng thái ca làm việc": "Shift status",
   "Trạng thái hiện tại:": "Current status:",
@@ -960,6 +968,61 @@ const additionalTranslations = {
   "Xác Nhận & Gửi": "Confirm and submit",
   "Xác Nhận Giao Thành Công": "Confirm Successful Delivery",
   "Xóa địa chỉ thành công!": "Address deleted successfully!",
+  "Ảnh minh chứng giao hàng": "Proof of delivery photo",
+  "Bắt đầu giao": "Start delivery",
+  "Bạn xác nhận đã nộp số tiền COD về công ty?":
+    "Do you confirm that the COD cash has been submitted to the company?",
+  "Biển số xe": "Vehicle plate",
+  "Cài đặt": "Settings",
+  "Cài đặt hồ sơ": "Profile settings",
+  "Cập nhật trạng thái": "Update status",
+  "Chỉ đường": "Directions",
+  "Chọn trạng thái mới cho đơn giao hàng": "Choose the new delivery order status",
+  "Chưa có đơn nào được phân công cho tài khoản này.":
+    "No orders have been assigned to this account yet.",
+  "Admin cần phân công nhân viên giao hàng cho đơn Sẵn sàng giao trước khi shipper nhìn thấy.":
+    "An admin must assign a delivery staff member to ready-for-delivery orders before the shipper can see them.",
+  "Các đơn Sẵn sàng giao ở admin phải được chọn nhân viên Delivery User.":
+    "Ready-for-delivery orders in admin must be assigned to Delivery User.",
+  "Đã cập nhật trạng thái giao đơn.": "Delivery status updated.",
+  "Đã mở ứng dụng nhắn tin cho khách hàng.": "Messaging app opened for the customer.",
+  "Đang chờ kế toán xác nhận": "Waiting for accounting confirmation",
+  "Đang lấy hàng": "Picking up",
+  "Giao thành công": "Delivered successfully",
+  "Giao thất bại": "Delivery failed",
+  "Ghi chú giao hàng": "Delivery note",
+  "Gọi khách hàng": "Call customer",
+  "Gửi yêu cầu chốt ca nộp tiền thành công! Đang chờ kế toán xác nhận.":
+    "Cash handover request sent successfully. Waiting for accounting confirmation.",
+  "Hàng bị hỏng": "Goods were damaged",
+  "Hoàn hàng": "Return goods",
+  "Không có ghi chú": "No note",
+  "Không có đơn chờ giao được phân công.": "No waiting delivery orders are assigned.",
+  "Không có đơn đang giao được phân công.": "No in-progress delivery orders are assigned.",
+  "Không có đơn đã giao.": "No delivered orders.",
+  "Không có đơn giao thất bại.": "No failed delivery orders.",
+  "Không liên hệ được khách": "Could not contact customer",
+  "Khách từ chối nhận hàng": "Customer refused delivery",
+  "Khu vực giao hàng": "Delivery area",
+  "Làm mới hồ sơ": "Refresh profile",
+  "Loại phương tiện": "Vehicle type",
+  "Lưu hồ sơ": "Save profile",
+  "Lý do khác": "Other reason",
+  "Nhắn tin khách hàng": "Message customer",
+  "Phương thức thanh toán": "Payment method",
+  "Sai địa chỉ": "Wrong address",
+  "Tất cả": "All",
+  "Thành tiền": "Line total",
+  "Thất bại": "Failed",
+  "Thông tin shipper đang đăng nhập": "Current delivery staff profile",
+  "Thử đổi bộ lọc hoặc từ khóa tìm kiếm.": "Try changing the filter or search keyword.",
+  "Thử lại": "Retry",
+  "Tổng tiền": "Total amount",
+  "Trạng thái đang lấy hàng đã được ghi nhận trên thiết bị.":
+    "Pickup status has been recorded on this device.",
+  "Trạng thái tài khoản": "Account status",
+  "Xác nhận chốt ca": "Confirm shift close",
+  "Xem chi tiết": "View details",
 };
 
 const termTranslations = {

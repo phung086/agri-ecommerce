@@ -83,6 +83,21 @@ public class OrderEntity {
     @Column(name = "tracking_number", length = 100)
     private String trackingNumber;
 
+    @Column(name = "shipping_provider", length = 50)
+    private String shippingProvider;
+
+    @Column(name = "shipping_status", length = 100)
+    private String shippingStatus;
+
+    @Column(name = "shipping_status_updated_at")
+    private LocalDateTime shippingStatusUpdatedAt;
+
+    @Column(name = "points_used")
+    private Integer pointsUsed;
+
+    @Column(name = "points_earned")
+    private Integer pointsEarned;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -109,6 +124,14 @@ public class OrderEntity {
 
         if (this.status == null) {
             this.status = "pending";
+        }
+
+        if (this.pointsUsed == null) {
+            this.pointsUsed = 0;
+        }
+
+        if (this.pointsEarned == null) {
+            this.pointsEarned = 0;
         }
     }
 

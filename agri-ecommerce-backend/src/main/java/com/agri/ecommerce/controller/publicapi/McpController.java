@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * để truy vấn dữ liệu thời gian thực của cửa hàng nông sản.
  */
 @Slf4j
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 @RestController
 @RequestMapping("/api/public/mcp")
 @RequiredArgsConstructor

@@ -32,6 +32,8 @@ import {
   Star,
   Truck,
   UserRound,
+  Coins,
+  Award,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -564,7 +566,7 @@ function PurchaseHistorySection({
 }) {
   const { t } = useLanguage();
   const completedOrders = orders.filter(isCompletedOrder).length;
-  const totalSpent = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
+  const totalSpent = orders.filter(isCompletedOrder).reduce((sum, order) => sum + getOrderTotal(order), 0);
 
   return (
     <section className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
@@ -614,7 +616,7 @@ function PurchaseHistorySection({
         <div className="rounded-[8px] border border-amber-100 bg-amber-50 p-3">
           <div className="flex items-center gap-2 text-amber-700">
             <CreditCard className="size-4" />
-            <span className="text-xs font-black uppercase">{t("Giá trị hiển thị")}</span>
+            <span className="text-xs font-black uppercase">{t("Tổng chi tiêu")}</span>
           </div>
           <p className="mt-2 text-2xl font-black text-amber-950">
             {formatCurrency(totalSpent)}
@@ -1122,31 +1124,41 @@ export default function CustomerProfilePage() {
   const profileInitial = getInitial(profile);
   const profileAvatarUrl = getAssetUrl(form.avatar || profile?.avatar);
 
+  const getTierLabel = (tier) => {
+    const labels = {
+      BRONZE: t("Đồng"),
+      SILVER: t("Bạc"),
+      GOLD: t("Vàng"),
+      PLATINUM: t("Kim Cương"),
+    };
+    return labels[String(tier).toUpperCase()] || tier || t("Đồng");
+  };
+
   const profileStats = useMemo(
     () => [
       {
-        title: "Trạng thái",
-        value: profile?.status || "Chưa có",
-        description: "Trạng thái tài khoản",
-        icon: ShieldCheck,
-        tone: "green",
-      },
-      {
-        title: "Vai trò",
-        value: profile?.roleName || "Customer",
-        description: "Quyền sử dụng hệ thống",
-        icon: UserRound,
-        tone: "blue",
-      },
-      {
-        title: "Liên hệ",
-        value: profile?.phoneNumber || "Chưa thêm",
-        description: "Số điện thoại giao hàng",
-        icon: Phone,
+        title: t("Xu tích lũy"),
+        value: profile?.loyaltyPoints !== undefined ? `${formatNumber(profile.loyaltyPoints)} Xu` : "0 Xu",
+        description: t("Dùng để giảm trừ trực tiếp khi thanh toán"),
+        icon: Coins,
         tone: "amber",
       },
+      {
+        title: t("Hạng thành viên"),
+        value: profile?.membershipTier ? getTierLabel(profile.membershipTier) : t("Đồng"),
+        description: t("Hạng Vàng & Kim Cương được mã VIP"),
+        icon: Award,
+        tone: "rose",
+      },
+      {
+        title: t("Số điện thoại"),
+        value: profile?.phoneNumber || t("Chưa thêm"),
+        description: t("Số điện thoại giao hàng mặc định"),
+        icon: Phone,
+        tone: "green",
+      },
     ],
-    [profile]
+    [profile, t]
   );
 
   const applyProfile = useCallback((nextProfile) => {
@@ -1979,6 +1991,20 @@ export default function CustomerProfilePage() {
                     <h2 className="text-xl font-black text-slate-900">{t("Hồ sơ cá nhân")}</h2>
                     <p className="mt-1 text-sm text-slate-500">{t("Thông tin hồ sơ để bảo mật tài khoản tốt nhất")}</p>
                   </div>
+
+                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                    {profileStats.map((stat, idx) => (
+                      <StatCard
+                        key={idx}
+                        title={stat.title}
+                        value={stat.value}
+                        description={stat.description}
+                        icon={stat.icon}
+                        tone={stat.tone}
+                      />
+                    ))}
+                  </div>
+
                   <div className="grid gap-5 md:grid-cols-[1fr_220px]">
                     <div className="space-y-4">
                       <div className="space-y-2">

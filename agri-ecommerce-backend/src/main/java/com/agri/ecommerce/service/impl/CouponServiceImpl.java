@@ -30,6 +30,7 @@ public class CouponServiceImpl implements CouponService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final String COUPON_TYPE_ORDER_DISCOUNT = "ORDER_DISCOUNT";
     private static final String COUPON_TYPE_FREESHIP = "FREESHIP";
+    private static final String COUPON_TYPE_PRODUCT_DISCOUNT = "PRODUCT_DISCOUNT";
     private static final String DISCOUNT_TYPE_PERCENTAGE = "PERCENTAGE";
     private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
@@ -108,6 +109,7 @@ public class CouponServiceImpl implements CouponService {
                 .discountPercentage(resolveDiscountPercentage(couponType, discountType, request.getDiscountPercentage()))
                 .discountAmount(resolveDiscountAmount(couponType, discountType, request.getDiscountAmount()))
                 .minOrderValue(resolveMinOrderValue(request.getMinOrderValue()))
+                .productId(request.getProductId())
                 .startsAt(request.getStartsAt())
                 .expiresAt(request.getExpiresAt())
                 .usageLimit(request.getUsageLimit())
@@ -135,6 +137,7 @@ public class CouponServiceImpl implements CouponService {
         coupon.setDiscountType(discountType);
         coupon.setDiscountPercentage(resolveDiscountPercentage(couponType, discountType, request.getDiscountPercentage()));
         coupon.setDiscountAmount(resolveDiscountAmount(couponType, discountType, request.getDiscountAmount()));
+        coupon.setProductId(request.getProductId());
         coupon.setMinOrderValue(resolveMinOrderValue(request.getMinOrderValue()));
         coupon.setStartsAt(request.getStartsAt());
         coupon.setExpiresAt(request.getExpiresAt());
@@ -276,7 +279,7 @@ public class CouponServiceImpl implements CouponService {
         }
 
         normalizedType = normalizedType.trim().toUpperCase(Locale.ROOT);
-        if (!Set.of(COUPON_TYPE_ORDER_DISCOUNT, COUPON_TYPE_FREESHIP).contains(normalizedType)) {
+        if (!Set.of(COUPON_TYPE_ORDER_DISCOUNT, COUPON_TYPE_FREESHIP, COUPON_TYPE_PRODUCT_DISCOUNT).contains(normalizedType)) {
             throw new BadRequestException("Loai ma giam gia khong hop le");
         }
 
