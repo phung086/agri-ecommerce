@@ -21,6 +21,7 @@ import {
   formatCurrency,
   formatNumber,
   getApiErrorMessage,
+  getAssetUrl,
   getImageBackground,
 } from "@/lib/admin-utils";
 import {
@@ -739,6 +740,22 @@ export default function ProductDetailPage() {
                           <p className="mt-3 text-sm leading-6 text-slate-600">
                             {review.comment}
                           </p>
+                        )}
+                        {Array.isArray(review.images) && review.images.length > 0 && (
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            {review.images.map((imageUrl, index) => (
+                              <div
+                                key={`${review.id}-image-${index}`}
+                                className="aspect-square overflow-hidden rounded-[8px] border border-emerald-100 bg-white"
+                              >
+                                <img
+                                  src={getAssetUrl(imageUrl)}
+                                  alt={`Anh danh gia ${index + 1}`}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </article>
                     ))}

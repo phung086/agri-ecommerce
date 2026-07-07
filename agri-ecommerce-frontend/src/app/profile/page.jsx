@@ -16,6 +16,7 @@ import {
   Eye,
   EyeOff,
   Home,
+  ImagePlus,
   Leaf,
   LockKeyhole,
   LogOut,
@@ -32,6 +33,7 @@ import {
   Star,
   Truck,
   UserRound,
+  X,
   Coins,
   Award,
 } from "lucide-react";
@@ -113,7 +115,17 @@ const blankPasswordForm = {
 const defaultReviewDraft = {
   rating: 5,
   comment: "",
+  images: [],
 };
+
+const MAX_REVIEW_IMAGES = 3;
+const MAX_REVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
+const REVIEW_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
 function unwrapApiData(response) {
   return response?.data ?? response;
@@ -149,6 +161,18 @@ function getReviewByProduct(reviews, productId) {
       (review) => Number(review.productId) === normalizedProductId
     ) || null
   );
+}
+
+function getReviewDraft(draft) {
+  return {
+    ...defaultReviewDraft,
+    ...(draft || {}),
+    images: Array.isArray(draft?.images) ? draft.images : [],
+  };
+}
+
+function getReviewImageSource(image) {
+  return typeof image === "string" ? image : image?.previewUrl || "";
 }
 
 function getOrderQuantity(order) {
@@ -562,6 +586,8 @@ function PurchaseHistorySection({
   onRefresh,
   onToggleOrder,
   onUpdateReviewDraft,
+  onSelectReviewImages,
+  onRemoveReviewImage,
   onSubmitReview,
 }) {
   const { t } = useLanguage();
@@ -741,9 +767,10 @@ function PurchaseHistorySection({
                               item.productId
                             );
                             const reviewable = isCompletedOrder(order);
-                            const draft =
-                              reviewDrafts[String(item.productId)] ||
-                              defaultReviewDraft;
+                            const draft = getReviewDraft(
+                              reviewDrafts[String(item.productId)]
+                            );
+                            const draftImages = draft.images;
                             const submitting =
                               reviewSubmittingId === String(item.productId);
 
@@ -795,6 +822,23 @@ function PurchaseHistorySection({
                                         {existingReview.comment}
                                       </p>
                                     )}
+                                    {Array.isArray(existingReview.images) &&
+                                      existingReview.images.length > 0 && (
+                                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                          {existingReview.images.map((imageUrl, index) => (
+                                            <div
+                                              key={`${existingReview.id}-image-${index}`}
+                                              className="aspect-square overflow-hidden rounded-[8px] border border-amber-100 bg-white"
+                                            >
+                                              <img
+                                                src={getAssetUrl(imageUrl)}
+                                                alt={`Anh danh gia ${index + 1}`}
+                                                className="h-full w-full object-cover"
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
                                   </div>
                                 )}
 
@@ -857,6 +901,68 @@ function PurchaseHistorySection({
                                       className="mt-3 bg-white"
                                       placeholder="Chia sẻ cảm nhận sau khi nhận hàng..."
                                     />
+                                    <div className="mt-3 space-y-2">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p className="text-xs font-black uppercase text-emerald-700">
+                                          Anh thuc te
+                                        </p>
+                                        <span className="text-xs font-semibold text-muted-foreground">
+                                          {draftImages.length}/{MAX_REVIEW_IMAGES} anh
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                        {draftImages.map((image, index) => (
+                                          <div
+                                            key={image.id || `${item.productId}-image-${index}`}
+                                            className="relative aspect-square overflow-hidden rounded-[8px] border border-emerald-100 bg-white"
+                                          >
+                                            <img
+                                              src={getAssetUrl(getReviewImageSource(image))}
+                                              alt={`Anh danh gia ${index + 1}`}
+                                              className="h-full w-full object-cover"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                onRemoveReviewImage(item.productId, index)
+                                              }
+                                              className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow-sm transition hover:bg-red-50 hover:text-red-600"
+                                              aria-label="Xoa anh danh gia"
+                                            >
+                                              <X className="size-3.5" />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        {draftImages.length < MAX_REVIEW_IMAGES && (
+                                          <label
+                                            htmlFor={`review-images-${order.id}-${item.productId}`}
+                                            className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-[8px] border border-dashed border-emerald-200 bg-white text-center text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
+                                          >
+                                            <ImagePlus className="size-5" />
+                                            <span className="px-1 text-[11px] font-bold">
+                                              Them anh
+                                            </span>
+                                            <input
+                                              id={`review-images-${order.id}-${item.productId}`}
+                                              type="file"
+                                              accept="image/jpeg,image/png,image/webp,image/gif"
+                                              multiple
+                                              className="hidden"
+                                              onChange={(event) => {
+                                                onSelectReviewImages(
+                                                  item.productId,
+                                                  event.target.files
+                                                );
+                                                event.target.value = "";
+                                              }}
+                                            />
+                                          </label>
+                                        )}
+                                      </div>
+                                      <p className="text-xs font-semibold text-muted-foreground">
+                                        Toi da 3 anh, moi anh khong qua 5MB.
+                                      </p>
+                                    </div>
                                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                       <span className="text-xs font-semibold text-muted-foreground">
                                         {(draft.comment || "").length}/255 ký tự
@@ -1638,6 +1744,107 @@ export default function CustomerProfilePage() {
     }));
   }
 
+  function selectReviewImages(productId, fileList) {
+    const key = String(productId);
+    const files = Array.from(fileList || []);
+
+    if (files.length === 0) {
+      return;
+    }
+
+    setReviewDrafts((current) => {
+      const draft = getReviewDraft(current[key]);
+      const remainingSlots = MAX_REVIEW_IMAGES - draft.images.length;
+
+      if (remainingSlots <= 0) {
+        toast.error("Chi duoc them toi da 3 anh danh gia.");
+        return current;
+      }
+
+      const validImages = [];
+      for (const file of files.slice(0, remainingSlots)) {
+        if (!REVIEW_IMAGE_TYPES.has(file.type)) {
+          toast.error("Chi ho tro anh jpg, png, webp hoac gif.");
+          continue;
+        }
+
+        if (file.size > MAX_REVIEW_IMAGE_SIZE) {
+          toast.error(`Anh "${file.name}" vuot qua 5MB.`);
+          continue;
+        }
+
+        validImages.push({
+          id:
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}-${file.name}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+        });
+      }
+
+      if (files.length > remainingSlots) {
+        toast.warning("Chi giu lai toi da 3 anh dau tien.");
+      }
+
+      if (validImages.length === 0) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [key]: {
+          ...draft,
+          images: [...draft.images, ...validImages],
+        },
+      };
+    });
+  }
+
+  function removeReviewImage(productId, imageIndex) {
+    const key = String(productId);
+
+    setReviewDrafts((current) => {
+      const draft = getReviewDraft(current[key]);
+      const removedImage = draft.images[imageIndex];
+      if (removedImage?.previewUrl) {
+        URL.revokeObjectURL(removedImage.previewUrl);
+      }
+
+      return {
+        ...current,
+        [key]: {
+          ...draft,
+          images: draft.images.filter((_, index) => index !== imageIndex),
+        },
+      };
+    });
+  }
+
+  async function uploadDraftReviewImages(images) {
+    const uploadedUrls = [];
+
+    for (const image of images) {
+      if (typeof image === "string") {
+        uploadedUrls.push(image);
+        continue;
+      }
+
+      if (!image?.file) {
+        continue;
+      }
+
+      const uploadedImage = await reviewService.uploadReviewImage(image.file);
+      const imageUrl = uploadedImage?.path || uploadedImage?.url;
+
+      if (imageUrl) {
+        uploadedUrls.push(imageUrl);
+      }
+    }
+
+    return uploadedUrls.slice(0, MAX_REVIEW_IMAGES);
+  }
+
   async function submitReview(event, item) {
     event.preventDefault();
 
@@ -1649,7 +1856,7 @@ export default function CustomerProfilePage() {
     }
 
     const key = String(productId);
-    const draft = reviewDrafts[key] || defaultReviewDraft;
+    const draft = getReviewDraft(reviewDrafts[key]);
     const rating = Number(draft.rating || 0);
 
     if (rating < 1 || rating > 5) {
@@ -1661,14 +1868,21 @@ export default function CustomerProfilePage() {
     setOrdersError("");
 
     try {
+      const uploadedImageUrls = await uploadDraftReviewImages(draft.images);
       const createdReview = await reviewService.createReview({
         productId,
         rating,
         comment: String(draft.comment || "").trim(),
+        images: uploadedImageUrls,
       });
 
       setReviews((current) => [createdReview, ...current]);
       setReviewDrafts((current) => {
+        draft.images.forEach((image) => {
+          if (image?.previewUrl) {
+            URL.revokeObjectURL(image.previewUrl);
+          }
+        });
         const nextDrafts = { ...current };
         delete nextDrafts[key];
         return nextDrafts;
@@ -2400,6 +2614,8 @@ export default function CustomerProfilePage() {
                     }}
                     onToggleOrder={handleToggleOrder}
                     onUpdateReviewDraft={updateReviewDraft}
+                    onSelectReviewImages={selectReviewImages}
+                    onRemoveReviewImage={removeReviewImage}
                     onSubmitReview={submitReview}
                   />
                 </div>
