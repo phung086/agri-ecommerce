@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
 public class CouponMapper {
 
     public CouponResponse toCouponResponse(CouponEntity coupon) {
-        LocalDateTime now = LocalDateTime.now();
+        // Đồng bộ múi giờ UTC+7 cho thời gian hiện tại
+        java.time.ZonedDateTime nowZoned = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        LocalDateTime now = nowZoned.toLocalDateTime();
         boolean expired = coupon.getExpiresAt() != null && coupon.getExpiresAt().isBefore(now);
         boolean notStarted = coupon.getStartsAt() != null && coupon.getStartsAt().isAfter(now);
         boolean usageExhausted = coupon.getUsageLimit() != null
