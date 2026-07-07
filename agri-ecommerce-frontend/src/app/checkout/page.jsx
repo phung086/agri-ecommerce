@@ -22,6 +22,7 @@ import {
   TicketPercent,
   X,
   Coins,
+  Truck,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
