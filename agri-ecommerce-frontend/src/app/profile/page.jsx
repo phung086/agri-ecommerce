@@ -1719,7 +1719,7 @@ export default function CustomerProfilePage() {
 
       setNotice("Đã xóa địa chỉ thành công.");
     } catch (err) {
-      setError(err?.message || "Không thể xóa địa chỉ giao hàng.");
+      setError(err.response?.data?.message || err?.message || "Không thể xóa địa chỉ giao hàng.");
     }
   }
 
@@ -2330,6 +2330,17 @@ export default function CustomerProfilePage() {
                       </Button>
                     )}
                   </div>
+
+                  {notice && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 animate-fade-in">
+                      {notice}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 animate-shake">
+                      {error}
+                    </div>
+                  )}
 
                   {showAddressForm ? (
                     <form onSubmit={handleSaveAddress} className="space-y-4 rounded-xl border border-emerald-100 bg-emerald-50/20 p-4">

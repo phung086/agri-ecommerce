@@ -813,17 +813,12 @@ export default function CheckoutPage() {
     }),
     [couponCode, paymentMethod, selectedAddressId, usePoints]
   );
-  const checkoutQuoteReady =
-    Boolean(preview) &&
-    String(previewShippingAddress?.id || "") ===
-    String(checkoutPayload.shippingAddressId || "");
+  const isAddressSyncing = String(previewShippingAddress?.id || "") !== String(checkoutPayload.shippingAddressId || "");
+  const checkoutQuoteReady = Boolean(preview) && !isAddressSyncing;
   const hasServerDiscount = checkoutQuoteReady && summary.discountAmount > 0;
   const hasServerFreeShipping =
     checkoutQuoteReady && cartItems.length > 0 && summary.shippingFee === 0;
-  const pendingAmountLabel = previewing ? "Đang tính..." : "Đang tính toán...";
-  const totalAmountLabel = checkoutQuoteReady
-    ? formatCurrency(summary.totalPrice)
-    : pendingAmountLabel;
+  const totalAmountLabel = preview ? formatCurrency(summary.totalPrice) : "Đang tính...";
 
   const requestCheckoutPreview = useCallback(
     async ({ showErrors = true, clearMessages = false } = {}) => {
@@ -1938,9 +1933,10 @@ export default function CheckoutPage() {
 
                       <div className="flex justify-between">
                         <span>Phí giao hàng</span>
-                        <span>
-                          {!checkoutQuoteReady
-                            ? pendingAmountLabel
+                        <span className={previewing || isAddressSyncing ? "opacity-60 flex items-center gap-1" : ""}>
+                          {(previewing || isAddressSyncing) && <Loader2 className="size-3 animate-spin text-emerald-600 inline" />}
+                          {!preview
+                            ? "Đang tính..."
                             : summary.shippingFee === 0 && cartItems.length > 0
                               ? "Miễn phí"
                               : formatCurrency(summary.shippingFee)}
@@ -1950,11 +1946,13 @@ export default function CheckoutPage() {
                       <div className="flex justify-between border-t border-emerald-100 pt-3 text-base font-black text-slate-950">
                         <span>Tổng thanh toán</span>
                         <span
-                          className={
+                          className={`transition-all ${
+                            previewing || isAddressSyncing ? "opacity-60" : ""
+                          } ${
                             hasServerDiscount || hasServerFreeShipping
                               ? "text-emerald-700"
                               : ""
-                          }
+                          }`}
                         >
                           {totalAmountLabel}
                         </span>
