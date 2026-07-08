@@ -29,6 +29,22 @@ export const orderService = {
     return unwrapApiData(response);
   },
 
+  previewGuestCheckout: async (payload) => {
+    const response = await axiosClient.post(
+      "/public/orders/checkout/preview",
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
+  guestCheckout: async (payload) => {
+    const response = await axiosClient.post(
+      "/public/orders/checkout",
+      payload
+    );
+    return unwrapApiData(response);
+  },
+
   createVnpayPaymentUrl: async (orderId, payload = {}) => {
     const response = await axiosClient.post(
       `/customer/orders/${orderId}/payment/vnpay`,

@@ -1,11 +1,13 @@
 package com.agri.ecommerce.service.impl;
 
 import com.agri.ecommerce.dto.request.order.CheckoutRequest;
+import com.agri.ecommerce.dto.request.order.CheckoutItemRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.order.CheckoutPreviewItemResponse;
 import com.agri.ecommerce.dto.response.order.CheckoutPreviewResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
+import com.agri.ecommerce.dto.response.order.ShippingAddressResponse;
 import com.agri.ecommerce.config.VnpayProperties;
 import com.agri.ecommerce.entity.*;
 import com.agri.ecommerce.common.exception.BadRequestException;
@@ -54,6 +56,8 @@ public class OrderServiceImpl implements OrderService {
     private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
     private static final String PAYMENT_METHOD_VNPAY = "vnpay";
     private static final String SHIPPING_PROVIDER_GHN = "GHN";
+    private static final String CHECKOUT_TYPE_CUSTOMER = "CUSTOMER";
+    private static final String CHECKOUT_TYPE_GUEST = "GUEST";
     private static final BigDecimal DEFAULT_SHIPPING_FEE = new BigDecimal("25000.00");
     private static final double DEFAULT_ITEM_WEIGHT_GRAMS = 500.0d;
     private static final int MAX_PAGE_SIZE = 100;
@@ -359,6 +363,145 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public CheckoutPreviewResponse previewGuestCheckout(CheckoutRequest request) {
+        validateGuestCheckoutRequest(request);
+        String paymentMethod = normalizePaymentMethod(request.getPaymentMethod());
+        validateGuestPaymentMethod(paymentMethod);
+
+        Map<Long, Integer> quantityByProductId = aggregateGuestItemQuantities(request);
+        Map<Long, ProductEntity> productsById = productRepository.findAllById(quantityByProductId.keySet())
+                .stream()
+                .collect(Collectors.toMap(ProductEntity::getId, Function.identity()));
+
+        List<CheckoutPreviewItemResponse> previewItems = quantityByProductId.entrySet().stream()
+                .map(entry -> toCheckoutPreviewItem(productsById.get(entry.getKey()), entry.getValue()))
+                .toList();
+        boolean allItemsAvailable = previewItems.stream().allMatch(CheckoutPreviewItemResponse::isAvailable);
+        int totalQuantity = previewItems.stream()
+                .mapToInt(item -> item.getRequestedQuantity() == null ? 0 : item.getRequestedQuantity())
+                .sum();
+        BigDecimal subtotal = previewItems.stream()
+                .map(CheckoutPreviewItemResponse::getLineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal shippingFee = calculateBaseShippingFee(request.getGuestCity(), request.getGuestAddress(), totalQuantity);
+        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            shippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal totalPrice = subtotal.add(shippingFee).setScale(2, RoundingMode.HALF_UP);
+        List<String> warnings = new ArrayList<>();
+        warnings.add("Mua nhanh khong can tai khoan: khach vang lai khong ap dung ma giam gia, xu tich luy hoac thang hang.");
+        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            warnings.add("Don hang tu 100.000d duoc mien phi van chuyen.");
+        }
+
+        return CheckoutPreviewResponse.builder()
+                .canCheckout(allItemsAvailable)
+                .paymentMethod(paymentMethod)
+                .couponCode(null)
+                .couponValid(false)
+                .couponMessage("Guest checkout does not use coupons")
+                .shippingAddress(toGuestShippingAddressResponse(request))
+                .totalQuantity(totalQuantity)
+                .subtotal(subtotal)
+                .discountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                .couponDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                .pointsDiscount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                .pointsUsed(0)
+                .shippingFee(shippingFee)
+                .totalPrice(totalPrice)
+                .items(previewItems)
+                .warnings(warnings)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse guestCheckout(CheckoutRequest request) {
+        validateGuestCheckoutRequest(request);
+        String paymentMethod = normalizePaymentMethod(request.getPaymentMethod());
+        validateGuestPaymentMethod(paymentMethod);
+
+        Map<Long, Integer> quantityByProductId = aggregateGuestItemQuantities(request);
+        List<ProductEntity> lockedProducts = productRepository.findAllByIdInForUpdate(quantityByProductId.keySet());
+        Map<Long, ProductEntity> productsById = lockedProducts.stream()
+                .collect(Collectors.toMap(ProductEntity::getId, Function.identity()));
+        List<CheckoutItem> checkoutItems = buildCheckoutItems(quantityByProductId, productsById);
+        BigDecimal subtotal = checkoutItems.stream()
+                .map(CheckoutItem::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        int totalQuantity = checkoutItems.stream().mapToInt(CheckoutItem::quantity).sum();
+        BigDecimal shippingFee = calculateBaseShippingFee(request.getGuestCity(), request.getGuestAddress(), totalQuantity);
+        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            shippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal totalPrice = subtotal.add(shippingFee).setScale(2, RoundingMode.HALF_UP);
+
+        OrderEntity order = orderRepository.save(OrderEntity.builder()
+                .user(null)
+                .shippingAddress(null)
+                .checkoutType(CHECKOUT_TYPE_GUEST)
+                .guestEmail(cleanBlank(request.getGuestEmail()))
+                .guestToken(UUID.randomUUID().toString().replace("-", ""))
+                .shippingName(cleanBlank(request.getGuestFullName()))
+                .shippingPhone(cleanBlank(request.getGuestPhone()))
+                .shippingAddressDetail(cleanBlank(request.getGuestAddress()))
+                .shippingCity(cleanBlank(request.getGuestCity()))
+                .subtotal(subtotal)
+                .discountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                .shippingFee(shippingFee)
+                .coupon(null)
+                .couponCode(null)
+                .totalPrice(totalPrice)
+                .status(ORDER_PENDING)
+                .pointsUsed(0)
+                .pointsEarned(0)
+                .build());
+
+        List<OrderItemEntity> orderItems = checkoutItems.stream()
+                .map(checkoutItem -> OrderItemEntity.builder()
+                        .order(order)
+                        .product(checkoutItem.product())
+                        .quantity(checkoutItem.quantity())
+                        .price(checkoutItem.price())
+                        .build())
+                .toList();
+        List<OrderItemEntity> savedOrderItems = orderItemRepository.saveAll(orderItems);
+
+        PaymentEntity payment = paymentRepository.save(PaymentEntity.builder()
+                .order(order)
+                .paymentMethod(paymentMethod)
+                .amount(totalPrice)
+                .status(PAYMENT_PENDING)
+                .build());
+
+        String orderNote = "Guest created order";
+        try {
+            String trackingCode = shippingCarrierService.createShippingLabel(order);
+            order.setTrackingNumber(trackingCode);
+            order.setShippingProvider(SHIPPING_PROVIDER_GHN);
+            orderRepository.save(order);
+            orderNote += ". Da tao van don tren GHN. Ma van don: " + trackingCode;
+        } catch (Exception ex) {
+            log.error("[Order Service] Failed to create GHN shipping label for guest order: {}", ex.getMessage());
+        }
+
+        OrderStatusHistoryEntity history = orderStatusHistoryRepository.save(createStatusHistory(
+                order,
+                ORDER_PENDING,
+                orderNote
+        ));
+
+        checkoutItems.forEach(this::decreaseProductStock);
+        productRepository.saveAll(checkoutItems.stream().map(CheckoutItem::product).toList());
+        sendInvoiceAfterCommit(order);
+
+        return orderMapper.toOrderResponse(order, savedOrderItems, payment, List.of(history));
+    }
+
+    @Override
     @Transactional
     public OrderResponse cancelOrder(Long userId, Long orderId, OrderStatusNoteRequest request) {
         OrderEntity order = findOrderByIdAndUserIdForUpdate(orderId, userId);
@@ -433,7 +576,34 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private void notifyUser(Long userId, String message, String link) {
+        if (userId == null) {
+            return;
+        }
         notificationService.createNotification(userId, NOTIFICATION_TYPE_ORDER, message, link);
+    }
+
+    private void sendInvoiceAfterCommit(OrderEntity order) {
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                emailService.sendOrderInvoice(order);
+                            } catch (Exception ex) {
+                                log.error("[Order Service] Failed to send invoice email after commit: {}", ex.getMessage());
+                            }
+                        }
+                    }
+            );
+            return;
+        }
+
+        try {
+            emailService.sendOrderInvoice(order);
+        } catch (Exception ex) {
+            log.error("[Order Service] Failed to send invoice email: {}", ex.getMessage());
+        }
     }
 
     private String buildOrderLink(Long orderId) {
@@ -555,6 +725,71 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return quantityByProductId;
+    }
+
+    private Map<Long, Integer> aggregateGuestItemQuantities(CheckoutRequest request) {
+        List<CheckoutItemRequest> items = request == null ? null : request.getItems();
+        if (items == null || items.isEmpty()) {
+            throw new BadRequestException("Gio hang dang trong, khong the dat hang");
+        }
+
+        Map<Long, Integer> quantityByProductId = new LinkedHashMap<>();
+        for (CheckoutItemRequest item : items) {
+            if (item == null || item.getProductId() == null) {
+                throw new BadRequestException("San pham trong gio hang khong hop le");
+            }
+
+            Integer quantity = item.getQuantity();
+            if (quantity == null || quantity <= 0) {
+                throw new BadRequestException("So luong san pham khong hop le");
+            }
+
+            quantityByProductId.merge(item.getProductId(), quantity, Integer::sum);
+        }
+
+        return quantityByProductId;
+    }
+
+    private void validateGuestCheckoutRequest(CheckoutRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Thong tin dat hang khong hop le");
+        }
+
+        if (cleanBlank(request.getCouponCode()) != null || Boolean.TRUE.equals(request.getUsePoints())) {
+            throw new BadRequestException("Khach vang lai khong the ap dung ma giam gia hoac xu tich luy");
+        }
+
+        if (cleanBlank(request.getGuestFullName()) == null) {
+            throw new BadRequestException("Vui long nhap ten nguoi nhan");
+        }
+
+        String phone = cleanBlank(request.getGuestPhone());
+        if (phone == null || !phone.matches("^0\\d{9}$")) {
+            throw new BadRequestException("So dien thoai phai gom 10 chu so va bat dau bang 0");
+        }
+
+        if (cleanBlank(request.getGuestCity()) == null || cleanBlank(request.getGuestAddress()) == null) {
+            throw new BadRequestException("Vui long nhap day du dia chi giao hang");
+        }
+
+        aggregateGuestItemQuantities(request);
+    }
+
+    private void validateGuestPaymentMethod(String paymentMethod) {
+        if (!"cash".equalsIgnoreCase(paymentMethod)) {
+            throw new BadRequestException("Khach vang lai hien chi ho tro thanh toan khi nhan hang");
+        }
+    }
+
+    private ShippingAddressResponse toGuestShippingAddressResponse(CheckoutRequest request) {
+        return ShippingAddressResponse.builder()
+                .id(null)
+                .fullName(cleanBlank(request.getGuestFullName()))
+                .phone(cleanBlank(request.getGuestPhone()))
+                .address(cleanBlank(request.getGuestAddress()))
+                .city(cleanBlank(request.getGuestCity()))
+                .defaultAddress(false)
+                .build();
     }
 
     private List<CheckoutItem> buildCheckoutItems(Map<Long, Integer> quantityByProductId, Map<Long, ProductEntity> productsById) {
@@ -915,10 +1150,18 @@ public class OrderServiceImpl implements OrderService {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
+        return calculateBaseShippingFee(shippingAddress.getCity(), shippingAddress.getAddress(), totalQuantity);
+    }
+
+    private BigDecimal calculateBaseShippingFee(String city, String address, int totalQuantity) {
+        if (totalQuantity <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
         BigDecimal shippingFee = shippingCarrierService.calculateShippingFee(
-                shippingAddress.getCity(),
-                getAddressSegmentFromEnd(shippingAddress.getAddress(), 1),
-                getAddressSegmentFromEnd(shippingAddress.getAddress(), 2),
+                city,
+                getAddressSegmentFromEnd(address, 1),
+                getAddressSegmentFromEnd(address, 2),
                 Math.max(totalQuantity, 1) * DEFAULT_ITEM_WEIGHT_GRAMS
         );
 
@@ -1225,6 +1468,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private ShippingAddressEntity findShippingAddressByIdAndUserId(Long addressId, Long userId) {
+        if (addressId == null) {
+            throw new BadRequestException("Vui long chon dia chi giao hang");
+        }
+
         return shippingAddressRepository.findByIdAndUser_Id(addressId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy địa chỉ giao hàng với id: " + addressId));
     }

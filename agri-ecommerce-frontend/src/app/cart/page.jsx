@@ -30,6 +30,13 @@ import {
   getAuthSession,
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
+import {
+  clearGuestCart,
+  mapGuestCartItemsToCartResponse,
+  readGuestCart,
+  removeGuestCartItem,
+  updateGuestCartItem,
+} from "@/lib/guest-cart-storage";
 import { useLanguage } from "@/i18n/language-provider";
 import { localizeCartItem } from "@/i18n/localized-fields";
 import { cartService } from "@/services/cart.service";
@@ -52,7 +59,10 @@ async function fetchCartSnapshot() {
   const session = getActiveCustomerSession();
 
   if (!session) {
-    return { authStatus: "unauthenticated", cart: null };
+    return {
+      authStatus: "guest",
+      cart: mapGuestCartItemsToCartResponse(readGuestCart()),
+    };
   }
 
   const response = await cartService.getCart();
@@ -169,10 +179,15 @@ export default function CartPage() {
     setError("");
 
     try {
-      const response = await cartService.updateItem(item.id, {
-        quantity: nextQuantity,
-      });
-      setCart(response);
+      if (authStatus === "guest") {
+        const nextItems = updateGuestCartItem(item.productId, nextQuantity);
+        setCart(mapGuestCartItemsToCartResponse(nextItems));
+      } else {
+        const response = await cartService.updateItem(item.id, {
+          quantity: nextQuantity,
+        });
+        setCart(response);
+      }
       setNotice("Đã cập nhật giỏ hàng.");
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -187,8 +202,13 @@ export default function CartPage() {
     setError("");
 
     try {
-      const response = await cartService.removeItem(item.id);
-      setCart(response);
+      if (authStatus === "guest") {
+        const nextItems = removeGuestCartItem(item.productId);
+        setCart(mapGuestCartItemsToCartResponse(nextItems));
+      } else {
+        const response = await cartService.removeItem(item.id);
+        setCart(response);
+      }
       setNotice(`Đã xóa "${item.productName}" khỏi giỏ hàng.`);
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -213,8 +233,13 @@ export default function CartPage() {
     setError("");
 
     try {
-      const response = await cartService.clearCart();
-      setCart(response);
+      if (authStatus === "guest") {
+        clearGuestCart();
+        setCart(mapGuestCartItemsToCartResponse([]));
+      } else {
+        const response = await cartService.clearCart();
+        setCart(response);
+      }
       setNotice("Đã xóa toàn bộ giỏ hàng.");
     } catch (err) {
       setError(getApiErrorMessage(err));

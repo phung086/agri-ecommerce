@@ -33,6 +33,10 @@ public class OrderResponse {
 
     private String status;
 
+    private String checkoutType;
+
+    private String guestEmail;
+
     private BigDecimal subtotal;
 
     private BigDecimal discountAmount;

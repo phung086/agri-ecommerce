@@ -4,9 +4,11 @@ import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.config.VnpayProperties;
 import com.agri.ecommerce.dto.request.order.CheckoutRequest;
+import com.agri.ecommerce.dto.request.order.CheckoutItemRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
+import com.agri.ecommerce.dto.response.order.CheckoutPreviewResponse;
 import com.agri.ecommerce.entity.CartItemEntity;
 import com.agri.ecommerce.entity.CouponEntity;
 import com.agri.ecommerce.entity.OrderEntity;
@@ -52,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -596,5 +599,105 @@ class OrderServiceImplTest {
         assertThat(response.getPointsUsed()).isEqualTo(5000);
         assertThat(response.getDiscountAmount()).isEqualByComparingTo("5000.00");
         assertThat(response.getTotalPrice()).isEqualByComparingTo("70000.00");
+    }
+
+    @Test
+    void previewGuestCheckout_withValidRequest_shouldReturnCalculatedPreview() {
+        // Given
+        CheckoutRequest request = new CheckoutRequest();
+        request.setPaymentMethod("cash");
+        request.setGuestFullName("Guest User");
+        request.setGuestPhone("0987654321");
+        request.setGuestCity("Hanoi");
+        request.setGuestAddress("123 Street");
+        
+        CheckoutItemRequest item = new CheckoutItemRequest();
+        item.setProductId(10L);
+        item.setQuantity(1);
+        request.setItems(List.of(item));
+
+        ProductEntity product = product("in_stock", 5);
+        when(productRepository.findAllById(any())).thenReturn(List.of(product));
+        when(shippingCarrierService.calculateShippingFee(any(), any(), any(), anyDouble())).thenReturn(new BigDecimal("30000.00"));
+
+        // When
+        CheckoutPreviewResponse response = orderService.previewGuestCheckout(request);
+
+        // Then
+        assertThat(response.isCanCheckout()).isTrue();
+        assertThat(response.getSubtotal()).isEqualByComparingTo("50000.00"); // 50k * 1
+        assertThat(response.getShippingFee()).isEqualByComparingTo("30000.00");
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("80000.00");
+        assertThat(response.getPointsUsed()).isEqualTo(0);
+        assertThat(response.getDiscountAmount()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void previewGuestCheckout_withCouponCode_shouldThrowBadRequestException() {
+        // Given
+        CheckoutRequest request = new CheckoutRequest();
+        request.setPaymentMethod("cash");
+        request.setGuestFullName("Guest User");
+        request.setGuestPhone("0987654321");
+        request.setGuestCity("Hanoi");
+        request.setGuestAddress("123 Street");
+        request.setCouponCode("DISCOUNT50");
+        
+        CheckoutItemRequest item = new CheckoutItemRequest();
+        item.setProductId(10L);
+        item.setQuantity(2);
+        request.setItems(List.of(item));
+
+        // When / Then
+        assertThatThrownBy(() -> orderService.previewGuestCheckout(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Khach vang lai khong the ap dung ma giam gia hoac xu tich luy");
+    }
+
+    @Test
+    void guestCheckout_withValidCodRequest_shouldCreateOrder() {
+        // Given
+        CheckoutRequest request = new CheckoutRequest();
+        request.setPaymentMethod("cash");
+        request.setGuestFullName("Guest User");
+        request.setGuestPhone("0987654321");
+        request.setGuestCity("Hanoi");
+        request.setGuestAddress("123 Street");
+        
+        CheckoutItemRequest itemRequest = new CheckoutItemRequest();
+        itemRequest.setProductId(10L);
+        itemRequest.setQuantity(2);
+        request.setItems(List.of(itemRequest));
+
+        ProductEntity product = product("in_stock", 5);
+        when(productRepository.findAllByIdInForUpdate(any())).thenReturn(List.of(product));
+        when(shippingCarrierService.calculateShippingFee(any(), any(), any(), anyDouble())).thenReturn(new BigDecimal("30000.00"));
+        when(shippingCarrierService.createShippingLabel(any(OrderEntity.class))).thenReturn("GHN-GUEST-123");
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderItemRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentRepository.save(any(PaymentEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderStatusHistoryRepository.save(any(OrderStatusHistoryEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+        when(orderMapper.toOrderResponse(any(OrderEntity.class), anyList(), any(PaymentEntity.class), anyList()))
+                .thenAnswer(invocation -> {
+                    OrderEntity order = invocation.getArgument(0);
+                    return OrderResponse.builder()
+                            .id(order.getId())
+                            .status(order.getStatus())
+                            .checkoutType(order.getCheckoutType())
+                            .guestEmail(order.getGuestEmail())
+                            .totalPrice(order.getTotalPrice())
+                            .trackingNumber(order.getTrackingNumber())
+                            .build();
+                });
+
+        // When
+        OrderResponse response = orderService.guestCheckout(request);
+
+        // Then
+        assertThat(product.getStock()).isEqualTo(3); // 5 - 2
+        assertThat(response.getCheckoutType()).isEqualTo("GUEST");
+        assertThat(response.getTrackingNumber()).isEqualTo("GHN-GUEST-123");
+        verify(emailService).sendOrderInvoice(any(OrderEntity.class));
     }
 }

@@ -50,6 +50,12 @@ import {
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
 import {
+  clearGuestCart,
+  mapGuestCartItemsToCartResponse,
+  readGuestCart,
+  toGuestCheckoutItems,
+} from "@/lib/guest-cart-storage";
+import {
   PHONE_PATTERN_SOURCE,
   isValidPhoneNumber,
 } from "@/lib/phone-utils";
@@ -710,6 +716,7 @@ export default function CheckoutPage() {
   const [addressBookVersion, setAddressBookVersion] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [appliedCoupons, setAppliedCoupons] = useState([]); // CouponResponse[]
+  const [guestEmail, setGuestEmail] = useState("");
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [membershipTier, setMembershipTier] = useState("BRONZE");
   const [usePoints, setUsePoints] = useState(false);
@@ -741,6 +748,7 @@ export default function CheckoutPage() {
   const cartTotal = Number(cart?.totalAmount || 0);
   const cartQuantity = Number(cart?.totalQuantity || 0);
   const previewShippingAddress = preview?.shippingAddress || null;
+  const isGuestCheckout = authStatus === "guest";
 
   const selectedProvinceForForm = useMemo(
     () => findAddressOption(VIETNAM_PROVINCES, addressForm.provinceCode),
@@ -804,15 +812,38 @@ export default function CheckoutPage() {
 
   const couponCode = appliedCoupons.map((c) => c.code).join(",");
 
-  const checkoutPayload = useMemo(
-    () => ({
+  const checkoutPayload = useMemo(() => {
+    if (isGuestCheckout) {
+      return {
+        paymentMethod: "cash",
+        items: cartItems.map((item) => ({
+          productId: Number(item.productId),
+          quantity: Number(item.quantity || 0),
+        })),
+        guestFullName: addressForm.fullName.trim(),
+        guestPhone: addressForm.phone.trim(),
+        guestEmail: guestEmail.trim() || undefined,
+        guestAddress: buildDetailedAddress(addressForm),
+        guestCity: addressForm.provinceName.trim(),
+      };
+    }
+
+    return {
       shippingAddressId: selectedAddressId ? Number(selectedAddressId) : null,
       paymentMethod,
       couponCode: couponCode.trim() || undefined,
       usePoints,
-    }),
-    [couponCode, paymentMethod, selectedAddressId, usePoints]
-  );
+    };
+  }, [
+    addressForm,
+    cartItems,
+    couponCode,
+    guestEmail,
+    isGuestCheckout,
+    paymentMethod,
+    selectedAddressId,
+    usePoints,
+  ]);
   const isAddressSyncing = String(previewShippingAddress?.id || "") !== String(checkoutPayload.shippingAddressId || "");
   const checkoutQuoteReady = Boolean(preview) && !isAddressSyncing;
   const hasServerDiscount = checkoutQuoteReady && summary.discountAmount > 0;
@@ -822,7 +853,23 @@ export default function CheckoutPage() {
 
   const requestCheckoutPreview = useCallback(
     async ({ showErrors = true, clearMessages = false } = {}) => {
-      if (!checkoutPayload.shippingAddressId) {
+      if (isGuestCheckout) {
+        const hasGuestAddress =
+          checkoutPayload.guestFullName &&
+          checkoutPayload.guestPhone &&
+          checkoutPayload.guestCity &&
+          checkoutPayload.guestAddress &&
+          addressForm.districtCode &&
+          addressForm.wardCode;
+
+        if (!hasGuestAddress || !validateAddress()) {
+          setPreview(null);
+          if (showErrors) {
+            setError("Vui long nhap day du ten, so dien thoai va dia chi nhan hang.");
+          }
+          return null;
+        }
+      } else if (!checkoutPayload.shippingAddressId) {
         setPreview(null);
         if (showErrors) {
           setError("Vui lòng chọn hoặc thêm địa chỉ giao hàng.");
@@ -848,7 +895,9 @@ export default function CheckoutPage() {
       }
 
       try {
-        const response = await orderService.previewCheckout(checkoutPayload);
+        const response = isGuestCheckout
+          ? await orderService.previewGuestCheckout(checkoutPayload)
+          : await orderService.previewCheckout(checkoutPayload);
 
         if (previewRequestSeqRef.current !== requestSeq) {
           return null;
@@ -876,7 +925,7 @@ export default function CheckoutPage() {
         }
       }
     },
-    [cartItems.length, checkoutPayload, couponCode]
+    [addressForm.districtCode, addressForm.wardCode, cartItems.length, checkoutPayload, couponCode, isGuestCheckout]
   );
 
   /* Load cart + addresses on mount */
@@ -889,7 +938,18 @@ export default function CheckoutPage() {
 
       if (!session) {
         if (!cancelled) {
-          setAuthStatus("unauthenticated");
+          setAuthStatus("guest");
+          setCart(mapGuestCartItemsToCartResponse(readGuestCart()));
+          setAddresses([]);
+          setSelectedAddressId("");
+          setPaymentMethod("cash");
+          setAppliedCoupons([]);
+          setUsePoints(false);
+          setLoyaltyPoints(0);
+          setMembershipTier("GUEST");
+          setShowAddressForm(true);
+          setAddressForm(createBlankAddressForm());
+          setPreview(null);
           setLoading(false);
         }
         return;
@@ -1038,6 +1098,11 @@ export default function CheckoutPage() {
 
   async function handleSaveAddress(event) {
     event.preventDefault();
+    if (isGuestCheckout) {
+      await requestCheckoutPreview({ showErrors: true, clearMessages: true });
+      return;
+    }
+
     if (!validateAddress()) return;
 
     setSavingAddress(true);
@@ -1300,6 +1365,7 @@ export default function CheckoutPage() {
       }
 
       if (
+        !isGuestCheckout &&
         String(currentPreview.shippingAddress?.id || "") !==
         String(checkoutPayload.shippingAddressId || "")
       ) {
@@ -1314,20 +1380,27 @@ export default function CheckoutPage() {
         return;
       }
 
-      const order = await orderService.checkout(checkoutPayload);
+      const order = isGuestCheckout
+        ? await orderService.guestCheckout(checkoutPayload)
+        : await orderService.checkout(checkoutPayload);
 
       setCreatedOrder(order);
       setPreview(null);
 
-      if (paymentMethod === "vnpay") {
+      if (!isGuestCheckout && paymentMethod === "vnpay") {
         setNotice(`Đã tạo đơn hàng ${order.trackingNumber || '#' + order.id}. Đang chuyển sang VNPay...`);
         const payment = await orderService.createVnpayPaymentUrl(order.id);
         window.location.assign(payment.paymentUrl);
         return;
       }
 
-      const nextCart = await cartService.getCart();
-      setCart(nextCart);
+      if (isGuestCheckout) {
+        clearGuestCart();
+        setCart(mapGuestCartItemsToCartResponse([]));
+      } else {
+        const nextCart = await cartService.getCart();
+        setCart(nextCart);
+      }
       setNotice(`Đã tạo đơn hàng ${order.trackingNumber || '#' + order.id}.`);
     } catch (err) {
       setError(getErrorMessage(err, "Không thể tạo đơn hàng."));
@@ -1746,6 +1819,24 @@ export default function CheckoutPage() {
                             "Nhập 10 chữ số, bắt đầu bằng số 0."}
                         </p>
                       </div>
+                      {isGuestCheckout && (
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="guest-email">Email nhan hoa don (khong bat buoc)</Label>
+                          <Input
+                            id="guest-email"
+                            type="email"
+                            value={guestEmail}
+                            onChange={(e) => {
+                              setGuestEmail(e.target.value);
+                              setPreview(null);
+                            }}
+                            placeholder="bo trong neu khong dung email"
+                          />
+                          <p className="text-xs font-semibold text-slate-500">
+                            Khach vang lai van dat duoc hang neu khong nhap email.
+                          </p>
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <Label htmlFor="address-province">Tỉnh/thành phố</Label>
                         <select

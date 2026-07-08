@@ -192,7 +192,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
                 buildDeliveryOrderLink(savedOrder.getId())
         );
         notifyUser(
-                savedOrder.getUser().getId(),
+                savedOrder.getUser() == null ? null : savedOrder.getUser().getId(),
                 NOTIFICATION_TYPE_ORDER,
                 "Đơn hàng #" + savedOrder.getId() + " đã được phân công nhân viên giao hàng",
                 buildOrderLink(savedOrder.getId())
@@ -266,13 +266,15 @@ public class AdminOrderServiceImpl implements AdminOrderService {
                 order.setDeliveredAt(LocalDateTime.now());
             }
             paymentService.completeCashPaymentIfPending(order.getId());
-            loyaltyService.awardPointsForPurchase(order.getUser().getId(), order.getId(), order.getTotalPrice());
+            if (order.getUser() != null) {
+                loyaltyService.awardPointsForPurchase(order.getUser().getId(), order.getId(), order.getTotalPrice());
+            }
         }
 
         if (STATUS_CANCELED.equals(nextStatus)) {
             restoreInventoryAndCoupon(order);
             settlePaymentForCanceledOrder(order, note);
-            if (order.getPointsUsed() != null && order.getPointsUsed() > 0) {
+            if (order.getUser() != null && order.getPointsUsed() != null && order.getPointsUsed() > 0) {
                 loyaltyService.refundPointsForCancellation(order.getUser().getId(), order.getPointsUsed());
             }
         }
@@ -283,7 +285,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
 
     private void notifyStatusChange(OrderEntity order, String nextStatus) {
         Long orderId = order.getId();
-        Long customerId = order.getUser().getId();
+        Long customerId = order.getUser() == null ? null : order.getUser().getId();
 
         if (STATUS_PROCESSING.equals(nextStatus)) {
             notifyUser(customerId, NOTIFICATION_TYPE_ORDER, "Đơn hàng #" + orderId + " đã được xác nhận", buildOrderLink(orderId));
@@ -320,6 +322,9 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     }
 
     private void notifyUser(Long userId, String type, String message, String link) {
+        if (userId == null) {
+            return;
+        }
         notificationService.createNotification(userId, type, message, link);
     }
 
@@ -377,7 +382,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
         PaymentEntity savedPayment = paymentRepository.save(payment);
 
         notifyUser(
-                savedPayment.getOrder().getUser().getId(),
+                savedPayment.getOrder().getUser() == null ? null : savedPayment.getOrder().getUser().getId(),
                 NOTIFICATION_TYPE_PAYMENT,
                 buildRefundNotification(savedPayment.getOrder().getId(), note),
                 buildOrderLink(savedPayment.getOrder().getId())

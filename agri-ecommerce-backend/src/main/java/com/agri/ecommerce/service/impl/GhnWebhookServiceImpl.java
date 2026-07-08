@@ -201,10 +201,13 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
                 order.setDeliveredAt(LocalDateTime.now());
             }
             paymentService.completeCashPaymentIfPending(order.getId());
-            loyaltyService.awardPointsForPurchase(order.getUser().getId(), order.getId(), order.getTotalPrice());
+            if (order.getUser() != null) {
+                loyaltyService.awardPointsForPurchase(order.getUser().getId(), order.getId(), order.getTotalPrice());
+            }
         }
 
         if (STATUS_CANCELED.equals(nextInternalStatus)
+                && order.getUser() != null
                 && order.getPointsUsed() != null
                 && order.getPointsUsed() > 0) {
             loyaltyService.refundPointsForCancellation(order.getUser().getId(), order.getPointsUsed());
@@ -222,7 +225,9 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
 
     private void notifyCustomer(OrderEntity order, String internalStatus, String ghnStatus) {
         String message = buildNotificationMessage(order.getId(), internalStatus, ghnStatus);
-        notificationService.createNotification(order.getUser().getId(), NOTIFICATION_TYPE_ORDER, message, "/orders/" + order.getId());
+        if (order.getUser() != null) {
+            notificationService.createNotification(order.getUser().getId(), NOTIFICATION_TYPE_ORDER, message, "/orders/" + order.getId());
+        }
 
         if (STATUS_OUT_FOR_DELIVERY.equals(internalStatus)
                 || STATUS_DELIVERED.equals(internalStatus)
