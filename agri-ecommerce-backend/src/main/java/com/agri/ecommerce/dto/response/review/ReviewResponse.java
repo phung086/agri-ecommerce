@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -27,7 +28,7 @@ public class ReviewResponse {
 
     private String comment;
 
-    private String imageUrl;
+    private List<String> images;
 
     private LocalDateTime createdAt;
 

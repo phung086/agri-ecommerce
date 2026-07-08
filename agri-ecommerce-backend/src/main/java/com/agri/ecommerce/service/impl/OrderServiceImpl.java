@@ -585,17 +585,17 @@ public class OrderServiceImpl implements OrderService {
         int requestedQty = checkoutItem.quantity();
 
         List<InventoryBatchEntity> availableBatches = inventoryBatchRepository.findAvailableBatchesFifo(product.getId(), LocalDateTime.now());
-        
+
         int quantityNeeded = requestedQty;
         for (InventoryBatchEntity batch : availableBatches) {
             if (quantityNeeded <= 0) break;
-            
+
             int batchRemaining = batch.getRemainingQuantity();
             int deduct = Math.min(batchRemaining, quantityNeeded);
-            
+
             batch.setRemainingQuantity(batchRemaining - deduct);
             inventoryBatchRepository.save(batch);
-            
+
             inventoryTransactionRepository.save(InventoryTransactionEntity.builder()
                     .product(product)
                     .batch(batch)
@@ -603,7 +603,7 @@ public class OrderServiceImpl implements OrderService {
                     .type("EXPORT_SALE")
                     .note("Xuất bán cho Đơn hàng")
                     .build());
-                    
+
             quantityNeeded -= deduct;
         }
 
@@ -691,7 +691,7 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal currentShippingFee = baseShippingFee;
         CouponEntity primaryCoupon = null;
         List<String> validCodes = new java.util.ArrayList<>();
-        
+
         boolean hasOrderDiscount = false;
         boolean hasFreeship = false;
         java.util.Set<Long> discountedProductIds = new java.util.HashSet<>();
@@ -699,7 +699,7 @@ public class OrderServiceImpl implements OrderService {
         for (String code : codes) {
             CouponEntity coupon = couponRepository.findByCodeIgnoreCaseForUpdate(code)
                     .orElseThrow(() -> new BadRequestException("Mã giảm giá '" + code + "' không tồn tại"));
-            
+
             String type = normalizeCouponType(coupon);
             if (COUPON_TYPE_FREESHIP.equals(type)) {
                 if (hasFreeship) {
@@ -772,7 +772,7 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal totalDiscount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         BigDecimal currentShippingFee = baseShippingFee;
         List<String> validCodes = new java.util.ArrayList<>();
-        
+
         boolean hasOrderDiscount = false;
         boolean hasFreeship = false;
         java.util.Set<Long> discountedProductIds = new java.util.HashSet<>();
@@ -784,7 +784,7 @@ public class OrderServiceImpl implements OrderService {
             }
 
             CouponEntity coupon = couponOptional.get();
-            
+
             String type = normalizeCouponType(coupon);
             if (COUPON_TYPE_FREESHIP.equals(type)) {
                 if (hasFreeship) {

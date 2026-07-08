@@ -28,11 +28,12 @@ import java.util.Set;
 public class CustomerUploadController {
 
     private static final long MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "gif");
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg",
             "image/png",
-            "image/webp"
+            "image/webp",
+            "image/gif"
     );
 
     private final CloudinaryUploadService cloudinaryUploadService;

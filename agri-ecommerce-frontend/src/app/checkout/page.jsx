@@ -28,6 +28,12 @@ import {
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -273,14 +279,22 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
   }, []);
 
   // Khi mở dialog, clone appliedCoupons sang selectedCoupons
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedCoupons([...appliedCoupons]);
-      setManualCode("");
-      setManualError("");
-      setManualSuccess("");
+  function openCouponPicker() {
+    setSelectedCoupons([...appliedCoupons]);
+    setManualCode("");
+    setManualError("");
+    setManualSuccess("");
+    setIsOpen(true);
+  }
+
+  function handleCouponPickerOpenChange(nextOpen) {
+    if (nextOpen) {
+      openCouponPicker();
+      return;
     }
-  }, [isOpen, appliedCoupons]);
+
+    setIsOpen(false);
+  }
 
   // Phân loại các coupon có trong hệ thống
   const { freeshipCoupons, orderCoupons, productCoupons } = useMemo(() => {
@@ -399,7 +413,7 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
         <Label className="text-sm font-black text-slate-800">Mã giảm giá</Label>
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
+          onClick={openCouponPicker}
           className="text-xs font-black text-emerald-600 hover:text-emerald-700 transition flex items-center gap-1.5"
         >
           <TicketPercent className="size-4" />
@@ -436,8 +450,8 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
           ))}
         </div>
       ) : (
-        <div 
-          onClick={() => setIsOpen(true)}
+        <div
+          onClick={openCouponPicker}
           className="cursor-pointer border border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/20 rounded-[8px] p-3 text-center transition-all"
         >
           <p className="text-xs font-semibold text-slate-500 flex items-center justify-center gap-1.5">
@@ -448,7 +462,7 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
       )}
 
       {/* Coupon Selection Dialog */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={isOpen} onOpenChange={handleCouponPickerOpenChange}>
         <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden bg-slate-50">
           <div className="p-5 bg-white border-b border-slate-100">
             <DialogHeader>

@@ -2,22 +2,22 @@
 -- This includes FREESHIP coupon and PRODUCT_DISCOUNT coupons for specific products.
 
 INSERT INTO `coupons` (
-  `code`, 
-  `discount_percentage`, 
+  `code`,
+  `discount_percentage`,
   `discount_amount`,
-  `min_order_value`, 
+  `min_order_value`,
   `product_id`,
-  `starts_at`, 
-  `expires_at`, 
-  `usage_limit`, 
-  `times_used`, 
-  `is_active`, 
-  `coupon_type`, 
-  `discount_type`, 
-  `created_at`, 
+  `starts_at`,
+  `expires_at`,
+  `usage_limit`,
+  `times_used`,
+  `is_active`,
+  `coupon_type`,
+  `discount_type`,
+  `created_at`,
   `updated_at`
 )
-VALUES 
+VALUES
   ('FREESHIP', 0, 0.00, 0.00, NULL, NOW(), '2030-12-31 23:59:59', 10000, 0, 1, 'FREESHIP', 'PERCENTAGE', NOW(), NOW()),
   ('THIT10K', 0, 10000.00, 0.00, 24, NOW(), '2030-12-31 23:59:59', 10000, 0, 1, 'PRODUCT_DISCOUNT', 'FIXED_AMOUNT', NOW(), NOW()),
   ('CA20K', 0, 20000.00, 0.00, 25, NOW(), '2030-12-31 23:59:59', 10000, 0, 1, 'PRODUCT_DISCOUNT', 'FIXED_AMOUNT', NOW(), NOW()),

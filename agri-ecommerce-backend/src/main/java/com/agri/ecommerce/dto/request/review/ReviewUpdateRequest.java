@@ -7,6 +7,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.List;
+
 @Getter
 @Setter
 public class ReviewUpdateRequest {
@@ -19,6 +21,6 @@ public class ReviewUpdateRequest {
     @Size(max = 255, message = "Nội dung đánh giá không được vượt quá 255 ký tự")
     private String comment;
 
-    @Size(max = 1024, message = "Link ảnh đánh giá không được vượt quá 1024 ký tự")
-    private String imageUrl;
+    @Size(max = 3, message = "Chi duoc tai len toi da 3 anh danh gia")
+    private List<@Size(max = 512, message = "Duong dan anh khong duoc vuot qua 512 ky tu") String> images;
 }

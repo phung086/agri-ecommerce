@@ -142,7 +142,7 @@ export default function AdminCategoriesPage() {
 
     try {
       const uploadedImage = await adminService.uploadImage(file, "category");
-      updateForm("image", uploadedImage.path);
+      updateForm("image", uploadedImage?.path || uploadedImage?.url || "");
       setNotice("Đã tải ảnh danh mục lên server.");
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -270,7 +270,7 @@ export default function AdminCategoriesPage() {
         <StatCard
           title="Có ảnh đại diện"
           value={categoryStats.withImage}
-          description="Có đường dẫn ảnh"
+          description="Có ảnh hiển thị"
           icon={ImagePlus}
           tone="blue"
         />
@@ -430,38 +430,44 @@ export default function AdminCategoriesPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="category-image">Đường dẫn ảnh</Label>
-              <Input
-                id="category-image"
-                value={form.image}
-                onChange={(event) => updateForm("image", event.target.value)}
-                placeholder="uploads/categories/example.jpg"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="category-image-file">Chọn ảnh từ máy tính</Label>
+              <Label htmlFor="category-image-file">Ảnh danh mục</Label>
               <Input
                 id="category-image-file"
                 type="file"
                 accept="image/*"
                 disabled={uploadingImage}
-                onChange={(event) =>
-                  handleImageFile(event.target.files?.[0] || null)
-                }
+                onChange={(event) => {
+                  handleImageFile(event.target.files?.[0] || null);
+                  event.target.value = "";
+                }}
               />
+              <p className="text-xs text-muted-foreground">
+                Chọn ảnh từ máy để tải lên server.
+              </p>
               {uploadingImage && (
                 <p className="text-xs font-medium text-emerald-700">
                   Đang tải ảnh lên server...
                 </p>
               )}
               {form.image && (
-                <div
-                  className="h-28 rounded-lg border bg-cover bg-center"
-                  role="img"
-                  aria-label="Ảnh danh mục đang chọn"
-                  style={{ backgroundImage: getImageBackground(form.image) }}
-                />
+                <div className="relative">
+                  <div
+                    className="h-28 rounded-lg border bg-cover bg-center"
+                    role="img"
+                    aria-label="Ảnh danh mục đang chọn"
+                    style={{ backgroundImage: getImageBackground(form.image) }}
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon-xs"
+                    className="absolute right-1 top-1 bg-background/90"
+                    onClick={() => updateForm("image", "")}
+                  >
+                    <Trash2 className="size-3" />
+                    <span className="sr-only">Xóa ảnh danh mục</span>
+                  </Button>
+                </div>
               )}
             </div>
 

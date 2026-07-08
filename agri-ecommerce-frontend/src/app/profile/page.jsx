@@ -33,9 +33,9 @@ import {
   Star,
   Truck,
   UserRound,
+  X,
   Coins,
   Award,
-  X,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -115,9 +115,17 @@ const blankPasswordForm = {
 const defaultReviewDraft = {
   rating: 5,
   comment: "",
-  imageUrl: "",
-  imageFileName: "",
+  images: [],
 };
+
+const MAX_REVIEW_IMAGES = 3;
+const MAX_REVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
+const REVIEW_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
 function unwrapApiData(response) {
   return response?.data ?? response;
@@ -153,6 +161,18 @@ function getReviewByProduct(reviews, productId) {
       (review) => Number(review.productId) === normalizedProductId
     ) || null
   );
+}
+
+function getReviewDraft(draft) {
+  return {
+    ...defaultReviewDraft,
+    ...(draft || {}),
+    images: Array.isArray(draft?.images) ? draft.images : [],
+  };
+}
+
+function getReviewImageSource(image) {
+  return typeof image === "string" ? image : image?.previewUrl || "";
 }
 
 function getOrderQuantity(order) {
@@ -561,13 +581,12 @@ function PurchaseHistorySection({
   reviews,
   reviewDrafts,
   reviewSubmittingId,
-  reviewImageUploadingId,
   expandedOrderId,
   orderDetailLoading,
   onRefresh,
   onToggleOrder,
   onUpdateReviewDraft,
-  onUploadReviewImage,
+  onSelectReviewImages,
   onRemoveReviewImage,
   onSubmitReview,
 }) {
@@ -748,13 +767,12 @@ function PurchaseHistorySection({
                               item.productId
                             );
                             const reviewable = isCompletedOrder(order);
-                            const draft =
-                              reviewDrafts[String(item.productId)] ||
-                              defaultReviewDraft;
+                            const draft = getReviewDraft(
+                              reviewDrafts[String(item.productId)]
+                            );
+                            const draftImages = draft.images;
                             const submitting =
                               reviewSubmittingId === String(item.productId);
-                            const uploadingReviewImage =
-                              reviewImageUploadingId === String(item.productId);
 
                             return (
                               <div
@@ -804,13 +822,23 @@ function PurchaseHistorySection({
                                         {existingReview.comment}
                                       </p>
                                     )}
-                                    {existingReview.imageUrl && (
-                                      <img
-                                        src={existingReview.imageUrl}
-                                        alt="Ảnh đánh giá sản phẩm"
-                                        className="mt-3 h-24 w-24 rounded-[8px] border border-amber-100 object-cover"
-                                      />
-                                    )}
+                                    {Array.isArray(existingReview.images) &&
+                                      existingReview.images.length > 0 && (
+                                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                          {existingReview.images.map((imageUrl, index) => (
+                                            <div
+                                              key={`${existingReview.id}-image-${index}`}
+                                              className="aspect-square overflow-hidden rounded-[8px] border border-amber-100 bg-white"
+                                            >
+                                              <img
+                                                src={getAssetUrl(imageUrl)}
+                                                alt={`Anh danh gia ${index + 1}`}
+                                                className="h-full w-full object-cover"
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
                                   </div>
                                 )}
 
@@ -873,48 +901,67 @@ function PurchaseHistorySection({
                                       className="mt-3 bg-white"
                                       placeholder="Chia sẻ cảm nhận sau khi nhận hàng..."
                                     />
-                                    <div className="mt-3 rounded-[8px] border border-dashed border-emerald-200 bg-white p-3">
-                                      {draft.imageUrl ? (
-                                        <div className="flex items-center gap-3">
-                                          <img
-                                            src={draft.imageUrl}
-                                            alt="Ảnh đánh giá sản phẩm"
-                                            className="h-20 w-20 rounded-[8px] object-cover"
-                                          />
-                                          <div className="min-w-0 flex-1">
-                                            <p className="truncate text-xs font-bold text-emerald-800">
-                                              {draft.imageFileName || "Ảnh đã tải lên"}
-                                            </p>
+                                    <div className="mt-3 space-y-2">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p className="text-xs font-black uppercase text-emerald-700">
+                                          Anh thuc te
+                                        </p>
+                                        <span className="text-xs font-semibold text-muted-foreground">
+                                          {draftImages.length}/{MAX_REVIEW_IMAGES} anh
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                        {draftImages.map((image, index) => (
+                                          <div
+                                            key={image.id || `${item.productId}-image-${index}`}
+                                            className="relative aspect-square overflow-hidden rounded-[8px] border border-emerald-100 bg-white"
+                                          >
+                                            <img
+                                              src={getAssetUrl(getReviewImageSource(image))}
+                                              alt={`Anh danh gia ${index + 1}`}
+                                              className="h-full w-full object-cover"
+                                            />
                                             <button
                                               type="button"
-                                              className="mt-2 inline-flex h-8 items-center gap-1 rounded-[8px] border border-rose-100 px-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
-                                              onClick={() => onRemoveReviewImage(item.productId)}
-                                              disabled={uploadingReviewImage || submitting}
+                                              onClick={() =>
+                                                onRemoveReviewImage(item.productId, index)
+                                              }
+                                              className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow-sm transition hover:bg-red-50 hover:text-red-600"
+                                              aria-label="Xoa anh danh gia"
                                             >
                                               <X className="size-3.5" />
-                                              Xóa ảnh
                                             </button>
                                           </div>
-                                        </div>
-                                      ) : (
-                                        <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-emerald-700">
-                                          <ImagePlus className="size-4" />
-                                          {uploadingReviewImage ? "Đang tải ảnh..." : "Thêm ảnh thực tế của sản phẩm"}
-                                          <input
-                                            type="file"
-                                            accept="image/jpeg,image/png,image/webp"
-                                            className="sr-only"
-                                            disabled={uploadingReviewImage || submitting}
-                                            onChange={(event) => {
-                                              const file = event.target.files?.[0];
-                                              event.target.value = "";
-                                              if (file) {
-                                                onUploadReviewImage(item.productId, file);
-                                              }
-                                            }}
-                                          />
-                                        </label>
-                                      )}
+                                        ))}
+                                        {draftImages.length < MAX_REVIEW_IMAGES && (
+                                          <label
+                                            htmlFor={`review-images-${order.id}-${item.productId}`}
+                                            className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-[8px] border border-dashed border-emerald-200 bg-white text-center text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
+                                          >
+                                            <ImagePlus className="size-5" />
+                                            <span className="px-1 text-[11px] font-bold">
+                                              Them anh
+                                            </span>
+                                            <input
+                                              id={`review-images-${order.id}-${item.productId}`}
+                                              type="file"
+                                              accept="image/jpeg,image/png,image/webp,image/gif"
+                                              multiple
+                                              className="hidden"
+                                              onChange={(event) => {
+                                                onSelectReviewImages(
+                                                  item.productId,
+                                                  event.target.files
+                                                );
+                                                event.target.value = "";
+                                              }}
+                                            />
+                                          </label>
+                                        )}
+                                      </div>
+                                      <p className="text-xs font-semibold text-muted-foreground">
+                                        Toi da 3 anh, moi anh khong qua 5MB.
+                                      </p>
                                     </div>
                                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                       <span className="text-xs font-semibold text-muted-foreground">
@@ -923,7 +970,7 @@ function PurchaseHistorySection({
                                       <Button
                                         type="submit"
                                         className="h-9 bg-emerald-600 text-sm font-bold hover:bg-emerald-700"
-                                        disabled={submitting || uploadingReviewImage}
+                                        disabled={submitting}
                                       >
                                         <Send className="size-4" />
                                         {submitting ? "Đang gửi..." : "Gửi đánh giá"}
@@ -1158,7 +1205,6 @@ export default function CustomerProfilePage() {
   const [reviews, setReviews] = useState([]);
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [reviewSubmittingId, setReviewSubmittingId] = useState("");
-  const [reviewImageUploadingId, setReviewImageUploadingId] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState("");
   const [activeTab, setActiveTab] = useState("profile"); // "profile", "addresses", "password", "orders"
@@ -1698,57 +1744,105 @@ export default function CustomerProfilePage() {
     }));
   }
 
-  async function uploadReviewImage(productId, file) {
+  function selectReviewImages(productId, fileList) {
     const key = String(productId);
+    const files = Array.from(fileList || []);
 
-    if (!file) {
+    if (files.length === 0) {
       return;
     }
 
-    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-    if (!allowedTypes.has(file.type)) {
-      setOrdersError("Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP cho đánh giá.");
-      return;
-    }
+    setReviewDrafts((current) => {
+      const draft = getReviewDraft(current[key]);
+      const remainingSlots = MAX_REVIEW_IMAGES - draft.images.length;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setOrdersError("Ảnh đánh giá không được vượt quá 5MB.");
-      return;
-    }
+      if (remainingSlots <= 0) {
+        toast.error("Chi duoc them toi da 3 anh danh gia.");
+        return current;
+      }
 
-    setReviewImageUploadingId(key);
-    setOrdersError("");
+      const validImages = [];
+      for (const file of files.slice(0, remainingSlots)) {
+        if (!REVIEW_IMAGE_TYPES.has(file.type)) {
+          toast.error("Chi ho tro anh jpg, png, webp hoac gif.");
+          continue;
+        }
 
-    try {
-      const uploadedImage = await reviewService.uploadReviewImage(file);
-      setReviewDrafts((current) => ({
+        if (file.size > MAX_REVIEW_IMAGE_SIZE) {
+          toast.error(`Anh "${file.name}" vuot qua 5MB.`);
+          continue;
+        }
+
+        validImages.push({
+          id:
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}-${file.name}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+        });
+      }
+
+      if (files.length > remainingSlots) {
+        toast.warning("Chi giu lai toi da 3 anh dau tien.");
+      }
+
+      if (validImages.length === 0) {
+        return current;
+      }
+
+      return {
         ...current,
         [key]: {
-          ...defaultReviewDraft,
-          ...(current[key] || {}),
-          imageUrl: uploadedImage?.url || uploadedImage?.path || "",
-          imageFileName: uploadedImage?.fileName || file.name,
+          ...draft,
+          images: [...draft.images, ...validImages],
         },
-      }));
-    } catch (err) {
-      setOrdersError(err?.message || "Không thể tải ảnh đánh giá.");
-    } finally {
-      setReviewImageUploadingId("");
-    }
+      };
+    });
   }
 
-  function removeReviewImage(productId) {
+  function removeReviewImage(productId, imageIndex) {
     const key = String(productId);
 
-    setReviewDrafts((current) => ({
-      ...current,
-      [key]: {
-        ...defaultReviewDraft,
-        ...(current[key] || {}),
-        imageUrl: "",
-        imageFileName: "",
-      },
-    }));
+    setReviewDrafts((current) => {
+      const draft = getReviewDraft(current[key]);
+      const removedImage = draft.images[imageIndex];
+      if (removedImage?.previewUrl) {
+        URL.revokeObjectURL(removedImage.previewUrl);
+      }
+
+      return {
+        ...current,
+        [key]: {
+          ...draft,
+          images: draft.images.filter((_, index) => index !== imageIndex),
+        },
+      };
+    });
+  }
+
+  async function uploadDraftReviewImages(images) {
+    const uploadedUrls = [];
+
+    for (const image of images) {
+      if (typeof image === "string") {
+        uploadedUrls.push(image);
+        continue;
+      }
+
+      if (!image?.file) {
+        continue;
+      }
+
+      const uploadedImage = await reviewService.uploadReviewImage(image.file);
+      const imageUrl = uploadedImage?.path || uploadedImage?.url;
+
+      if (imageUrl) {
+        uploadedUrls.push(imageUrl);
+      }
+    }
+
+    return uploadedUrls.slice(0, MAX_REVIEW_IMAGES);
   }
 
   async function submitReview(event, item) {
@@ -1762,7 +1856,7 @@ export default function CustomerProfilePage() {
     }
 
     const key = String(productId);
-    const draft = reviewDrafts[key] || defaultReviewDraft;
+    const draft = getReviewDraft(reviewDrafts[key]);
     const rating = Number(draft.rating || 0);
 
     if (rating < 1 || rating > 5) {
@@ -1774,15 +1868,21 @@ export default function CustomerProfilePage() {
     setOrdersError("");
 
     try {
+      const uploadedImageUrls = await uploadDraftReviewImages(draft.images);
       const createdReview = await reviewService.createReview({
         productId,
         rating,
         comment: String(draft.comment || "").trim(),
-        imageUrl: draft.imageUrl || undefined,
+        images: uploadedImageUrls,
       });
 
       setReviews((current) => [createdReview, ...current]);
       setReviewDrafts((current) => {
+        draft.images.forEach((image) => {
+          if (image?.previewUrl) {
+            URL.revokeObjectURL(image.previewUrl);
+          }
+        });
         const nextDrafts = { ...current };
         delete nextDrafts[key];
         return nextDrafts;
@@ -2506,7 +2606,6 @@ export default function CustomerProfilePage() {
                     reviews={reviews}
                     reviewDrafts={reviewDrafts}
                     reviewSubmittingId={reviewSubmittingId}
-                    reviewImageUploadingId={reviewImageUploadingId}
                     expandedOrderId={expandedOrderId}
                     orderDetailLoading={orderDetailLoading}
                     onRefresh={() => {
@@ -2515,7 +2614,7 @@ export default function CustomerProfilePage() {
                     }}
                     onToggleOrder={handleToggleOrder}
                     onUpdateReviewDraft={updateReviewDraft}
-                    onUploadReviewImage={uploadReviewImage}
+                    onSelectReviewImages={selectReviewImages}
                     onRemoveReviewImage={removeReviewImage}
                     onSubmitReview={submitReview}
                   />
