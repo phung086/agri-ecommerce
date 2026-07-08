@@ -818,7 +818,7 @@ export default function CheckoutPage() {
   const hasServerDiscount = checkoutQuoteReady && summary.discountAmount > 0;
   const hasServerFreeShipping =
     checkoutQuoteReady && cartItems.length > 0 && summary.shippingFee === 0;
-  const totalAmountLabel = preview ? formatCurrency(summary.totalPrice) : "Đang tính...";
+  const totalAmountLabel = cartItems.length === 0 ? "0đ" : (preview ? formatCurrency(summary.totalPrice) : "Đang tính...");
 
   const requestCheckoutPreview = useCallback(
     async ({ showErrors = true, clearMessages = false } = {}) => {
@@ -1370,9 +1370,10 @@ export default function CheckoutPage() {
       <div className="mx-auto w-full max-w-[1480px] space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         <AdminPageHeader
           title="Thanh toán"
-          description="Kiểm tra giỏ hàng, chọn địa chỉ giao hàng, áp mã giảm giá và tạo đơn hàng thật qua backend."
+          description="Kiểm tra lại giỏ hàng, chọn thông tin giao nhận và áp dụng các chương trình ưu đãi giảm giá."
           image="/market-assets/fresh-market-hero.png"
-          badges={["Customer API", "Cart", "Checkout"]}
+          badges={["Thanh toán nhanh", "Bảo mật", "Giao hàng hỏa tốc"]}
+          slogan="Nông sản xanh, sạch, tươi mới mỗi ngày giao tận tay gia đình bạn."
         />
 
         {authStatus === "unauthenticated" ? (
@@ -1968,12 +1969,14 @@ export default function CheckoutPage() {
                       <div className="flex justify-between">
                         <span>Phí giao hàng</span>
                         <span className={previewing || isAddressSyncing ? "opacity-60 flex items-center gap-1" : ""}>
-                          {(previewing || isAddressSyncing) && <Loader2 className="size-3 animate-spin text-emerald-600 inline" />}
-                          {!preview
-                            ? "Đang tính..."
-                            : summary.shippingFee === 0 && cartItems.length > 0
-                              ? "Miễn phí"
-                              : formatCurrency(summary.shippingFee)}
+                          {(previewing || isAddressSyncing) && cartItems.length > 0 && <Loader2 className="size-3 animate-spin text-emerald-600 inline" />}
+                          {cartItems.length === 0
+                            ? "—"
+                            : !preview
+                              ? "Đang tính..."
+                              : summary.shippingFee === 0 && cartItems.length > 0
+                                ? "Miễn phí"
+                                : formatCurrency(summary.shippingFee)}
                         </span>
                       </div>
 
@@ -2007,9 +2010,11 @@ export default function CheckoutPage() {
                     </div>
                   ) : selectedAddressId ? (
                     <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3 text-sm font-semibold text-sky-900">
-                      {previewing
-                        ? "Đang đồng bộ địa chỉ nhận hàng từ API..."
-                        : "Chọn địa chỉ để hệ thống kiểm tra lại từ API."}
+                      {cartItems.length === 0
+                        ? "Giỏ hàng của bạn đang trống. Vui lòng thêm sản phẩm trước khi thanh toán."
+                        : previewing
+                          ? "Đang cập nhật địa chỉ giao hàng..."
+                          : "Hệ thống sẽ tự động tính phí giao hàng khi bạn chọn địa chỉ."}
                     </div>
                   ) : null}
 

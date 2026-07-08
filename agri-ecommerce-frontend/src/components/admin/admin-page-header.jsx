@@ -8,6 +8,7 @@ export function AdminPageHeader({
   badges = [],
   children,
   className,
+  slogan,
 }) {
   return (
     <section
@@ -56,7 +57,7 @@ export function AdminPageHeader({
             />
             <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.82)_0%,rgba(255,255,255,0.08)_58%,rgba(16,185,129,0.18)_100%)]" />
             <div className="absolute bottom-4 left-4 right-4 rounded-[8px] border border-white/70 bg-white/86 px-3 py-2 text-xs font-bold text-emerald-800 shadow-sm backdrop-blur">
-              {typeof window !== "undefined" && window.__agriTranslate ? window.__agriTranslate("Vận hành bán hàng, kho và giao nhận trên cùng một bảng điều khiển.") : "Vận hành bán hàng, kho và giao nhận trên cùng một bảng điều khiển."}
+              {slogan ? slogan : (typeof window !== "undefined" && window.__agriTranslate ? window.__agriTranslate("Vận hành bán hàng, kho và giao nhận trên cùng một bảng điều khiển.") : "Vận hành bán hàng, kho và giao nhận trên cùng một bảng điều khiển.")}
             </div>
           </div>
         )}
