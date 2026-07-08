@@ -323,7 +323,7 @@ export default function ProductDetailPage() {
       const count = nextItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
       setCartCount(count);
       triggerAddToCartEffect();
-      setNotice("Gio hang dang luu tam tren trinh duyet. Ban co the thanh toan nhanh khong can dang nhap.");
+      setNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Bạn có thể thanh toán nhanh không cần đăng nhập.");
       return;
     }
 
