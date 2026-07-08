@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   BadgePercent,
@@ -12,6 +13,7 @@ import {
   Leaf,
   Loader2,
   MapPin,
+  Minus,
   PackageCheck,
   Plus,
   RefreshCw,
@@ -20,6 +22,7 @@ import {
   ShoppingBasket,
   Tag,
   TicketPercent,
+  Trash2,
   X,
   Coins,
   Truck,
@@ -54,6 +57,8 @@ import {
   mapGuestCartItemsToCartResponse,
   readGuestCart,
   toGuestCheckoutItems,
+  updateGuestCartItem,
+  removeGuestCartItem,
 } from "@/lib/guest-cart-storage";
 import {
   PHONE_PATTERN_SOURCE,
@@ -1148,6 +1153,52 @@ export default function CheckoutPage() {
     setShowAddressForm(false);
   }
 
+  async function handleUpdateQuantity(item, newQty) {
+    if (newQty <= 0) {
+      await handleRemoveItem(item);
+      return;
+    }
+
+    if (newQty > item.stock) {
+      toast.error(`Chỉ còn ${item.stock} sản phẩm trong kho.`);
+      return;
+    }
+
+    setPreview(null);
+
+    if (isGuestCheckout) {
+      const nextItems = updateGuestCartItem(item.productId, newQty);
+      setCart(mapGuestCartItemsToCartResponse(nextItems));
+      window.dispatchEvent(new Event("storage"));
+    } else {
+      try {
+        const nextCart = await cartService.updateItem(item.id, { quantity: newQty });
+        setCart(nextCart);
+        window.dispatchEvent(new Event("storage"));
+      } catch (err) {
+        setError(getErrorMessage(err, "Không thể cập nhật số lượng sản phẩm."));
+      }
+    }
+  }
+
+  async function handleRemoveItem(item) {
+    setPreview(null);
+
+    if (isGuestCheckout) {
+      const nextItems = removeGuestCartItem(item.productId);
+      setCart(mapGuestCartItemsToCartResponse(nextItems));
+      window.dispatchEvent(new Event("storage"));
+    } else {
+      try {
+        const nextCart = await cartService.removeItem(item.id);
+        setCart(nextCart);
+        window.dispatchEvent(new Event("storage"));
+      } catch (err) {
+        setError(getErrorMessage(err, "Không thể xóa sản phẩm khỏi giỏ hàng."));
+      }
+    }
+  }
+
   async function handleSaveAddress(event) {
     event.preventDefault();
     if (isGuestCheckout) {
@@ -1725,13 +1776,35 @@ export default function CheckoutPage() {
                             Tồn kho: {formatNumber(item.stock)}
                           </p>
                         </div>
-                        <div className="text-left sm:text-right">
-                          <p className="text-sm font-semibold text-slate-500">
-                            SL: {item.quantity}
+                        <div className="flex flex-col items-end justify-between min-h-[80px]">
+                          <p className="font-black text-emerald-700">
+                            {formatCurrency(item.lineTotal || (item.productPrice * item.quantity))}
                           </p>
-                          <p className="mt-1 font-black text-emerald-700">
-                            {formatCurrency(item.lineTotal)}
-                          </p>
+                          <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuantity(item, item.quantity - 1)}
+                              className="flex size-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-850"
+                              title={item.quantity === 1 ? "Xóa" : "Giảm"}
+                            >
+                              {item.quantity === 1 ? (
+                                <Trash2 className="size-3" />
+                              ) : (
+                                <Minus className="size-3" />
+                              )}
+                            </button>
+                            <span className="w-6 text-center text-xs font-bold text-slate-800">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuantity(item, item.quantity + 1)}
+                              className="flex size-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-850"
+                              title="Tăng"
+                            >
+                              <Plus className="size-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -2286,9 +2359,7 @@ export default function CheckoutPage() {
                   </div>
 
                   <p className="text-xs leading-5 text-slate-500">
-                    Với VNPay, đơn hàng sẽ được tạo trước rồi chuyển sang cổng
-                    thanh toán; hệ thống chỉ cập nhật đã thanh toán sau khi IPN
-                    hợp lệ từ VNPay gửi về.
+                    Bạn sẽ được chuyển hướng an toàn đến cổng thanh toán VNPay để hoàn tất giao dịch. Đơn hàng của bạn sẽ được xử lý ngay sau khi thanh toán thành công!
                   </p>
                 </div>
               </section>

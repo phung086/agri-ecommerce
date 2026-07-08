@@ -1285,7 +1285,12 @@ export default function Home() {
   useEffect(() => {
     let ignore = false;
     const slugs = Array.from(
-      new Set(productCards.map((product) => product.slug).filter(Boolean))
+      new Set(
+        productCards
+          .filter((product) => !product.id.startsWith("fallback-"))
+          .map((product) => product.slug)
+          .filter(Boolean)
+      )
     );
 
     if (slugs.length === 0) {
