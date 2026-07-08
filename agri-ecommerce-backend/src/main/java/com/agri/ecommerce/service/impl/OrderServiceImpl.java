@@ -181,6 +181,9 @@ public class OrderServiceImpl implements OrderService {
                 })
                 .toList();
         BigDecimal baseShippingFee = calculateBaseShippingFee(shippingAddress, totalQuantity);
+        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            baseShippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
         CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal, baseShippingFee, checkoutItems, user);
 
         int pointsToRedeem = calculateRedeemablePoints(request, user, subtotal);
@@ -196,6 +199,10 @@ public class OrderServiceImpl implements OrderService {
         }
 
         List<String> warnings = buildCheckoutPreviewWarnings(previewItems, couponCalculation);
+        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            warnings = new ArrayList<>(warnings);
+            warnings.add("Đơn hàng từ 100.000đ được miễn phí vận chuyển!");
+        }
         if (pointsDiscount.compareTo(BigDecimal.ZERO) > 0) {
             warnings = new ArrayList<>(warnings);
             warnings.add("Đã áp dụng giảm giá " + pointsToRedeem + " xu tích lũy");
@@ -244,6 +251,9 @@ public class OrderServiceImpl implements OrderService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         int totalQuantity = checkoutItems.stream().mapToInt(CheckoutItem::quantity).sum();
         BigDecimal baseShippingFee = calculateBaseShippingFee(shippingAddress, totalQuantity);
+        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            baseShippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
         CouponCalculation couponCalculation = calculateCoupon(request.getCouponCode(), subtotal, baseShippingFee, checkoutItems, user);
         int pointsToRedeem = calculateRedeemablePoints(request, user, subtotal);
         int pointsUsed = pointsToRedeem > 0
