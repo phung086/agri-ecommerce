@@ -10,7 +10,7 @@ function safeNumber(value, fallback = 0) {
 }
 
 function normalizeGuestCartItem(product, quantity = 1) {
-  const productId = safeNumber(product?.id);
+  const productId = safeNumber(product?.id || product?.productId);
   if (!productId) {
     return null;
   }

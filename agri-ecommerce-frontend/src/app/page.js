@@ -40,6 +40,10 @@ import {
   getAuthSession,
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
+import { cartService } from "@/services/cart.service";
+import { marketplaceService } from "@/services/marketplace.service";
+import { reviewService } from "@/services/review.service";
+import { wishlistService } from "@/services/wishlist.service";
 import {
   addGuestCartItem,
   clearGuestCart,
@@ -47,10 +51,6 @@ import {
   removeGuestCartItem,
   updateGuestCartItem,
 } from "@/lib/guest-cart-storage";
-import { cartService } from "@/services/cart.service";
-import { marketplaceService } from "@/services/marketplace.service";
-import { reviewService } from "@/services/review.service";
-import { wishlistService } from "@/services/wishlist.service";
 import { useLanguage } from "@/i18n/language-provider";
 import { localizeProduct, localizeCategory } from "@/i18n/localized-fields";
 
@@ -61,27 +61,27 @@ const WISHLIST_STORAGE_KEY = "agri-market:wishlist";
 const fallbackCategories = [
   {
     id: "rau-la",
-    name: "Rau lÃ¡",
+    name: "Rau lá",
     slug: "rau-la",
-    description: "Rau xanh thu hoáº¡ch má»—i sÃ¡ng tá»« ÄÃ  Láº¡t vÃ  Má»™c ChÃ¢u.",
+    description: "Rau xanh thu hoạch mỗi sáng từ Đà Lạt và Mộc Châu.",
   },
   {
     id: "trai-cay",
-    name: "TrÃ¡i cÃ¢y",
+    name: "Trái cây",
     slug: "trai-cay",
-    description: "TrÃ¡i cÃ¢y theo mÃ¹a, Ä‘Ã³ng gÃ³i trong ngÃ y.",
+    description: "Trái cây theo mùa, đóng gói trong ngày.",
   },
   {
     id: "gao-hat",
-    name: "Gáº¡o & háº¡t",
+    name: "Gạo & hạt",
     slug: "gao-hat",
-    description: "Gáº¡o sáº¡ch, háº¡t dinh dÆ°á»¡ng vÃ  nÃ´ng sáº£n khÃ´.",
+    description: "Gạo sạch, hạt dinh dưỡng và nông sản khô.",
   },
   {
     id: "combo",
-    name: "Combo bá»¯a Äƒn",
+    name: "Combo bữa ăn",
     slug: "combo",
-    description: "Set rau cá»§, trÃ¡i cÃ¢y vÃ  thá»±c pháº©m thiáº¿t yáº¿u.",
+    description: "Set rau củ, trái cây và thực phẩm thiết yếu.",
   },
 ];
 
@@ -89,154 +89,154 @@ const fallbackProducts = [
   {
     id: "fallback-1",
     slug: "rau-huu-co-da-lat",
-    name: "Rau há»¯u cÆ¡ ÄÃ  Láº¡t",
+    name: "Rau hữu cơ Đà Lạt",
     description:
-      "Rau lÃ¡ Ä‘Æ°á»£c thu hoáº¡ch trong buá»•i sÃ¡ng, sÆ¡ cháº¿ nháº¹ vÃ  Ä‘Ã³ng gÃ³i mÃ¡t Ä‘á»ƒ giá»¯ Ä‘á»™ giÃ²n.",
-    categoryName: "Rau lÃ¡",
+      "Rau lá được thu hoạch trong buổi sáng, sơ chế nhẹ và đóng gói mát để giữ độ giòn.",
+    categoryName: "Rau lá",
     categorySlug: "rau-la",
-    origin: "LÃ¢m Äá»“ng",
+    origin: "Lâm Đồng",
     price: 34000,
     oldPrice: 42000,
     unit: "500g",
     stock: 42,
-    badge: "Giao sá»›m",
+    badge: "Giao sớm",
     imagePosition: "76% 32%",
   },
   {
     id: "fallback-2",
     slug: "ca-chua-bi-vietgap",
-    name: "CÃ  chua bi VietGAP",
+    name: "Cà chua bi VietGAP",
     description:
-      "CÃ  chua bi má»ng nÆ°á»›c, vá»‹ chua ngá»t nháº¹, phÃ¹ há»£p salad vÃ  bá»¯a Äƒn gia Ä‘Ã¬nh.",
-    categoryName: "Rau lÃ¡",
+      "Cà chua bi mọng nước, vị chua ngọt nhẹ, phù hợp salad và bữa ăn gia đình.",
+    categoryName: "Rau lá",
     categorySlug: "rau-la",
-    origin: "Má»™c ChÃ¢u",
+    origin: "Mộc Châu",
     price: 29000,
     oldPrice: 36000,
     unit: "300g",
     stock: 28,
-    badge: "BÃ¡n cháº¡y",
+    badge: "Bán chạy",
     imagePosition: "51% 82%",
   },
   {
     id: "fallback-3",
     slug: "xoai-cat-hoa-loc",
-    name: "XoÃ i cÃ¡t HÃ²a Lá»™c",
+    name: "Xoài cát Hòa Lộc",
     description:
-      "XoÃ i chÃ­n vá»«a, thÆ¡m rÃµ, Ä‘Æ°á»£c tuyá»ƒn theo Ä‘á»™ ngá»t vÃ  háº¡n cháº¿ dáº­p trong váº­n chuyá»ƒn.",
-    categoryName: "TrÃ¡i cÃ¢y",
+      "Xoài chín vừa, thơm rõ, được tuyển theo độ ngọt và hạn chế dập trong vận chuyển.",
+    categoryName: "Trái cây",
     categorySlug: "trai-cay",
-    origin: "Tiá»n Giang",
+    origin: "Tiền Giang",
     price: 89000,
     oldPrice: 108000,
     unit: "1kg",
     stock: 18,
-    badge: "Ngá»t mÃ¹a vá»¥",
+    badge: "Ngọt mùa vụ",
     imagePosition: "82% 74%",
   },
   {
     id: "fallback-4",
     slug: "gao-st25-tui-vai",
-    name: "Gáº¡o ST25 tÃºi váº£i",
+    name: "Gạo ST25 túi vải",
     description:
-      "Gáº¡o thÆ¡m háº¡t dÃ i, Ä‘Ã³ng tÃºi váº£i 5kg, phÃ¹ há»£p gia Ä‘Ã¬nh dÃ¹ng háº±ng ngÃ y.",
-    categoryName: "Gáº¡o & háº¡t",
+      "Gạo thơm hạt dài, đóng túi vải 5kg, phù hợp gia đình dùng hằng ngày.",
+    categoryName: "Gạo & hạt",
     categorySlug: "gao-hat",
-    origin: "SÃ³c TrÄƒng",
+    origin: "Sóc Trăng",
     price: 159000,
     oldPrice: 179000,
     unit: "5kg",
     stock: 64,
-    badge: "Chuáº©n má»›i",
+    badge: "Chuẩn mới",
     imagePosition: "94% 74%",
   },
   {
     id: "fallback-5",
     slug: "ca-rot-baby",
-    name: "CÃ  rá»‘t baby",
+    name: "Cà rốt baby",
     description:
-      "CÃ  rá»‘t non, ngá»t tá»± nhiÃªn, tiá»‡n cho mÃ³n háº¥p, Ã¡p cháº£o hoáº·c nÆ°á»›c Ã©p.",
-    categoryName: "Rau lÃ¡",
+      "Cà rốt non, ngọt tự nhiên, tiện cho món hấp, áp chảo hoặc nước ép.",
+    categoryName: "Rau lá",
     categorySlug: "rau-la",
-    origin: "ÄÃ  Láº¡t",
+    origin: "Đà Lạt",
     price: 39000,
     oldPrice: 48000,
     unit: "500g",
     stock: 11,
-    badge: "TÆ°Æ¡i giÃ²n",
+    badge: "Tươi giòn",
     imagePosition: "64% 82%",
   },
   {
     id: "fallback-6",
     slug: "combo-bua-xanh",
-    name: "Combo bá»¯a xanh",
+    name: "Combo bữa xanh",
     description:
-      "Bá»™ 4 mÃ³n rau cá»§ theo ngÃ y, Ä‘á»§ cho bá»¯a tá»‘i nhanh vÃ  cÃ¢n báº±ng.",
-    categoryName: "Combo bá»¯a Äƒn",
+      "Bộ 4 món rau củ theo ngày, đủ cho bữa tối nhanh và cân bằng.",
+    categoryName: "Combo bữa ăn",
     categorySlug: "combo",
-    origin: "Nhiá»u nÃ´ng tráº¡i",
+    origin: "Nhiều nông trại",
     price: 149000,
     oldPrice: 196000,
-    unit: "4 mÃ³n",
+    unit: "4 món",
     stock: 24,
-    badge: "Tiáº¿t kiá»‡m",
+    badge: "Tiết kiệm",
     imagePosition: "72% 62%",
   },
   {
     id: "fallback-7",
     slug: "chuoi-cau-huu-co",
-    name: "Chuá»‘i cau há»¯u cÆ¡",
+    name: "Chuối cau hữu cơ",
     description:
-      "Chuá»‘i chÃ­n tá»± nhiÃªn theo náº£i nhá», vá»‹ ngá»t thanh, dá»… dÃ¹ng cho bá»¯a sÃ¡ng.",
-    categoryName: "TrÃ¡i cÃ¢y",
+      "Chuối chín tự nhiên theo nải nhỏ, vị ngọt thanh, dễ dùng cho bữa sáng.",
+    categoryName: "Trái cây",
     categorySlug: "trai-cay",
-    origin: "Äá»“ng Nai",
+    origin: "Đồng Nai",
     price: 52000,
     oldPrice: 62000,
     unit: "1kg",
     stock: 35,
-    badge: "Má»›i vá»",
+    badge: "Mới về",
     imagePosition: "58% 64%",
   },
   {
     id: "fallback-8",
     slug: "hat-dieu-rang-moc",
-    name: "Háº¡t Ä‘iá»u rang má»™c",
+    name: "Hạt điều rang mộc",
     description:
-      "Háº¡t Ä‘iá»u rang khÃ´ng táº©m vá»‹, giÃ²n nháº¹, Ä‘Ã³ng tÃºi zip tiá»‡n báº£o quáº£n.",
-    categoryName: "Gáº¡o & háº¡t",
+      "Hạt điều rang không tẩm vị, giòn nhẹ, đóng túi zip tiện bảo quản.",
+    categoryName: "Gạo & hạt",
     categorySlug: "gao-hat",
-    origin: "BÃ¬nh PhÆ°á»›c",
+    origin: "Bình Phước",
     price: 119000,
     oldPrice: 139000,
     unit: "250g",
     stock: 57,
-    badge: "GiÃ u nÄƒng lÆ°á»£ng",
+    badge: "Giàu năng lượng",
     imagePosition: "44% 70%",
   },
 ];
 
 const sortOptions = [
-  { value: "createdAt,desc", label: "Má»›i nháº¥t" },
-  { value: "price,asc", label: "GiÃ¡ tÄƒng dáº§n" },
-  { value: "price,desc", label: "GiÃ¡ giáº£m dáº§n" },
-  { value: "name,asc", label: "TÃªn A-Z" },
+  { value: "createdAt,desc", label: "Mới nhất" },
+  { value: "price,asc", label: "Giá tăng dần" },
+  { value: "price,desc", label: "Giá giảm dần" },
+  { value: "name,asc", label: "Tên A-Z" },
 ];
 
 const serviceSteps = [
   {
-    title: "Chá»n sáº£n pháº©m",
-    description: "TÃ¬m theo danh má»¥c, giÃ¡ hoáº·c tÃªn sáº£n pháº©m Ä‘ang cÃ³ trong kho.",
+    title: "Chọn sản phẩm",
+    description: "Tìm theo danh mục, giá hoặc tên sản phẩm đang có trong kho.",
     icon: Search,
   },
   {
-    title: "ÄÃ³ng gÃ³i",
-    description: "ÄÆ¡n Ä‘Æ°á»£c kiá»ƒm láº¡i tá»“n kho, phÃ¢n loáº¡i vÃ  Ä‘Ã³ng gÃ³i mÃ¡t.",
+    title: "Đóng gói",
+    description: "Đơn được kiểm lại tồn kho, phân loại và đóng gói mát.",
     icon: Store,
   },
   {
-    title: "Giao táº­n cá»­a",
-    description: "Theo dÃµi tá»•ng tiá»n, phÃ­ giao dá»± kiáº¿n vÃ  nháº­n hÃ ng trong ngÃ y.",
+    title: "Giao tận cửa",
+    description: "Theo dõi tổng tiền, phí giao dự kiến và nhận hàng trong ngày.",
     icon: Truck,
   },
 ];
@@ -287,25 +287,25 @@ function normalizeProduct(product, index = 0) {
   return {
     id: String(product.id || product.slug || product.name),
     slug: product.slug || String(product.id || product.name),
-    name: product.name || "Sáº£n pháº©m nÃ´ng sáº£n",
+    name: product.name || "Sản phẩm nông sản",
     description:
       product.description ||
-      "NÃ´ng sáº£n Ä‘Æ°á»£c tuyá»ƒn chá»n tá»« nhÃ  vÆ°á»n liÃªn káº¿t, cáº­p nháº­t tá»“n kho theo ngÃ y.",
-    categoryName: product.categoryName || product.category || "NÃ´ng sáº£n",
+      "Nông sản được tuyển chọn từ nhà vườn liên kết, cập nhật tồn kho theo ngày.",
+    categoryName: product.categoryName || product.category || "Nông sản",
     categorySlug: product.categorySlug || "",
-    origin: product.origin || product.categoryName || "NÃ´ng tráº¡i liÃªn káº¿t",
+    origin: product.origin || product.categoryName || "Nông trại liên kết",
     price,
     oldPrice:
       Number(product.oldPrice || 0) > price
         ? Number(product.oldPrice)
         : Math.round(price * (1.12 + (index % 3) * 0.03)),
-    unit: product.unit || "sáº£n pháº©m",
+    unit: product.unit || "sản phẩm",
     stock,
     averageRating: 0,
     totalReviews: 0,
     badge:
       product.badge ||
-      (stock > 0 && stock <= 15 ? "Sáº¯p háº¿t" : index % 2 ? "TÆ°Æ¡i má»›i" : "ÄÃ¡ng mua"),
+      (stock > 0 && stock <= 15 ? "Sắp hết" : index % 2 ? "Tươi mới" : "Đáng mua"),
     imageBackground,
     imagePosition:
       product.imagePosition ||
@@ -338,9 +338,9 @@ function mapCartResponseToItems(cartResponse) {
       id: String(item.productId),
       cartItemId: item.id,
       slug: item.productSlug || String(item.productId),
-      name: item.productName || "Sáº£n pháº©m trong giá»",
+      name: item.productName || "Sản phẩm trong giỏ",
       price,
-      unit: item.unit || "sáº£n pháº©m",
+      unit: item.unit || "sản phẩm",
       stock,
       quantity: Number(item.quantity || 0),
       imageBackground,
@@ -355,10 +355,10 @@ function mapGuestCartStorageToHomeItems(items) {
   return (items || []).map((item, index) => ({
     id: String(item.productId),
     slug: item.productSlug || String(item.productId),
-    name: item.productName || "San pham trong gio",
+    name: item.productName || "Sản phẩm trong giỏ",
     nameEn: item.productNameEn || "",
     price: Number(item.productPrice || 0),
-    unit: item.unit || "san pham",
+    unit: item.unit || "sản phẩm",
     unitEn: item.unitEn || "",
     stock: Number(item.stock ?? 0),
     quantity: Number(item.quantity || 0),
@@ -380,9 +380,9 @@ function mapWishlistResponseToItems(wishlistResponse) {
       wishlistItemId: item.id,
       productId: String(item.productId || item.id || index),
       slug: item.productSlug || String(item.productId || item.id || index),
-      name: item.productName || "Sáº£n pháº©m yÃªu thÃ­ch",
+      name: item.productName || "Sản phẩm yêu thích",
       price,
-      unit: item.unit || "sáº£n pháº©m",
+      unit: item.unit || "sản phẩm",
       stock,
       imageBackground,
       imagePosition:
@@ -397,11 +397,11 @@ function mapProductToWishlistItem(product) {
     id: String(product.id),
     productId: String(product.id),
     slug: product.slug || String(product.id),
-    name: product.name || "Sáº£n pháº©m yÃªu thÃ­ch",
+    name: product.name || "Sản phẩm yêu thích",
     price: Number(product.price || 0),
-    unit: product.unit || "sáº£n pháº©m",
+    unit: product.unit || "sản phẩm",
     stock: Number(product.stock ?? 0),
-    categoryName: product.categoryName || "NÃ´ng sáº£n",
+    categoryName: product.categoryName || "Nông sản",
     imageBackground: product.imageBackground,
     imagePosition: product.imagePosition,
     status: product.status,
@@ -479,8 +479,8 @@ function ProductCard({
             ? "border-rose-200 bg-rose-500 text-white hover:bg-rose-600"
             : "border-white/70 bg-white/92 text-slate-700 hover:bg-rose-50 hover:text-rose-600"
         }`}
-        aria-label={wishlisted ? "Bá» khá»i yÃªu thÃ­ch" : "ThÃªm vÃ o yÃªu thÃ­ch"}
-        title={wishlisted ? "Bá» khá»i yÃªu thÃ­ch" : "ThÃªm vÃ o yÃªu thÃ­ch"}
+        aria-label={wishlisted ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích"}
+        title={wishlisted ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích"}
       >
         <Heart className={`size-5 ${wishlisted ? "fill-current" : ""}`} />
       </button>
@@ -516,7 +516,7 @@ function ProductCard({
             <MapPin className="size-3.5 shrink-0 text-emerald-600" />
             <span className="truncate">{product.origin}</span>
           </span>
-          <span>{formatNumber(product.stock)} cÃ²n láº¡i</span>
+          <span>{formatNumber(product.stock)} còn lại</span>
         </div>
 
         <div className="flex items-end justify-between gap-3 border-t border-emerald-100 pt-3">
@@ -549,7 +549,7 @@ function ProductCard({
             ) : (
               <ShoppingBasket className="size-4" />
             )}
-            {recentlyAdded ? "ÄÃ£ thÃªm" : "ThÃªm"}
+            {recentlyAdded ? "Đã thêm" : "Thêm"}
           </button>
         </div>
       </div>
@@ -598,7 +598,7 @@ function CartDrawer({
     >
       <button
         type="button"
-        aria-label="ÄÃ³ng giá» hÃ ng"
+        aria-label="Đóng giỏ hàng"
         onClick={onClose}
         className={`absolute inset-0 bg-slate-950/25 backdrop-blur-sm transition-opacity ${
           cartOpen ? "opacity-100" : "opacity-0"
@@ -612,14 +612,14 @@ function CartDrawer({
         <div className="flex items-center justify-between border-b border-emerald-100 px-5 py-4">
           <div>
             <p className="text-xs font-bold uppercase text-emerald-700">
-              Giá» hÃ ng
+              Giỏ hàng
             </p>
             <h2 className="text-xl font-black text-slate-950">
-              {cart.length} sáº£n pháº©m
+              {cart.length} sản phẩm
             </h2>
             {cartUpdating && (
               <p className="mt-1 text-xs font-bold text-emerald-700">
-                Äang Ä‘á»“ng bá»™ giá» hÃ ng...
+                Đang đồng bộ giỏ hàng...
               </p>
             )}
           </div>
@@ -711,15 +711,15 @@ function CartDrawer({
               )}
               <div className="space-y-2 text-sm font-semibold text-slate-600">
                 <div className="flex justify-between">
-                  <span>Táº¡m tÃ­nh</span>
+                  <span>Tạm tính</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>PhÃ­ giao dá»± kiáº¿n</span>
-                  <span>TÃ­nh á»Ÿ checkout</span>
+                  <span>Phí giao dự kiến</span>
+                  <span>Tính ở checkout</span>
                 </div>
                 <div className="flex justify-between border-t border-emerald-100 pt-3 text-base font-black text-slate-950">
-                  <span>Tá»•ng táº¡m tÃ­nh</span>
+                  <span>Tổng tạm tính</span>
                   <span>{formatCurrency(grandTotal)}</span>
                 </div>
               </div>
@@ -730,7 +730,7 @@ function CartDrawer({
                 className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
               >
                 <CreditCard className="size-4" />
-                Thanh toÃ¡n
+                Thanh toán
               </button>
               <button
                 type="button"
@@ -738,7 +738,7 @@ function CartDrawer({
                 disabled={cartUpdating}
                 className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-[8px] text-sm font-bold text-slate-500 transition hover:bg-white hover:text-rose-600 disabled:opacity-50"
               >
-                XÃ³a giá» hÃ ng
+                Xóa giỏ hàng
               </button>
             </div>
           </>
@@ -748,10 +748,10 @@ function CartDrawer({
               <ShoppingBasket className="size-8" />
             </div>
             <h3 className="mt-5 text-xl font-black text-slate-950">
-              Giá» hÃ ng Ä‘ang trá»‘ng
+              Giỏ hàng đang trống
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Chá»n vÃ i mÃ³n rau cá»§, trÃ¡i cÃ¢y hoáº·c combo tÆ°Æ¡i Ä‘á»ƒ báº¯t Ä‘áº§u Ä‘Æ¡n hÃ ng.
+              Chọn vài món rau củ, trái cây hoặc combo tươi để bắt đầu đơn hàng.
             </p>
           </div>
         )}
@@ -780,7 +780,7 @@ function WishlistDrawer({
     >
       <button
         type="button"
-        aria-label="ÄÃ³ng danh sÃ¡ch yÃªu thÃ­ch"
+        aria-label="Đóng danh sách yêu thích"
         onClick={onClose}
         className={`absolute inset-0 bg-slate-950/25 backdrop-blur-sm transition-opacity ${
           wishlistOpen ? "opacity-100" : "opacity-0"
@@ -794,14 +794,14 @@ function WishlistDrawer({
         <div className="flex items-center justify-between border-b border-rose-100 px-5 py-4">
           <div>
             <p className="text-xs font-bold uppercase text-rose-600">
-              YÃªu thÃ­ch
+              Yêu thích
             </p>
             <h2 className="text-xl font-black text-slate-950">
-              {items.length} sáº£n pháº©m
+              {items.length} sản phẩm
             </h2>
             {wishlistUpdating && (
               <p className="mt-1 text-xs font-bold text-rose-600">
-                Äang Ä‘á»“ng bá»™ yÃªu thÃ­ch...
+                Đang đồng bộ yêu thích...
               </p>
             )}
           </div>
@@ -864,15 +864,15 @@ function WishlistDrawer({
                       onClick={() => onRemove(item)}
                       disabled={wishlistUpdating}
                       className="inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
-                      aria-label="Bá» khá»i yÃªu thÃ­ch"
-                      title="Bá» khá»i yÃªu thÃ­ch"
+                      aria-label="Bỏ khỏi yêu thích"
+                      title="Bỏ khỏi yêu thích"
                     >
                       <Trash2 className="size-4" />
                     </button>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2">
                     <span className="line-clamp-1 text-xs font-semibold text-slate-500">
-                      {formatNumber(item.stock)} cÃ²n láº¡i
+                      {formatNumber(item.stock)} còn lại
                     </span>
                     <button
                       type="button"
@@ -881,7 +881,7 @@ function WishlistDrawer({
                       className="inline-flex h-9 items-center gap-2 rounded-[8px] bg-slate-950 px-3 text-xs font-black text-white transition hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500"
                     >
                       <ShoppingBasket className="size-4" />
-                      ThÃªm
+                      Thêm
                     </button>
                   </div>
                 </div>
@@ -894,10 +894,10 @@ function WishlistDrawer({
               <Heart className="size-8" />
             </div>
             <h3 className="mt-5 text-xl font-black text-slate-950">
-              ChÆ°a cÃ³ sáº£n pháº©m yÃªu thÃ­ch
+              Chưa có sản phẩm yêu thích
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Báº¥m trÃ¡i tim trÃªn sáº£n pháº©m Ä‘á»ƒ lÆ°u láº¡i vÃ  xem nhanh á»Ÿ Ä‘Ã¢y.
+              Bấm trái tim trên sản phẩm để lưu lại và xem nhanh ở đây.
             </p>
           </div>
         )}
@@ -1089,7 +1089,7 @@ export default function Home() {
       } catch (error) {
         if (!ignore) {
           setCartError(
-            error?.message || "KhÃ´ng thá»ƒ táº£i giá» hÃ ng tá»« tÃ i khoáº£n cá»§a báº¡n."
+            error?.message || "Không thể tải giỏ hàng từ tài khoản của bạn."
           );
         }
       } finally {
@@ -1129,7 +1129,7 @@ export default function Home() {
           setWishlistItems([]);
           setWishlistError(
             error?.message ||
-              "KhÃ´ng thá»ƒ táº£i danh sÃ¡ch yÃªu thÃ­ch tá»« tÃ i khoáº£n cá»§a báº¡n."
+              "Không thể tải danh sách yêu thích từ tài khoản của bạn."
           );
         }
       } finally {
@@ -1261,17 +1261,17 @@ export default function Home() {
     () => [
       {
         id: ALL_CATEGORY,
-        name: "Táº¥t cáº£",
+        name: "Tất cả",
         slug: ALL_CATEGORY,
         image: "",
-        description: "Táº¥t cáº£ sáº£n pháº©m Ä‘ang má»Ÿ bÃ¡n.",
+        description: "Tất cả sản phẩm đang mở bán.",
       },
       ...categories.map((category) => ({
         id: category.id || category.slug,
         name: category.name,
         slug: category.slug,
         image: category.image || "",
-        description: category.description || "NÃ´ng sáº£n Ä‘Æ°á»£c cáº­p nháº­t theo mÃ¹a.",
+        description: category.description || "Nông sản được cập nhật theo mùa.",
       })),
     ],
     [categories]
@@ -1391,7 +1391,7 @@ export default function Home() {
 
   const activeCategoryName =
     categoryOptions.find((category) => category.slug === filters.categorySlug)
-      ?.name || "Táº¥t cáº£";
+      ?.name || "Tất cả";
 
   const previewCategorySlug = hoveredCategorySlug || filters.categorySlug;
   const previewCategoryName =
@@ -1408,23 +1408,23 @@ export default function Home() {
   const marketStats = [
     {
       value: `${formatNumber(Math.max(totalProducts, productCards.length))}+`,
-      label: t("Sáº£n pháº©m sáºµn sÃ ng"),
+      label: t("Sản phẩm sẵn sàng"),
       icon: ShoppingBasket,
-      description: t("Äang má»Ÿ bÃ¡n táº¡i cá»­a hÃ ng"),
+      description: t("Đang mở bán tại cửa hàng"),
       tone: "green",
     },
     {
       value: `${formatNumber(Math.max(categoryOptions.length - 1, 0))}+`,
-      label: t("NhÃ³m nÃ´ng sáº£n"),
+      label: t("Nhóm nông sản"),
       icon: Leaf,
-      description: t("Lá»c nhanh theo nhu cáº§u"),
+      description: t("Lọc nhanh theo nhu cầu"),
       tone: "amber",
     },
     {
       value: "2h",
-      label: t("Giao nhanh ná»™i thÃ nh"),
+      label: t("Giao nhanh nội thành"),
       icon: Truck,
-      description: t("Æ¯á»›c tÃ­nh giao trong ngÃ y"),
+      description: t("Ước tính giao trong ngày"),
       tone: "blue",
     },
   ];
@@ -1471,8 +1471,8 @@ export default function Home() {
       const productId = Number(product.id);
 
       if (!Number.isFinite(productId)) {
-        setCartError("Sáº£n pháº©m máº«u chÆ°a thá»ƒ thÃªm vÃ o giá» tÃ i khoáº£n.");
-        window.alert("Sáº£n pháº©m máº«u chÆ°a thá»ƒ thÃªm vÃ o giá» tÃ i khoáº£n.");
+        setCartError("Sản phẩm mẫu chưa thể thêm vào giỏ tài khoản.");
+        window.alert("Sản phẩm mẫu chưa thể thêm vào giỏ tài khoản.");
         return false;
       }
 
@@ -1484,12 +1484,12 @@ export default function Home() {
           quantity: 1,
         });
         setCart(mapCartResponseToItems(response));
-        setCartNotice("ÄÃ£ thÃªm sáº£n pháº©m vÃ o giá» hÃ ng cá»§a báº¡n.");
+        setCartNotice("Đã thêm sản phẩm vào giỏ hàng của bạn.");
         showAddToCartFeedback(product);
         return true;
       } catch (error) {
-        setCartError(error?.message || "KhÃ´ng thá»ƒ thÃªm sáº£n pháº©m vÃ o giá».");
-        window.alert(error?.message || "KhÃ´ng thá»ƒ thÃªm sáº£n pháº©m vÃ o giá».");
+        setCartError(error?.message || "Không thể thêm sản phẩm vào giỏ.");
+        window.alert(error?.message || "Không thể thêm sản phẩm vào giỏ.");
         return false;
       } finally {
         setCartUpdating(false);
@@ -1498,7 +1498,7 @@ export default function Home() {
 
     const nextItems = addGuestCartItem(product, 1);
     setCart(mapGuestCartStorageToHomeItems(nextItems));
-    setCartNotice("Gio hang dang luu tam tren trinh duyet. Ban co the thanh toan nhanh khong can dang nhap.");
+    setCartNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Bạn có thể thanh toán nhanh không cần đăng nhập.");
     showAddToCartFeedback(product);
     return true;
   }
@@ -1510,11 +1510,11 @@ export default function Home() {
     const added = await addToCart(item);
 
     if (added) {
-      setWishlistNotice(`ÄÃ£ thÃªm ${item.name} vÃ o giá» hÃ ng.`);
+      setWishlistNotice(`Đã thêm ${item.name} vào giỏ hàng.`);
       return;
     }
 
-    setWishlistError("KhÃ´ng thá»ƒ thÃªm sáº£n pháº©m vÃ o giá» hÃ ng.");
+    setWishlistError("Không thể thêm sản phẩm vào giỏ hàng.");
   }
 
   async function toggleWishlist(product) {
@@ -1541,8 +1541,8 @@ export default function Home() {
         setWishlistItems(mapWishlistResponseToItems(response));
         setWishlistNotice(
           isWishlisted
-            ? "ÄÃ£ bá» sáº£n pháº©m khá»i danh sÃ¡ch yÃªu thÃ­ch."
-            : "ÄÃ£ thÃªm sáº£n pháº©m vÃ o danh sÃ¡ch yÃªu thÃ­ch."
+            ? "Đã bỏ sản phẩm khỏi danh sách yêu thích."
+            : "Đã thêm sản phẩm vào danh sách yêu thích."
         );
 
         if (!isWishlisted) {
@@ -1550,7 +1550,7 @@ export default function Home() {
         }
       } catch (error) {
         setWishlistError(
-          error?.message || "KhÃ´ng thá»ƒ cáº­p nháº­t danh sÃ¡ch yÃªu thÃ­ch."
+          error?.message || "Không thể cập nhật danh sách yêu thích."
         );
       } finally {
         setWishlistUpdating(false);
@@ -1569,8 +1569,8 @@ export default function Home() {
     });
     setWishlistNotice(
       isWishlisted
-        ? "ÄÃ£ bá» sáº£n pháº©m khá»i danh sÃ¡ch yÃªu thÃ­ch."
-        : "ÄÃ£ lÆ°u sáº£n pháº©m yÃªu thÃ­ch trÃªn trÃ¬nh duyá»‡t."
+        ? "Đã bỏ sản phẩm khỏi danh sách yêu thích."
+        : "Đã lưu sản phẩm yêu thích trên trình duyệt."
     );
 
     if (!isWishlisted) {
@@ -1596,9 +1596,9 @@ export default function Home() {
       try {
         const response = await wishlistService.removeItem(productId);
         setWishlistItems(mapWishlistResponseToItems(response));
-        setWishlistNotice("ÄÃ£ bá» sáº£n pháº©m khá»i danh sÃ¡ch yÃªu thÃ­ch.");
+        setWishlistNotice("Đã bỏ sản phẩm khỏi danh sách yêu thích.");
       } catch (error) {
-        setWishlistError(error?.message || "KhÃ´ng thá»ƒ bá» sáº£n pháº©m yÃªu thÃ­ch.");
+        setWishlistError(error?.message || "Không thể bỏ sản phẩm yêu thích.");
       } finally {
         setWishlistUpdating(false);
       }
@@ -1613,96 +1613,90 @@ export default function Home() {
       writeStoredWishlist(nextItems);
       return nextItems;
     });
-    setWishlistNotice("ÄÃ£ bá» sáº£n pháº©m khá»i danh sÃ¡ch yÃªu thÃ­ch.");
+    setWishlistNotice("Đã bỏ sản phẩm khỏi danh sách yêu thích.");
   }
 
   async function increaseCartItem(id) {
     setCartNotice("");
     setCartError("");
     const item = cart.find((currentItem) => currentItem.id === id);
+    if (!item) return;
 
-    if (item?.cartItemId) {
-      const nextQuantity = Math.min(item.quantity + 1, item.stock || 99);
+    const nextQuantity = Math.min(item.quantity + 1, item.stock || 99);
+    if (nextQuantity === item.quantity) {
+      setCartError("Số lượng đã đạt tồn kho hiện tại.");
+      return;
+    }
 
-      if (nextQuantity === item.quantity) {
-        setCartError("Sá»‘ lÆ°á»£ng Ä‘Ã£ Ä‘áº¡t tá»“n kho hiá»‡n táº¡i.");
-        return;
-      }
-
+    if (item.cartItemId) {
       setCartUpdating(true);
-
       try {
         const response = await cartService.updateItem(item.cartItemId, {
           quantity: nextQuantity,
         });
         setCart(mapCartResponseToItems(response));
       } catch (error) {
-        setCartError(error?.message || "KhÃ´ng thá»ƒ cáº­p nháº­t sá»‘ lÆ°á»£ng.");
+        setCartError(error?.message || "Không thể cập nhật số lượng.");
       } finally {
         setCartUpdating(false);
       }
-
-      return;
+    } else {
+      const nextItems = updateGuestCartItem(Number(id), nextQuantity);
+      setCart(mapGuestCartStorageToHomeItems(nextItems));
     }
-
-    setCart(
-      mapGuestCartStorageToHomeItems(
-        updateGuestCartItem(id, Math.min(item.quantity + 1, item.stock || 99))
-      )
-    );
   }
 
   async function decreaseCartItem(id) {
     setCartNotice("");
     setCartError("");
     const item = cart.find((currentItem) => currentItem.id === id);
+    if (!item) return;
 
-    if (item?.cartItemId) {
-      if (item.quantity <= 1) {
-        await removeCartItem(id);
-        return;
-      }
-
-      setCartUpdating(true);
-
-      try {
-        const response = await cartService.updateItem(item.cartItemId, {
-          quantity: item.quantity - 1,
-        });
-        setCart(mapCartResponseToItems(response));
-      } catch (error) {
-        setCartError(error?.message || "KhÃ´ng thá»ƒ cáº­p nháº­t sá»‘ lÆ°á»£ng.");
-      } finally {
-        setCartUpdating(false);
-      }
-
+    if (item.quantity <= 1) {
+      await removeCartItem(id);
       return;
     }
 
-    setCart(mapGuestCartStorageToHomeItems(updateGuestCartItem(id, item.quantity - 1)));
+    const nextQuantity = item.quantity - 1;
+
+    if (item.cartItemId) {
+      setCartUpdating(true);
+      try {
+        const response = await cartService.updateItem(item.cartItemId, {
+          quantity: nextQuantity,
+        });
+        setCart(mapCartResponseToItems(response));
+      } catch (error) {
+        setCartError(error?.message || "Không thể cập nhật số lượng.");
+      } finally {
+        setCartUpdating(false);
+      }
+    } else {
+      const nextItems = updateGuestCartItem(Number(id), nextQuantity);
+      setCart(mapGuestCartStorageToHomeItems(nextItems));
+    }
   }
 
   async function removeCartItem(id) {
     setCartNotice("");
     setCartError("");
     const item = cart.find((currentItem) => currentItem.id === id);
+    if (!item) return;
 
-    if (item?.cartItemId) {
+    if (item.cartItemId) {
       setCartUpdating(true);
-
       try {
         const response = await cartService.removeItem(item.cartItemId);
         setCart(mapCartResponseToItems(response));
       } catch (error) {
-        setCartError(error?.message || "KhÃ´ng thá»ƒ xÃ³a sáº£n pháº©m khá»i giá».");
+        setCartError(error?.message || "Không thể xóa sản phẩm khỏi giỏ.");
       } finally {
         setCartUpdating(false);
       }
-
-      return;
+    } else {
+      const nextItems = removeGuestCartItem(Number(id));
+      setCart(mapGuestCartStorageToHomeItems(nextItems));
     }
-
-    setCart(mapGuestCartStorageToHomeItems(removeGuestCartItem(id)));
   }
 
   async function clearCart() {
@@ -1713,22 +1707,20 @@ export default function Home() {
 
     if (hasServerCartItems) {
       setCartUpdating(true);
-
       try {
         const response = await cartService.clearCart();
         setCart(mapCartResponseToItems(response));
-        setCartNotice("ÄÃ£ xÃ³a toÃ n bá»™ giá» hÃ ng.");
+        setCartNotice("Đã xóa toàn bộ giỏ hàng.");
       } catch (error) {
-        setCartError(error?.message || "KhÃ´ng thá»ƒ xÃ³a giá» hÃ ng.");
+        setCartError(error?.message || "Không thể xóa giỏ hàng.");
       } finally {
         setCartUpdating(false);
       }
-
-      return;
+    } else {
+      clearGuestCart();
+      setCart([]);
+      setCartNotice("Đã xóa toàn bộ giỏ hàng.");
     }
-
-    clearGuestCart();
-    setCart([]);
   }
 
   function handleCheckout() {
@@ -1736,7 +1728,15 @@ export default function Home() {
     setCartError("");
 
     if (cart.length === 0) {
-      setCartError("Giá» hÃ ng Ä‘ang trá»‘ng.");
+      setCartError("Giỏ hàng đang trống.");
+      return;
+    }
+
+    const session = getActiveCustomerSession();
+
+    if (!session) {
+      setCartError("Vui lòng đăng nhập tài khoản khách hàng trước khi thanh toán.");
+      router.push("/profile");
       return;
     }
 
@@ -1756,7 +1756,7 @@ export default function Home() {
                 AgriMarket
               </p>
               <p className="hidden text-xs font-medium text-emerald-700 sm:block">
-                NÃ´ng sáº£n tÆ°Æ¡i tá»« nÃ´ng tráº¡i
+                Nông sản tươi từ nông trại
               </p>
             </div>
           </Link>
@@ -1773,7 +1773,7 @@ export default function Home() {
                 onFocus={() => setShowSuggestions(true)}
                 onKeyDown={handleKeyDown}
                 className="h-10 w-full rounded-[8px] border border-emerald-100 bg-emerald-50/70 pl-9 pr-4 text-sm font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                placeholder="TÃ¬m rau cá»§, trÃ¡i cÃ¢y, gáº¡o sáº¡ch..."
+                placeholder="Tìm rau củ, trái cây, gạo sạch..."
               />
 
               {showSuggestions && (suggestions.length > 0 || suggestionsLoading) && (
@@ -1781,7 +1781,7 @@ export default function Home() {
                   {suggestionsLoading ? (
                     <div className="flex items-center justify-center py-6 text-emerald-600">
                       <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      <span className="text-xs font-semibold">Äang tÃ¬m kiáº¿m nÃ´ng sáº£n...</span>
+                      <span className="text-xs font-semibold">Đang tìm kiếm nông sản...</span>
                     </div>
                   ) : (
                     <>
@@ -1826,14 +1826,14 @@ export default function Home() {
                                   </span>
                                   {item.stock <= 0 && (
                                     <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-1 rounded">
-                                      Háº¿t hÃ ng
+                                      Hết hàng
                                     </span>
                                   )}
                                 </div>
                               </div>
                               <div className="text-right shrink-0">
                                 <p className="text-xs font-bold text-emerald-700">
-                                  {Number(item.price).toLocaleString("vi-VN")}Ä‘
+                                  {Number(item.price).toLocaleString("vi-VN")}đ
                                 </p>
                                 {item.unit && (
                                   <p className="text-[10px] text-slate-400">
@@ -1851,7 +1851,7 @@ export default function Home() {
                           onClick={() => setShowSuggestions(false)}
                           className="text-[10px] font-black text-emerald-700 hover:text-emerald-800 transition"
                         >
-                          Xem táº¥t cáº£ gá»£i Ã½ cho &quot;{filters.keyword}&quot; â†’
+                          Xem tất cả gợi ý cho &quot;{filters.keyword}&quot; →
                         </a>
                       </div>
                     </>
@@ -1865,22 +1865,22 @@ export default function Home() {
               className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700"
             >
               <Search className="size-4" />
-              TÃ¬m
+              Tìm
             </a>
           </div>
 
           <nav className="ml-auto hidden items-center gap-6 text-sm font-bold text-slate-600 md:flex">
             <a href="#categories" className="hover:text-emerald-700">
-              Danh má»¥c
+              Danh mục
             </a>
             <a href="#products" className="hover:text-emerald-700">
-              Sáº£n pháº©m
+              Sản phẩm
             </a>
             <a href="#delivery" className="hover:text-emerald-700">
-              Giao hÃ ng
+              Giao hàng
             </a>
             <Link href="/contact" className="hover:text-emerald-700">
-              LiÃªn há»‡
+              Liên hệ
             </Link>
           </nav>
 
@@ -1892,8 +1892,8 @@ export default function Home() {
                 ? "scale-110 border-rose-300 ring-4 ring-rose-100"
                 : "border-rose-100"
             }`}
-            aria-label="Xem danh sÃ¡ch yÃªu thÃ­ch"
-            title="Xem danh sÃ¡ch yÃªu thÃ­ch"
+            aria-label="Xem danh sách yêu thích"
+            title="Xem danh sách yêu thích"
           >
             <Heart className={`size-5 ${wishlistCount > 0 ? "fill-current" : ""}`} />
             {wishlistCount > 0 && (
@@ -1914,8 +1914,8 @@ export default function Home() {
                 ? "scale-110 border-emerald-400 ring-4 ring-emerald-100"
                 : "border-emerald-100"
             }`}
-            aria-label="Xem giá» hÃ ng"
-            title="Xem giá» hÃ ng"
+            aria-label="Xem giỏ hàng"
+            title="Xem giỏ hàng"
           >
             <ShoppingBasket className={`size-5 ${cartPulse ? "animate-bounce" : ""}`} />
             {cartCount > 0 && (
@@ -1932,8 +1932,8 @@ export default function Home() {
           <Link
             href="/profile"
             className="hidden size-10 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-slate-950 text-white transition hover:bg-emerald-800 sm:inline-flex"
-            aria-label="Há»“ sÆ¡ khÃ¡ch hÃ ng"
-            title="Há»“ sÆ¡ khÃ¡ch hÃ ng"
+            aria-label="Hồ sơ khách hàng"
+            title="Hồ sơ khách hàng"
           >
             {currentUserAvatarUrl ? (
               <span
@@ -1957,7 +1957,7 @@ export default function Home() {
           <div className="relative grid min-h-[360px] gap-6 p-5 text-white sm:p-7 lg:grid-cols-[1fr_520px] lg:items-end lg:p-8">
             <div className="max-w-3xl self-center">
               <div className="flex flex-wrap gap-2">
-                {["NÃ´ng sáº£n sáº¡ch", "Giao nhanh 2h", "GiÃ¡ bÃ¬nh á»•n"].map((badge) => (
+                {["Nông sản sạch", "Giao nhanh 2h", "Giá bình ổn"].map((badge) => (
                   <span
                     key={badge}
                     className="rounded-[8px] border border-white/30 bg-white/16 px-3 py-1 text-xs font-bold text-white backdrop-blur"
@@ -1967,13 +1967,13 @@ export default function Home() {
                 ))}
               </div>
               <p className="mt-8 text-sm font-black uppercase text-emerald-100">
-                Váº­n hÃ nh nhanh trong ngÃ y
+                Vận hành nhanh trong ngày
               </p>
               <h1 className="mt-3 max-w-2xl text-4xl font-black tracking-normal text-white sm:text-5xl">
                 AgriMarket
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-white/86">
-                Trang mua nÃ´ng sáº£n cho khÃ¡ch hÃ ng vá»›i danh má»¥c rÃµ rÃ ng, giÃ¡ minh báº¡ch, tá»“n kho cáº­p nháº­t vÃ  giá» hÃ ng sáºµn sÃ ng cho Ä‘Æ¡n giao trong ngÃ y.
+                Trang mua nông sản cho khách hàng với danh mục rõ ràng, giá minh bạch, tồn kho cập nhật và giỏ hàng sẵn sàng cho đơn giao trong ngày.
               </p>
             </div>
 
@@ -2015,15 +2015,15 @@ export default function Home() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-black uppercase text-emerald-700">
-              Äi chá»£ theo mÃ¹a
+              Đi chợ theo mùa
             </p>
             <h2 className="mt-1 text-3xl font-black tracking-normal text-slate-950">
-              Danh má»¥c nÃ´ng sáº£n
+              Danh mục nông sản
             </h2>
           </div>
           <div className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-emerald-200 bg-white px-3 text-sm font-bold text-emerald-800 shadow-sm">
             <SlidersHorizontal className="size-4" />
-            {categoriesLoading ? "Äang táº£i danh má»¥c" : activeCategoryName}
+            {categoriesLoading ? "Đang tải danh mục" : activeCategoryName}
           </div>
         </div>
 
@@ -2090,14 +2090,14 @@ export default function Home() {
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-black uppercase text-emerald-700">
-                Sáº£n pháº©m trong danh má»¥c
+                Sản phẩm trong danh mục
               </p>
               <h3 className="text-lg font-black text-slate-950">
                 {previewCategoryName}
               </h3>
             </div>
             <span className="text-xs font-bold text-slate-500">
-              {categoryPreviewProducts.length} mÃ³n
+              {categoryPreviewProducts.length} món
             </span>
           </div>
 
@@ -2133,7 +2133,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="rounded-[8px] border border-dashed border-emerald-200 bg-emerald-50/60 px-4 py-5 text-sm font-semibold text-emerald-800">
-              ChÆ°a cÃ³ sáº£n pháº©m hiá»ƒn thá»‹ cho danh má»¥c nÃ y.
+              Chưa có sản phẩm hiển thị cho danh mục này.
             </div>
           )}
         </div>
@@ -2144,14 +2144,14 @@ export default function Home() {
           <div className="mx-auto grid w-full max-w-[1480px] gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[0.78fr_1.22fr] lg:px-8">
             <div className="space-y-3">
               <p className="text-sm font-black uppercase text-rose-600">
-                Gá»£i Ã½ hÃ´m nay
+                Gợi ý hôm nay
               </p>
               <h2 className="text-3xl font-black tracking-normal text-slate-950">
-                MÃ³n tÆ°Æ¡i nÃªn thÃªm vÃ o giá»
+                Món tươi nên thêm vào giỏ
               </h2>
               <p className="text-sm leading-6 text-slate-500">
-                Nhá»¯ng sáº£n pháº©m Ä‘ang cÃ³ tá»“n kho tá»‘t, giÃ¡ dá»… mua vÃ  phÃ¹ há»£p cho
-                bá»¯a Äƒn nhanh trong ngÃ y.
+                Những sản phẩm đang có tồn kho tốt, giá dễ mua và phù hợp cho
+                bữa ăn nhanh trong ngày.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -2194,15 +2194,15 @@ export default function Home() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-black uppercase text-emerald-700">
-              {filters.keyword.trim() ? "Káº¿t quáº£ tÃ¬m kiáº¿m" : "Sáº£n pháº©m ná»•i báº­t"}
+              {filters.keyword.trim() ? "Kết quả tìm kiếm" : "Sản phẩm nổi bật"}
             </p>
             <h2 className="mt-1 text-3xl font-black tracking-normal text-slate-950">
-              HÃ ng tÆ°Æ¡i Ä‘ang má»Ÿ bÃ¡n
+              Hàng tươi đang mở bán
             </h2>
             <p className="mt-2 text-sm font-semibold text-slate-500">
               {productsLoading
-                ? "Äang táº£i sáº£n pháº©m tá»« API..."
-                : `${formatNumber(totalProducts)} sáº£n pháº©m phÃ¹ há»£p`}
+                ? "Đang tải sản phẩm từ API..."
+                : `${formatNumber(totalProducts)} sản phẩm phù hợp`}
             </p>
           </div>
 
@@ -2213,7 +2213,7 @@ export default function Home() {
               type="number"
               min="0"
               className="h-10 rounded-[8px] border border-emerald-100 px-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-              placeholder="GiÃ¡ tá»«"
+              placeholder="Giá từ"
             />
             <input
               value={filters.maxPrice}
@@ -2221,7 +2221,7 @@ export default function Home() {
               type="number"
               min="0"
               className="h-10 rounded-[8px] border border-emerald-100 px-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-              placeholder="GiÃ¡ Ä‘áº¿n"
+              placeholder="Giá đến"
             />
             <select
               value={filters.sort}
@@ -2239,7 +2239,7 @@ export default function Home() {
               onClick={resetFilters}
               className="inline-flex h-10 items-center justify-center rounded-[8px] px-3 text-sm font-bold text-slate-500 transition hover:bg-emerald-50 hover:text-rose-600"
             >
-              XÃ³a lá»c
+              Xóa lọc
             </button>
           </div>
         </div>
@@ -2247,7 +2247,7 @@ export default function Home() {
         {(apiError || usingFallback) && (
           <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
             {usingFallback
-              ? "ChÆ°a káº¿t ná»‘i Ä‘Æ°á»£c public API, Ä‘ang hiá»ƒn thá»‹ dá»¯ liá»‡u máº«u."
+              ? "Chưa kết nối được public API, đang hiển thị dữ liệu mẫu."
               : apiError}
           </div>
         )}
@@ -2288,7 +2288,7 @@ export default function Home() {
                     className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-black text-emerald-800 transition hover:border-emerald-200 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-300"
                   >
                     <ArrowRight className="size-4 rotate-180" />
-                    TrÆ°á»›c
+                    Trước
                   </button>
 
                   {paginationPages.map((pageIndex) => {
@@ -2335,10 +2335,10 @@ export default function Home() {
               <Search className="size-7" />
             </div>
             <p className="mt-5 font-black text-slate-800">
-              ChÆ°a cÃ³ sáº£n pháº©m phÃ¹ há»£p.
+              Chưa có sản phẩm phù hợp.
             </p>
             <p className="mt-2 text-sm text-slate-500">
-              HÃ£y thá»­ tá»« khÃ³a khÃ¡c hoáº·c má»Ÿ rá»™ng khoáº£ng giÃ¡.
+              Hãy thử từ khóa khác hoặc mở rộng khoảng giá.
             </p>
           </div>
         )}
@@ -2348,13 +2348,13 @@ export default function Home() {
         <div className="mx-auto grid w-full max-w-[1480px] gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
           <div>
             <p className="text-sm font-black uppercase text-emerald-700">
-              Quy trÃ¬nh Ä‘Æ¡n hÃ ng
+              Quy trình đơn hàng
             </p>
             <h2 className="mt-2 text-3xl font-black tracking-normal text-slate-950">
-              Tá»« nÃ´ng tráº¡i Ä‘áº¿n giá» hÃ ng trong má»™t hÃ nh trÃ¬nh rÃµ rÃ ng
+              Từ nông trại đến giỏ hàng trong một hành trình rõ ràng
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-500">
-              Há»‡ thá»‘ng há»— trá»£ tÃ¬m kiáº¿m sáº£n pháº©m thÃ´ng minh, chá»n lá»c vÃ¹ng miá»n vÃ  giao hÃ ng há»a tá»‘c trong ngÃ y Ä‘á»ƒ báº£o Ä‘áº£m Ä‘á»™ tÆ°Æ¡i ngon tá»‘i Ä‘a.
+              Hệ thống hỗ trợ tìm kiếm sản phẩm thông minh, chọn lọc vùng miền và giao hàng hỏa tốc trong ngày để bảo đảm độ tươi ngon tối đa.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -2392,26 +2392,26 @@ export default function Home() {
           className="group rounded-[8px] bg-emerald-600 p-5 text-white transition duration-200 hover:bg-emerald-700 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer block"
         >
           <Sparkles className="size-7 transition group-hover:scale-110" />
-          <h3 className="mt-5 text-xl font-black">Æ¯u Ä‘Ã£i theo mÃ¹a</h3>
+          <h3 className="mt-5 text-xl font-black">Ưu đãi theo mùa</h3>
           <p className="mt-2 text-sm leading-6 text-white/85">
-            Combo rau cá»§ Ä‘Æ°á»£c cáº­p nháº­t theo ngÃ y Ä‘á»ƒ giáº£m lÃ£ng phÃ­ vÃ  giá»¯ giÃ¡ tá»‘t.
+            Combo rau củ được cập nhật theo ngày để giảm lãng phí và giữ giá tốt.
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-white/70 transition group-hover:text-white">
-            Xem táº¥t cáº£ Æ°u Ä‘Ã£i â†’
+            Xem tất cả ưu đãi →
           </span>
         </Link>
         <div className="rounded-[8px] bg-amber-400 p-5 text-amber-950">
           <CircleDollarSign className="size-7" />
-          <h3 className="mt-5 text-xl font-black">PhÃ­ giao tÃ­nh theo GHN</h3>
+          <h3 className="mt-5 text-xl font-black">Phí giao tính theo GHN</h3>
           <p className="mt-2 text-sm leading-6 text-amber-950/75">
-            Checkout gá»i GHN Ä‘á»ƒ tÃ­nh phÃ­ theo Ä‘á»‹a chá»‰ nháº­n hÃ ng vÃ  kho gá»­i.
+            Checkout gọi GHN để tính phí theo địa chỉ nhận hàng và kho gửi.
           </p>
         </div>
         <div className="rounded-[8px] bg-slate-950 p-5 text-white">
           <Heart className="size-7" />
-          <h3 className="mt-5 text-xl font-black">Cháº¥t lÆ°á»£ng trÆ°á»›c tiÃªn</h3>
+          <h3 className="mt-5 text-xl font-black">Chất lượng trước tiên</h3>
           <p className="mt-2 text-sm leading-6 text-white/75">
-            Má»—i sáº£n pháº©m hiá»ƒn thá»‹ tá»“n kho, Ä‘Æ¡n vá»‹ bÃ¡n vÃ  vÃ¹ng cung á»©ng dá»… Ä‘á»c.
+            Mỗi sản phẩm hiển thị tồn kho, đơn vị bán và vùng cung ứng dễ đọc.
           </p>
         </div>
       </section>
@@ -2422,7 +2422,7 @@ export default function Home() {
             <Leaf className="size-5 text-emerald-600" />
             <span className="font-black">AgriMarket</span>
           </div>
-          <p>NÃ´ng sáº£n tÆ°Æ¡i, giÃ¡ rÃµ rÃ ng, giao trong ngÃ y.</p>
+          <p>Nông sản tươi, giá rõ ràng, giao trong ngày.</p>
         </div>
       </footer>
 
