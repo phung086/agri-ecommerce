@@ -571,7 +571,7 @@ class OrderServiceImplTest {
         user.setLoyaltyPoints(5000); // 5000 points available
 
         ProductEntity product = product("in_stock", 20);
-        CartItemEntity item = cartItem(product, 2); // 2 * 50,000 = 100,000 subtotal
+        CartItemEntity item = cartItem(product, 1); // 1 * 50,000 = 50,000 subtotal (below 100k, shipping fee applies)
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(shippingAddressRepository.findByIdAndUser_Id(any(), eq(1L))).thenReturn(Optional.of(address()));
@@ -595,6 +595,6 @@ class OrderServiceImplTest {
         verify(loyaltyService).deductPointsForCheckout(eq(1L), eq(5000));
         assertThat(response.getPointsUsed()).isEqualTo(5000);
         assertThat(response.getDiscountAmount()).isEqualByComparingTo("5000.00");
-        assertThat(response.getTotalPrice()).isEqualByComparingTo("120000.00");
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("70000.00");
     }
 }
