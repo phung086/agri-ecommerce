@@ -65,6 +65,25 @@ async function fetchCartSnapshot() {
     };
   }
 
+  // User is authenticated — check if there are pending guest cart items to merge
+  const guestItems = readGuestCart();
+  if (guestItems.length > 0) {
+    // Silently merge guest cart items into the authenticated cart
+    try {
+      await Promise.all(
+        guestItems.map((item) =>
+          cartService.addItem({
+            productId: Number(item.productId),
+            quantity: Number(item.quantity || 1),
+          })
+        )
+      );
+    } catch {
+      // Merge failed — ignore silently, items will remain in localStorage
+    }
+    clearGuestCart();
+  }
+
   const response = await cartService.getCart();
 
   return { authStatus: "authenticated", cart: response };
