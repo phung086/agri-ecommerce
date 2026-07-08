@@ -36,6 +36,8 @@ import {
   X,
   Coins,
   Award,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -1212,6 +1214,9 @@ export default function CustomerProfilePage() {
   const [phoneError, setPhoneError] = useState("");
   const [coupons, setCoupons] = useState([]);
   const [couponsLoading, setCouponsLoading] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [deletingAddressId, setDeletingAddressId] = useState(null);
+  const [isDeletingAddress, setIsDeletingAddress] = useState(false);
 
   const loadPublicCoupons = useCallback(async () => {
     setCouponsLoading(true);
@@ -1657,16 +1662,26 @@ export default function CustomerProfilePage() {
     }
   }
 
-  async function handleDeleteAddress(addressId) {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa địa chỉ này?")) {
-      return;
-    }
+  function openDeleteConfirm(addressId) {
+    setDeletingAddressId(addressId);
+    setIsDeleteConfirmOpen(true);
+    setError("");
+    setNotice("");
+  }
+
+  function closeDeleteConfirm() {
+    setIsDeleteConfirmOpen(false);
+    setDeletingAddressId(null);
+  }
+
+  async function handleDeleteAddress() {
+    setIsDeletingAddress(true);
     setError("");
     setNotice("");
 
     try {
-      const addressToDelete = addresses.find((a) => a.id === addressId);
-      await shippingAddressService.deleteAddress(addressId);
+      const addressToDelete = addresses.find((a) => a.id === deletingAddressId);
+      await shippingAddressService.deleteAddress(deletingAddressId);
 
       const nextAddresses = await shippingAddressService.getAddresses();
       const normalizedAddresses = Array.isArray(nextAddresses) ? nextAddresses : [];
@@ -1718,8 +1733,11 @@ export default function CustomerProfilePage() {
       }
 
       setNotice("Đã xóa địa chỉ thành công.");
+      closeDeleteConfirm();
     } catch (err) {
       setError(err.response?.data?.message || err?.message || "Không thể xóa địa chỉ giao hàng.");
+    } finally {
+      setIsDeletingAddress(false);
     }
   }
 
@@ -2466,7 +2484,7 @@ export default function CustomerProfilePage() {
                                     type="button"
                                     variant="ghost"
                                     className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs px-2"
-                                    onClick={() => handleDeleteAddress(addr.id)}
+                                    onClick={() => openDeleteConfirm(addr.id)}
                                   >
                                     {t("Xóa")}
                                   </Button>
@@ -2632,6 +2650,50 @@ export default function CustomerProfilePage() {
                 </div>
               )}
             </main>
+          </div>
+        )}
+        {/* ── DELETE CONFIRMATION DIALOG ───────────────────────────── */}
+        {isDeleteConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="w-full max-w-sm rounded-xl border border-red-100 bg-white p-6 shadow-xl animate-scale-up">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                  <Trash2 className="size-5" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base font-black text-slate-950">
+                    {t("Xác nhận xóa địa chỉ")}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                    {t("Bạn có chắc chắn muốn xóa địa chỉ này? Hành động này không thể hoàn tác.")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 px-4 border-slate-100 bg-white text-slate-800 hover:bg-slate-50 font-bold"
+                  onClick={closeDeleteConfirm}
+                  disabled={isDeletingAddress}
+                >
+                  {t("Hủy")}
+                </Button>
+                <Button
+                  type="button"
+                  className="h-9 px-4 bg-red-600 font-bold hover:bg-red-700 text-white"
+                  disabled={isDeletingAddress}
+                  onClick={handleDeleteAddress}
+                >
+                  {isDeletingAddress ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    t("Xóa")
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>
