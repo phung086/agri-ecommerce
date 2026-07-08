@@ -1,4 +1,4 @@
--- V16: Update THIT coupon to be PRODUCT_DISCOUNT type and link to pork/meat product
+-- V18: Update THIT coupon to be PRODUCT_DISCOUNT type and link to pork/meat product
 -- This transforms the existing 'THIT' coupon from ORDER_DISCOUNT to PRODUCT_DISCOUNT
 
 UPDATE `coupons`
