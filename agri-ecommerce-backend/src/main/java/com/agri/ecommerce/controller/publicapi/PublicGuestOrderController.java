@@ -44,4 +44,16 @@ public class PublicGuestOrderController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Guest order created successfully", response, HttpStatus.CREATED.value()));
     }
+
+    @Operation(summary = "Track guest or public order")
+    @org.springframework.web.bind.annotation.GetMapping("/track")
+    public ResponseEntity<ApiResponse<OrderResponse>> trackOrder(
+            @org.springframework.web.bind.annotation.RequestParam Long orderId,
+            @org.springframework.web.bind.annotation.RequestParam String phone
+    ) {
+        OrderResponse response = orderService.trackOrder(orderId, phone);
+        return ResponseEntity.ok(
+                ApiResponse.success("Order retrieved successfully", response, HttpStatus.OK.value())
+        );
+    }
 }

@@ -391,9 +391,9 @@ public class OrderServiceImpl implements OrderService {
         }
         BigDecimal totalPrice = subtotal.add(shippingFee).setScale(2, RoundingMode.HALF_UP);
         List<String> warnings = new ArrayList<>();
-        warnings.add("Mua nhanh khong can tai khoan: khach vang lai khong ap dung ma giam gia, xu tich luy hoac thang hang.");
+        warnings.add("Mua nhanh không cần tài khoản: Khách vãng lai sẽ không áp dụng mã giảm giá, tích lũy xu hoặc thăng hạng thành viên.");
         if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
-            warnings.add("Don hang tu 100.000d duoc mien phi van chuyen.");
+            warnings.add("Đơn hàng từ 100.000đ được miễn phí vận chuyển.");
         }
 
         return CheckoutPreviewResponse.builder()
@@ -401,7 +401,7 @@ public class OrderServiceImpl implements OrderService {
                 .paymentMethod(paymentMethod)
                 .couponCode(null)
                 .couponValid(false)
-                .couponMessage("Guest checkout does not use coupons")
+                .couponMessage("Bạn cần có tài khoản để sử dụng mã giảm giá và tích lũy điểm thưởng nhé!")
                 .shippingAddress(toGuestShippingAddressResponse(request))
                 .totalQuantity(totalQuantity)
                 .subtotal(subtotal)
@@ -1502,6 +1502,21 @@ public class OrderServiceImpl implements OrderService {
                 .forEach(code -> uniqueCodes.putIfAbsent(code.toUpperCase(Locale.ROOT), code));
 
         return List.copyOf(uniqueCodes.values());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderResponse trackOrder(Long orderId, String phone) {
+        OrderEntity order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại."));
+
+        String orderPhone = order.getShippingPhone();
+
+        if (orderPhone == null || !orderPhone.replaceAll("\\D", "").equals(phone.replaceAll("\\D", ""))) {
+            throw new BadRequestException("Số điện thoại không khớp với thông tin đơn hàng.");
+        }
+
+        return toOrderResponse(order, true);
     }
 
     private record CheckoutItem(ProductEntity product, int quantity, BigDecimal price, BigDecimal lineTotal) {

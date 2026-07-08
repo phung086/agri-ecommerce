@@ -940,15 +940,65 @@ export default function CheckoutPage() {
         if (!cancelled) {
           setAuthStatus("guest");
           setCart(mapGuestCartItemsToCartResponse(readGuestCart()));
-          setAddresses([]);
-          setSelectedAddressId("");
           setPaymentMethod("cash");
           setAppliedCoupons([]);
           setUsePoints(false);
           setLoyaltyPoints(0);
           setMembershipTier("GUEST");
-          setShowAddressForm(true);
-          setAddressForm(createBlankAddressForm());
+
+          // Recover guest profile from localStorage
+          let guestAddr = null;
+          let profileObj = null;
+          try {
+            const rawProfile = window.localStorage.getItem("agri-market:guest-profile");
+            if (rawProfile) {
+              profileObj = JSON.parse(rawProfile);
+              if (profileObj && profileObj.fullName && profileObj.phone) {
+                guestAddr = {
+                  id: "guest-addr",
+                  fullName: profileObj.fullName,
+                  phone: profileObj.phone,
+                  address: profileObj.detailedAddress,
+                  city: profileObj.provinceName || profileObj.city,
+                  defaultAddress: true,
+                  provinceCode: profileObj.provinceCode,
+                  provinceName: profileObj.provinceName,
+                  districtCode: profileObj.districtCode,
+                  districtName: profileObj.districtName,
+                  wardCode: profileObj.wardCode,
+                  wardName: profileObj.wardName,
+                };
+              }
+            }
+          } catch (e) {
+            console.error("Failed to parse guest profile", e);
+          }
+
+          if (guestAddr) {
+            setAddresses([guestAddr]);
+            setSelectedAddressId("guest-addr");
+            setGuestEmail(profileObj?.email || "");
+            const restoredForm = {
+              fullName: profileObj.fullName || "",
+              phone: profileObj.phone || "",
+              provinceCode: profileObj.provinceCode || "",
+              provinceName: profileObj.provinceName || "",
+              districtCode: profileObj.districtCode || "",
+              districtName: profileObj.districtName || "",
+              wardCode: profileObj.wardCode || "",
+              wardName: profileObj.wardName || "",
+              address: profileObj.detailedAddress ? profileObj.detailedAddress.split(",")[0].trim() : "",
+              defaultAddress: true,
+            };
+            setAddressForm(restoredForm);
+            setShowAddressForm(false);
+          } else {
+            setAddresses([]);
+            setSelectedAddressId("");
+            setShowAddressForm(true);
+            setAddressForm(createBlankAddressForm());
+          }
+
           setPreview(null);
           setLoading(false);
         }
@@ -1092,14 +1142,75 @@ export default function CheckoutPage() {
   function closeAddressForm() {
     if (addresses.length === 0) return;
     setPhoneError("");
-    setAddressForm(createBlankAddressForm(false));
+    if (!isGuestCheckout) {
+      setAddressForm(createBlankAddressForm(false));
+    }
     setShowAddressForm(false);
   }
 
   async function handleSaveAddress(event) {
     event.preventDefault();
     if (isGuestCheckout) {
-      await requestCheckoutPreview({ showErrors: true, clearMessages: true });
+      if (!validateAddress()) return;
+
+      const payload = {
+        fullName: addressForm.fullName.trim(),
+        phone: addressForm.phone.trim(),
+        city: addressForm.provinceName.trim(),
+        address: buildDetailedAddress(addressForm),
+        defaultAddress: true,
+      };
+
+      if (
+        !payload.fullName ||
+        !payload.phone ||
+        !payload.city ||
+        !addressForm.districtCode ||
+        !addressForm.wardCode ||
+        !addressForm.address.trim()
+      ) {
+        setError("Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng.");
+        return;
+      }
+
+      const guestAddr = {
+        id: "guest-addr",
+        fullName: payload.fullName,
+        phone: payload.phone,
+        address: payload.address,
+        city: payload.city,
+        defaultAddress: true,
+        provinceCode: addressForm.provinceCode,
+        provinceName: addressForm.provinceName,
+        districtCode: addressForm.districtCode,
+        districtName: addressForm.districtName,
+        wardCode: addressForm.wardCode,
+        wardName: addressForm.wardName,
+      };
+
+      const profileToSave = {
+        fullName: payload.fullName,
+        phone: payload.phone,
+        email: guestEmail.trim(),
+        detailedAddress: payload.address,
+        provinceName: addressForm.provinceName,
+        provinceCode: addressForm.provinceCode,
+        districtCode: addressForm.districtCode,
+        districtName: addressForm.districtName,
+        wardCode: addressForm.wardCode,
+        wardName: addressForm.wardName,
+      };
+
+      try {
+        window.localStorage.setItem("agri-market:guest-profile", JSON.stringify(profileToSave));
+        setAddresses([guestAddr]);
+        setSelectedAddressId("guest-addr");
+        setShowAddressForm(false);
+        setNotice("Đã lưu thông tin giao hàng khách vãng lai.");
+        setPreview(null);
+      } catch (err) {
+        setError("Không thể lưu địa chỉ giao hàng khách vãng lai.");
+      }
       return;
     }
 
@@ -1683,7 +1794,11 @@ export default function CheckoutPage() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  openEditDialog(address);
+                                  if (isGuestCheckout) {
+                                    setShowAddressForm(true);
+                                  } else {
+                                    openEditDialog(address);
+                                  }
                                 }}
                                 className="inline-flex items-center justify-center rounded-[6px] p-1.5 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition"
                                 title="Chỉnh sửa"
@@ -1702,30 +1817,32 @@ export default function CheckoutPage() {
                                   />
                                 </svg>
                               </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  openDeleteConfirm(address.id);
-                                }}
-                                className="inline-flex items-center justify-center rounded-[6px] p-1.5 text-slate-600 hover:bg-red-50 hover:text-red-700 transition"
-                                title="Xóa"
-                              >
-                                <svg
-                                  className="size-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
+                              {!isGuestCheckout && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openDeleteConfirm(address.id);
+                                  }}
+                                  className="inline-flex items-center justify-center rounded-[6px] p-1.5 text-slate-600 hover:bg-red-50 hover:text-red-700 transition"
+                                  title="Xóa"
                                 >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
+                                  <svg
+                                    className="size-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <p className="mt-2 text-sm font-semibold text-slate-600">

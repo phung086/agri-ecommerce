@@ -59,4 +59,11 @@ export const orderService = {
     });
     return unwrapApiData(response);
   },
+
+  trackGuestOrder: async (orderId, phone) => {
+    const response = await axiosClient.get("/public/orders/track", {
+      params: { orderId, phone },
+    });
+    return unwrapApiData(response);
+  },
 };
