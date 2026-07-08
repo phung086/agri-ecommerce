@@ -1437,6 +1437,40 @@ export default function CheckoutPage() {
               )}
             </div>
 
+            {/* Render Shipping Address Details */}
+            {createdOrder.shippingAddress && (
+              <div className="rounded-[8px] border border-sky-100 bg-sky-50/50 p-4 text-left text-sm text-sky-900 space-y-1">
+                <p className="font-black text-[11px] uppercase tracking-wider text-sky-850">Địa chỉ nhận hàng</p>
+                <p className="font-bold text-slate-900 mt-1">
+                  {createdOrder.shippingAddress.fullName} - {createdOrder.shippingAddress.phone}
+                </p>
+                <p className="text-slate-700 text-xs">
+                  {createdOrder.shippingAddress.address}, {createdOrder.shippingAddress.city}
+                </p>
+              </div>
+            )}
+
+            {/* Render Order Products Details */}
+            {createdOrder.items && createdOrder.items.length > 0 && (
+              <div className="rounded-[8px] border border-emerald-100/50 bg-emerald-50/10 p-4 text-left text-sm space-y-2">
+                <p className="font-black text-[11px] uppercase tracking-wider text-emerald-800 mb-1">Chi tiết đơn đặt hàng</p>
+                <div className="divide-y divide-slate-100">
+                  {createdOrder.items.map((item) => (
+                    <div key={item.id} className="flex justify-between py-2.5 items-center text-xs">
+                      <div className="space-y-0.5 max-w-[70%]">
+                        <p className="font-bold text-slate-800">{item.productName}</p>
+                        <p className="text-slate-400">Đơn giá: {formatCurrency(item.price)}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-semibold text-slate-500">x{item.quantity}</span>
+                        <p className="font-bold text-slate-800 mt-0.5">{formatCurrency(item.lineTotal || (item.price * item.quantity))}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 type="button"

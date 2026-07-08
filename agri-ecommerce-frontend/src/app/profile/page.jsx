@@ -1383,6 +1383,14 @@ export default function CustomerProfilePage() {
     const timeoutId = window.setTimeout(() => {
       const session = getAuthSession(AUTH_SCOPES.customer);
 
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get("tab");
+        if (tab && ["profile", "addresses", "password", "orders", "coupons"].includes(tab)) {
+          setActiveTab(tab);
+        }
+      }
+
       if (!session?.accessToken || isAuthSessionExpired(session)) {
         clearAuthSession(AUTH_SCOPES.customer);
         setAuthStatus("unauthenticated");
