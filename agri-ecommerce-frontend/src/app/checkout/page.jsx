@@ -1404,6 +1404,61 @@ export default function CheckoutPage() {
               Đang tải dữ liệu thanh toán...
             </p>
           </section>
+        ) : createdOrder ? (
+          <section className="rounded-[8px] border border-emerald-100 bg-white p-8 text-center shadow-[0_16px_42px_rgba(15,61,38,0.07)] max-w-2xl mx-auto space-y-6 animate-fade-in">
+            <div className="flex size-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mx-auto">
+              <CheckCircle2 className="size-10" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-emerald-950">
+                Đơn đặt hàng của bạn đã được gửi đi!
+              </h2>
+              <p className="mt-2 text-sm text-slate-500 font-semibold">
+                Cảm ơn bạn đã mua sắm tại AgriMarket. Đơn hàng của bạn đang được tiếp nhận và xử lý.
+              </p>
+            </div>
+
+            <div className="border-t border-b border-dashed border-slate-200 py-4 my-6 text-left space-y-3 font-semibold text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Mã đơn hàng:</span>
+                <span className="font-bold text-slate-900">#{createdOrder.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Mã vận đơn GHN:</span>
+                <span className="font-mono font-bold text-emerald-750">{createdOrder.trackingNumber || "Chờ xử lý"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Phương thức thanh toán:</span>
+                <span className="font-bold text-slate-900">
+                  {paymentMethod === "vnpay" ? "VNPay Sandbox" : 
+                   paymentMethod === "paypal" ? "PayPal" : "Thanh toán khi nhận hàng (COD)"}
+                </span>
+              </div>
+              {createdOrder.totalPrice != null && (
+                <div className="flex justify-between border-t border-slate-100 pt-3">
+                  <span className="text-slate-400">Tổng thanh toán:</span>
+                  <span className="font-black text-emerald-700 text-base">{formatCurrency(createdOrder.totalPrice)}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => router.push("/")}
+                className="h-11 px-6 rounded-[8px] bg-emerald-600 hover:bg-emerald-700 text-sm font-bold text-white transition shadow-sm"
+              >
+                Tiếp tục mua sắm
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/profile?tab=orders")}
+                className="h-11 px-6 rounded-[8px] border border-slate-200 hover:bg-slate-50 text-sm font-bold text-slate-700 transition"
+              >
+                Xem đơn mua
+              </button>
+            </div>
+          </section>
         ) : (
           <form
             onSubmit={handleSubmitOrder}
@@ -1411,25 +1466,6 @@ export default function CheckoutPage() {
           >
             {/* ── LEFT column ─────────────────────────────────────────── */}
             <div className="space-y-5">
-              {createdOrder && (
-                <section className="rounded-[8px] border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
-                  <CheckCircle2 className="size-8" />
-                  <h2 className="mt-3 text-xl font-black">
-                    Đã tạo đơn hàng {createdOrder.trackingNumber || '#' + createdOrder.id}
-                  </h2>
-                  <p className="mt-2 text-sm font-semibold">
-                    Trạng thái hiện tại: {createdOrder.status}. Admin có thể xử
-                    lý đơn này ở batch tiếp theo.
-                  </p>
-                  <Button
-                    type="button"
-                    className="mt-4 bg-emerald-600 font-bold hover:bg-emerald-700"
-                    onClick={() => router.push("/")}
-                  >
-                    Tiếp tục mua hàng
-                  </Button>
-                </section>
-              )}
 
               {/* Cart items */}
               <section className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
