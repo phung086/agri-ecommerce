@@ -29,6 +29,10 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
 
     boolean existsByShippingAddress_Id(Long shippingAddressId);
 
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("update OrderEntity o set o.shippingAddress = null where o.shippingAddress.id = :addressId")
+    void setShippingAddressNull(@Param("addressId") Long addressId);
+
     @Override
     @EntityGraph(attributePaths = {"user", "user.role", "deliveryStaff", "deliveryStaff.role", "shippingAddress"})
     Page<OrderEntity> findAll(org.springframework.data.jpa.domain.Specification<OrderEntity> specification, Pageable pageable);
