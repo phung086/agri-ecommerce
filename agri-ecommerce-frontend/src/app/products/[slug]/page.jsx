@@ -36,6 +36,7 @@ import { localizeProduct } from "@/i18n/localized-fields";
 import { marketplaceService } from "@/services/marketplace.service";
 import { reviewService } from "@/services/review.service";
 import { wishlistService } from "@/services/wishlist.service";
+import { addGuestCartItem, readGuestCart } from "@/lib/guest-cart-storage";
 
 function getActiveCustomerSession() {
   const session = getAuthSession(AUTH_SCOPES.customer);
@@ -209,7 +210,9 @@ export default function ProductDetailPage() {
       const session = getActiveCustomerSession();
 
       if (!session) {
-        setCartCount(0);
+        const guestItems = readGuestCart();
+        const count = guestItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        setCartCount(count);
         return;
       }
 
@@ -316,8 +319,11 @@ export default function ProductDetailPage() {
     const session = getActiveCustomerSession();
 
     if (!session) {
-      setError("Vui lòng đăng nhập tài khoản khách hàng trước khi thêm giỏ.");
-      router.push("/profile");
+      const nextItems = addGuestCartItem(product, 1);
+      const count = nextItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+      setCartCount(count);
+      triggerAddToCartEffect();
+      setNotice("Gio hang dang luu tam tren trinh duyet. Ban co the thanh toan nhanh khong can dang nhap.");
       return;
     }
 

@@ -171,7 +171,9 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
         OrderEntity savedOrder = orderRepository.save(order);
         paymentService.completeCashPaymentIfPending(savedOrder.getId());
 
-        loyaltyService.awardPointsForPurchase(savedOrder.getUser().getId(), savedOrder.getId(), savedOrder.getTotalPrice());
+        if (savedOrder.getUser() != null) {
+            loyaltyService.awardPointsForPurchase(savedOrder.getUser().getId(), savedOrder.getId(), savedOrder.getTotalPrice());
+        }
 
         orderStatusHistoryRepository.save(createStatusHistory(
                 savedOrder,
@@ -230,7 +232,7 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
         order.setStatus(nextStatus);
         OrderEntity savedOrder = orderRepository.save(order);
 
-        if ("canceled".equals(nextStatus) && savedOrder.getPointsUsed() != null && savedOrder.getPointsUsed() > 0) {
+        if ("canceled".equals(nextStatus) && savedOrder.getUser() != null && savedOrder.getPointsUsed() != null && savedOrder.getPointsUsed() > 0) {
             loyaltyService.refundPointsForCancellation(savedOrder.getUser().getId(), savedOrder.getPointsUsed());
         }
 
@@ -261,6 +263,9 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     }
 
     private void notifyCustomer(OrderEntity order, String message, String link) {
+        if (order.getUser() == null) {
+            return;
+        }
         notificationService.createNotification(order.getUser().getId(), NOTIFICATION_TYPE_ORDER, message, link);
     }
 
