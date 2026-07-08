@@ -37,6 +37,10 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
     @Query("select orderEntity from OrderEntity orderEntity where orderEntity.id = :id")
     Optional<OrderEntity> findByIdForUpdate(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select orderEntity from OrderEntity orderEntity where orderEntity.trackingNumber = :trackingNumber")
+    Optional<OrderEntity> findByTrackingNumberForUpdate(@Param("trackingNumber") String trackingNumber);
+
     long countByStatus(String status);
 
     long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(LocalDateTime fromDate, LocalDateTime toDate);

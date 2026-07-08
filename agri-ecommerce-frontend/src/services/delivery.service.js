@@ -106,6 +106,13 @@ export const deliveryService = {
     });
   },
 
+  notifyArrival: async (orderId) => {
+    const response = await axiosClient.post(
+      `/delivery/orders/${orderId}/notify-arrival`
+    );
+    return unwrapApiData(response);
+  },
+
   deleteAvatar: async () =>
     requestWithDeliveryToken("/customer/profile/avatar", {
       method: "DELETE",

@@ -370,7 +370,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 CREATE TABLE `order_status_history` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `order_id` bigint(20) UNSIGNED NOT NULL,
-  `status` enum('pending','processing','ready_for_delivery','out_for_delivery','delivered','completed','canceled') DEFAULT NULL,
+  `status` enum('pending','processing','ready_for_delivery','out_for_delivery','delivered','completed','failed_delivery_attempt','canceled') DEFAULT NULL,
   `changed_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `note` text DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,

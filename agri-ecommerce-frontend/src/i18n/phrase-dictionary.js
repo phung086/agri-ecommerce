@@ -353,7 +353,10 @@ const additionalTranslations = {
   "Xóa toàn bộ sản phẩm trong giỏ hàng?": "Remove all products from the cart?",
   "Đã xóa toàn bộ giỏ hàng.": "Cart cleared.",
   "Phí giao dự kiến": "Estimated shipping fee",
+  "Tính khi chọn địa chỉ": "Calculated after selecting an address",
+  "Tính ở checkout": "Calculated at checkout",
   "Tổng cộng": "Grand total",
+  "Tổng tạm tính": "Estimated total",
   "Xóa giỏ hàng": "Clear cart",
   "Giỏ hàng đang trống": "Your cart is empty",
   "Chọn vài món rau củ, trái cây hoặc combo tươi để bắt đầu đơn hàng.":
@@ -702,8 +705,6 @@ const additionalTranslations = {
   "Chờ phân công": "Waiting assignment",
   "Quảng Bình": "Quang Binh",
   "Chanh dây": "Passion fruit",
-  "Hội An": "Hoi An",
-  "Đà Nẵng": "Da Nang",
   "tư vấn mua cà chua": "consultation for buying tomatoes",
   "Cho mình hỏi cửa hàng có giao rau củ trong ngày không?":
     "Does the store deliver vegetables on the same day?",
@@ -725,9 +726,9 @@ const additionalTranslations = {
   "Combo rau củ được cập nhật theo ngày để giảm lãng phí và giữ giá tốt.":
     "Vegetable combos updated daily to reduce waste and keep prices low.",
   "Xem tất cả ưu đãi →": "View all offers →",
-  "Phí giao tiêu chuẩn 25.000đ": "Standard delivery fee 25,000 VND",
-  "Giỏ hàng tự tính phí dự kiến để người mua chủ động trước khi thanh toán.":
-    "The cart estimates delivery fees so buyers can plan before checking out.",
+  "Phí giao tính theo GHN": "Shipping fee calculated by GHN",
+  "Checkout gọi GHN để tính phí theo địa chỉ nhận hàng và kho gửi.":
+    "Checkout calls GHN to calculate the fee from the delivery address and shop origin.",
   "Chất lượng trước tiên": "Quality first",
   "Mỗi sản phẩm hiển thị tồn kho, đơn vị bán và vùng cung ứng dễ đọc.":
     "Each product displays stock, unit, and supply region clearly.",
@@ -821,7 +822,7 @@ const additionalTranslations = {
   "Địa chỉ giao:": "Delivery address:",
   "Địa chỉ nhận hàng chưa được đồng bộ từ API. Vui lòng thử lại.":
     "Shipping address has not synced from the API. Please try again.",
-  "Địa chỉ vận hành hoặc liên hệ...": "Operations or contact address...",
+  "Địa chỉ vận hành hoặc liên hệ...": "Operating or contact address...",
   "Đơn giá": "Unit price",
   "Đơn giao thành công (COD)": "Successful COD deliveries",
   "Đơn giao thành công (Online)": "Successful online-paid deliveries",
@@ -844,7 +845,6 @@ const additionalTranslations = {
   "Họ tên người nhận": "Recipient full name",
   "Họ và tên": "Full name",
   "Hồ sơ cá nhân": "Personal profile",
-  "Hội An / Đà Nẵng": "Hoi An / Da Nang",
   "Hủy bỏ": "Cancel",
   "Hệ thống hỗ trợ tìm kiếm sản phẩm thông minh, chọn lọc vùng miền và giao hàng hỏa tốc trong ngày để bảo đảm độ tươi ngon tối đa.":
     "The system supports smart product search, regional curation, and same-day express delivery to keep produce as fresh as possible.",
@@ -860,6 +860,8 @@ const additionalTranslations = {
   "Không liên lạc được (thuê bao/không bắt máy)": "Could not contact customer (unavailable/no answer)",
   "Không tải được ưu đãi.": "Could not load promotions.",
   "Không thể báo cáo thất bại đơn.": "Could not report delivery failure.",
+  "KHU VỰC GIAO": "DELIVERY AREA",
+  "Chưa cập nhật": "Not updated",
   "Không thể cập nhật địa chỉ.": "Could not update address.",
   "Không thể cập nhật hồ sơ cá nhân.": "Could not update personal profile.",
   "Không thể cập nhật trạng thái giao đơn.": "Could not update delivery status.",

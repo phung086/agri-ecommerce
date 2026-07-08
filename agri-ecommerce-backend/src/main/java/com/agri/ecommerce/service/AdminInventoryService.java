@@ -25,4 +25,10 @@ public interface AdminInventoryService {
     InventoryStockMutationResponse setStock(Long productId, InventoryStockSetRequest request);
 
     InventoryStockMutationResponse adjustStock(Long productId, InventoryStockAdjustmentRequest request);
+
+    java.util.List<com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse> getBatches();
+
+    com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse createBatch(com.agri.ecommerce.dto.request.inventory.InventoryBatchCreateRequest request);
+
+    java.util.List<com.agri.ecommerce.dto.response.inventory.InventoryTransactionResponse> getTransactions();
 }

@@ -11,6 +11,8 @@ import com.agri.ecommerce.dto.response.inventory.InventorySummaryResponse;
 import com.agri.ecommerce.entity.CategoryEntity;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.repository.ProductRepository;
+import com.agri.ecommerce.repository.InventoryBatchRepository;
+import com.agri.ecommerce.repository.InventoryTransactionRepository;
 import com.agri.ecommerce.service.AdminInventoryService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,8 @@ public class AdminInventoryServiceImpl implements AdminInventoryService {
     );
 
     private final ProductRepository productRepository;
+    private final InventoryBatchRepository inventoryBatchRepository;
+    private final InventoryTransactionRepository inventoryTransactionRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -352,5 +356,89 @@ public class AdminInventoryServiceImpl implements AdminInventoryService {
         }
 
         return value.trim();
+    }
+
+    @Override
+    @Transactional
+    public com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse createBatch(com.agri.ecommerce.dto.request.inventory.InventoryBatchCreateRequest request) {
+        ProductEntity product = productRepository.findById(request.getProductId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm"));
+                
+        com.agri.ecommerce.entity.InventoryBatchEntity batch = com.agri.ecommerce.entity.InventoryBatchEntity.builder()
+                .product(product)
+                .batchNumber(request.getBatchNumber())
+                .importPrice(request.getImportPrice())
+                .originalQuantity(request.getOriginalQuantity())
+                .remainingQuantity(request.getOriginalQuantity())
+                .manufactureDate(request.getManufactureDate())
+                .expiryDate(request.getExpiryDate())
+                .build();
+                
+        batch = inventoryBatchRepository.save(batch);
+        
+        inventoryTransactionRepository.save(com.agri.ecommerce.entity.InventoryTransactionEntity.builder()
+                .product(product)
+                .batch(batch)
+                .quantity(request.getOriginalQuantity())
+                .type("IMPORT")
+                .note("Nhập kho lô hàng mới #" + request.getBatchNumber())
+                .build());
+                
+        int currentStock = product.getStock() == null ? 0 : product.getStock();
+        int updatedStock = currentStock + request.getOriginalQuantity();
+        product.setStock(updatedStock);
+        if (updatedStock > 0 && OUT_OF_STOCK_STATUS.equals(product.getStatus())) {
+            product.setStatus(IN_STOCK_STATUS);
+        }
+        productRepository.save(product);
+        
+        return mapToBatchResponse(batch);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse> getBatches() {
+        return inventoryBatchRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"))
+                .stream()
+                .map(this::mapToBatchResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.agri.ecommerce.dto.response.inventory.InventoryTransactionResponse> getTransactions() {
+        return inventoryTransactionRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"))
+                .stream()
+                .map(this::mapToTransactionResponse)
+                .toList();
+    }
+
+    private com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse mapToBatchResponse(com.agri.ecommerce.entity.InventoryBatchEntity batch) {
+        return com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse.builder()
+                .id(batch.getId())
+                .productId(batch.getProduct().getId())
+                .productName(batch.getProduct().getName())
+                .batchNumber(batch.getBatchNumber())
+                .importPrice(batch.getImportPrice())
+                .originalQuantity(batch.getOriginalQuantity())
+                .remainingQuantity(batch.getRemainingQuantity())
+                .manufactureDate(batch.getManufactureDate())
+                .expiryDate(batch.getExpiryDate())
+                .createdAt(batch.getCreatedAt())
+                .build();
+    }
+
+    private com.agri.ecommerce.dto.response.inventory.InventoryTransactionResponse mapToTransactionResponse(com.agri.ecommerce.entity.InventoryTransactionEntity tx) {
+        return com.agri.ecommerce.dto.response.inventory.InventoryTransactionResponse.builder()
+                .id(tx.getId())
+                .productId(tx.getProduct().getId())
+                .productName(tx.getProduct().getName())
+                .batchId(tx.getBatch() != null ? tx.getBatch().getId() : null)
+                .batchNumber(tx.getBatch() != null ? tx.getBatch().getBatchNumber() : null)
+                .quantity(tx.getQuantity())
+                .type(tx.getType())
+                .note(tx.getNote())
+                .createdAt(tx.getCreatedAt())
+                .build();
     }
 }

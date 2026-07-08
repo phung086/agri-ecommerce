@@ -45,6 +45,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private static final String STATUS_OUT_FOR_DELIVERY = "out_for_delivery";
     private static final String STATUS_DELIVERED = "delivered";
     private static final String STATUS_COMPLETED = "completed";
+    private static final String STATUS_FAILED_DELIVERY_ATTEMPT = "failed_delivery_attempt";
     private static final String STATUS_CANCELED = "canceled";
     private static final String NOTIFICATION_TYPE_ORDER = "order";
     private static final String NOTIFICATION_TYPE_DELIVERY = "delivery";
@@ -57,6 +58,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
             STATUS_OUT_FOR_DELIVERY,
             STATUS_DELIVERED,
             STATUS_COMPLETED,
+            STATUS_FAILED_DELIVERY_ATTEMPT,
             STATUS_CANCELED
     );
     private static final Set<String> TERMINAL_STATUSES = Set.of(STATUS_COMPLETED, STATUS_CANCELED);
@@ -69,7 +71,8 @@ public class AdminOrderServiceImpl implements AdminOrderService {
             STATUS_PENDING, Set.of(STATUS_PROCESSING, STATUS_CANCELED),
             STATUS_PROCESSING, Set.of(STATUS_READY_FOR_DELIVERY, STATUS_CANCELED),
             STATUS_READY_FOR_DELIVERY, Set.of(STATUS_OUT_FOR_DELIVERY, STATUS_CANCELED),
-            STATUS_OUT_FOR_DELIVERY, Set.of(STATUS_DELIVERED),
+            STATUS_OUT_FOR_DELIVERY, Set.of(STATUS_DELIVERED, STATUS_FAILED_DELIVERY_ATTEMPT, STATUS_CANCELED),
+            STATUS_FAILED_DELIVERY_ATTEMPT, Set.of(STATUS_READY_FOR_DELIVERY, STATUS_CANCELED),
             STATUS_DELIVERED, Set.of(STATUS_COMPLETED),
             STATUS_COMPLETED, Set.of(),
             STATUS_CANCELED, Set.of()
@@ -605,7 +608,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private String normalizeStatus(String status) {
         String normalizedStatus = status.toLowerCase(Locale.ROOT);
         if (!ALLOWED_STATUSES.contains(normalizedStatus)) {
-            throw new BadRequestException("Trạng thái đơn hàng không hợp lệ. Giá trị hợp lệ: pending, processing, ready_for_delivery, out_for_delivery, delivered, completed, canceled");
+            throw new BadRequestException("Trạng thái đơn hàng không hợp lệ. Giá trị hợp lệ: pending, processing, ready_for_delivery, out_for_delivery, delivered, completed, failed_delivery_attempt, canceled");
         }
 
         return normalizedStatus;

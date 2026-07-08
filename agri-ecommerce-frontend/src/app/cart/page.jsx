@@ -34,8 +34,6 @@ import { useLanguage } from "@/i18n/language-provider";
 import { localizeCartItem } from "@/i18n/localized-fields";
 import { cartService } from "@/services/cart.service";
 
-const SHIPPING_FEE = 25000;
-
 function getActiveCustomerSession() {
   const session = getAuthSession(AUTH_SCOPES.customer);
 
@@ -90,8 +88,7 @@ export default function CartPage() {
   );
   const cartTotal = Number(cart?.totalAmount || 0);
   const cartQuantity = Number(cart?.totalQuantity || 0);
-  const shippingFee = cartItems.length > 0 ? SHIPPING_FEE : 0;
-  const grandTotal = cartTotal + shippingFee;
+  const grandTotal = cartTotal;
 
   const stockWarnings = useMemo(
     () =>
@@ -481,9 +478,7 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between">
                   <span>Phí giao dự kiến</span>
-                  <span>
-                    {shippingFee === 0 ? "Miễn phí" : formatCurrency(shippingFee)}
-                  </span>
+                  <span>Tính khi chọn địa chỉ</span>
                 </div>
                 {stockWarnings > 0 && (
                   <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
@@ -491,7 +486,7 @@ export default function CartPage() {
                   </div>
                 )}
                 <div className="flex justify-between border-t border-emerald-100 pt-4 text-base font-black text-slate-950">
-                  <span>Tổng dự kiến</span>
+                  <span>Tổng tạm tính</span>
                   <span>{formatCurrency(grandTotal)}</span>
                 </div>
               </div>

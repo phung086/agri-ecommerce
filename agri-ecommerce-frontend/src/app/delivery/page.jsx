@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
 import {
@@ -290,6 +291,17 @@ function createProfileForm(user) {
   };
 }
 
+function getDeliveryArea(profile, t) {
+  const area =
+    profile?.operatingAddress ||
+    profile?.address ||
+    profile?.user?.address ||
+    profile?.deliveryProfile?.operatingAddress ||
+    "";
+
+  return String(area).trim() || t("Chưa cập nhật");
+}
+
 function getInitial(user) {
   return (user?.name || user?.email || "S").charAt(0).toUpperCase();
 }
@@ -314,12 +326,14 @@ function validateAvatarFile(file) {
 }
 
 export default function DeliveryPage() {
+  const router = useRouter();
   const { t } = useLanguage();
   const [authStatus, setAuthStatus] = useState("checking");
   const [currentUser, setCurrentUser] = useState(null);
   const [loginForm, setLoginForm] = useState(blankLoginForm);
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -459,6 +473,8 @@ export default function DeliveryPage() {
       return matchesFilter && matchesKeyword;
     });
   }, [orders, orderFilter, searchTerm]);
+
+  const deliveryArea = getDeliveryArea(currentUser, t);
 
   function updateLoginForm(field, value) {
     setLoginForm((current) => ({
@@ -614,17 +630,23 @@ export default function DeliveryPage() {
     }, 1500);
   };
 
-  // Automated SMS notification to client
-  const sendArrivalNotification = (order) => {
-    const phone = getCustomerPhone(order);
-    if (!phone) {
-      toast.error(t("Khách hàng không có số điện thoại!"));
-      return;
+  // Automated notification to client
+  const sendArrivalNotification = async (order) => {
+    setError("");
+    setNotice("");
+    try {
+      await deliveryService.notifyArrival(order.id);
+      const message = "Đã gửi thông báo chuẩn bị giao hàng tới khách hàng.";
+      setNotice(message);
+      toast.success(t(message));
+    } catch (err) {
+      const message = getErrorMessage(
+        err,
+        "Không thể gửi thông báo cho khách hàng."
+      );
+      setError(message);
+      toast.error(t(message));
     }
-    const message = `Xin chào ${getCustomerName(order)}, tôi là nhân viên giao hàng từ AgriMarket. Tôi đang trên đường giao đơn hàng #${order.id} trị giá ${formatCurrency(getOrderTotal(order))} cho quý khách. Vui lòng giữ liên lạc điện thoại nhé!`;
-    
-    window.location.assign(`sms:${phone}?&body=${encodeURIComponent(message)}`);
-    toast.success(t("Đã mở ứng dụng nhắn tin cho khách hàng."));
   };
 
   async function handleStartTransit(order) {
@@ -856,7 +878,11 @@ export default function DeliveryPage() {
         address: profileForm.address.trim(),
         avatar: profileForm.avatar,
       });
-      const profile = unwrapApiData(response);
+      const profile = {
+        ...currentUser,
+        ...unwrapApiData(response),
+        address: profileForm.address.trim(),
+      };
       setCurrentUser(profile);
       setProfileForm(createProfileForm(profile));
       syncDeliverySessionUser(profile);
@@ -958,10 +984,14 @@ export default function DeliveryPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-emerald-600 text-white shadow-md">
         <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4 md:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="flex items-center gap-2 transition hover:opacity-90"
+            title="Trở lại trang mua hàng"
+          >
             <Truck className="size-6" />
             <h1 className="text-lg font-black tracking-tight">AgriMarket - Shipper</h1>
-          </div>
+          </Link>
           {authStatus === "authenticated" && (
             <button
               onClick={handleLogout}
@@ -982,7 +1012,43 @@ export default function DeliveryPage() {
           </div>
         ) : authStatus === "unauthenticated" ? (
           /* Login Form */
-          <div className="mx-auto max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative mx-auto max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="absolute right-4 top-4">
+              <button
+                type="button"
+                onClick={() => setShowRoleDropdown((prev) => !prev)}
+                className="flex size-9 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-emerald-700"
+                title="Chọn vai trò đăng nhập"
+              >
+                <UserCheck className="size-4" />
+              </button>
+
+              {showRoleDropdown && (
+                <div className="absolute right-0 top-full z-50 mt-1.5 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/profile")}
+                    className="w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-emerald-800"
+                  >
+                    Khách hàng
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full rounded-md bg-slate-50 px-3 py-2 text-left text-xs font-bold text-emerald-800"
+                  >
+                    Giao hàng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/admin/login")}
+                    className="w-full rounded-md px-3 py-2 text-left text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-emerald-800"
+                  >
+                    Quản trị viên
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="mb-6 text-center">
               <span className="inline-block rounded-full bg-emerald-50 p-3 text-emerald-600">
                 <Truck className="size-8" />
@@ -1201,8 +1267,8 @@ export default function DeliveryPage() {
                           <p className="text-2xl font-black text-slate-800 mt-1">{orders.length} đơn</p>
                         </div>
                         <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                          <p className="text-xs text-slate-500 font-black uppercase">Khu Vực Giao</p>
-                          <p className="text-sm font-black text-slate-800 mt-2 truncate">Hội An / Đà Nẵng</p>
+                          <p className="text-xs text-slate-500 font-black uppercase">{t("KHU VỰC GIAO")}</p>
+                          <p className="text-sm font-black text-slate-800 mt-2 truncate">{deliveryArea}</p>
                         </div>
                       </div>
 
@@ -1653,7 +1719,7 @@ export default function DeliveryPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="delivery-profile-address">Địa chỉ vận hành hoặc liên hệ...</Label>
+                      <Label htmlFor="delivery-profile-address">{t("Địa chỉ vận hành hoặc liên hệ...")}</Label>
                       <Textarea
                         id="delivery-profile-address"
                         value={profileForm.address}

@@ -49,6 +49,9 @@ public class OrderMapper {
                 .deliverySignature(order.getDeliverySignature())
                 .deliveryFailureReason(order.getDeliveryFailureReason())
                 .trackingNumber(order.getTrackingNumber())
+                .shippingProvider(order.getShippingProvider())
+                .shippingStatus(order.getShippingStatus())
+                .shippingStatusUpdatedAt(order.getShippingStatusUpdatedAt())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();

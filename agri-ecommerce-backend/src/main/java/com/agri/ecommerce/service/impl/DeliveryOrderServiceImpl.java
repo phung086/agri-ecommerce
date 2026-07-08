@@ -16,6 +16,7 @@ import com.agri.ecommerce.repository.PaymentRepository;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.DeliveryOrderService;
 import com.agri.ecommerce.service.PaymentService;
+import com.agri.ecommerce.service.EmailService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -36,13 +37,15 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private static final String STATUS_OUT_FOR_DELIVERY = "out_for_delivery";
     private static final String STATUS_DELIVERED = "delivered";
     private static final String STATUS_COMPLETED = "completed";
+    private static final String STATUS_FAILED_DELIVERY_ATTEMPT = "failed_delivery_attempt";
     private static final String NOTIFICATION_TYPE_ORDER = "order";
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ASSIGNED_ORDER_STATUSES = Set.of(
             STATUS_READY_FOR_DELIVERY,
             STATUS_OUT_FOR_DELIVERY,
             STATUS_DELIVERED,
-            STATUS_COMPLETED
+            STATUS_COMPLETED,
+            STATUS_FAILED_DELIVERY_ATTEMPT
     );
     private static final Set<String> HISTORY_STATUSES = Set.of(STATUS_DELIVERED, STATUS_COMPLETED);
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
@@ -60,6 +63,8 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private final NotificationService notificationService;
 
     private final PaymentService paymentService;
+
+    private final EmailService emailService;
 
     private final OrderMapper orderMapper;
 
@@ -138,6 +143,11 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 "Đơn hàng #" + savedOrder.getId() + " đang được giao",
                 buildOrderLink(savedOrder.getId())
         );
+        emailService.sendOrderStatusUpdate(
+                savedOrder,
+                "Đang giao hàng",
+                "Đơn hàng của bạn đang được giao bởi nhân viên giao hàng của AgriMarket. Vui lòng giữ liên lạc điện thoại để nhận hàng sạch tươi ngon!"
+        );
 
         return toOrderResponse(savedOrder, true);
     }
@@ -170,6 +180,11 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 "Đơn hàng #" + savedOrder.getId() + " đã được giao thành công",
                 buildOrderLink(savedOrder.getId())
         );
+        emailService.sendOrderStatusUpdate(
+                savedOrder,
+                "Giao hàng thành công",
+                "Đơn hàng của bạn đã được giao thành công bởi nhân viên giao hàng của AgriMarket. Cảm ơn quý khách đã tin dùng nông sản sạch của chúng tôi!"
+        );
 
         return toOrderResponse(savedOrder, true);
     }
@@ -196,13 +211,13 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
             order.setDeliveryFailureReason("Khách từ chối nhận/Hủy đơn");
             notifyMessage = "Đơn hàng #" + order.getId() + " đã bị hủy do khách từ chối nhận";
         } else if ("rescheduled".equalsIgnoreCase(reason)) {
-            nextStatus = STATUS_READY_FOR_DELIVERY; // Reset về sẵn sàng giao để shipper giao lại
-            historyStatus = "failed_delivery_attempt";
+            nextStatus = STATUS_FAILED_DELIVERY_ATTEMPT;
+            historyStatus = STATUS_FAILED_DELIVERY_ATTEMPT;
             order.setDeliveryFailureReason("Khách hẹn giao lại");
             notifyMessage = "Đơn hàng #" + order.getId() + " giao thất bại: Khách hẹn giao lại";
         } else if ("cannot_contact".equalsIgnoreCase(reason)) {
-            nextStatus = STATUS_READY_FOR_DELIVERY;
-            historyStatus = "failed_delivery_attempt";
+            nextStatus = STATUS_FAILED_DELIVERY_ATTEMPT;
+            historyStatus = STATUS_FAILED_DELIVERY_ATTEMPT;
             order.setDeliveryFailureReason("Không liên lạc được");
             notifyMessage = "Đơn hàng #" + order.getId() + " giao thất bại: Không liên lạc được với khách";
         } else {
@@ -227,6 +242,12 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 savedOrder,
                 notifyMessage,
                 buildOrderLink(savedOrder.getId())
+        );
+        emailService.sendOrderStatusUpdate(
+                savedOrder,
+                "Cập nhật kết quả giao hàng",
+                notifyMessage + ". Chi tiết lý do: " + savedOrder.getDeliveryFailureReason() + 
+                (cleanBlank(note) != null ? " | Ghi chú từ shipper: " + note.trim() : "")
         );
 
         return toOrderResponse(savedOrder, true);
@@ -344,7 +365,7 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
 
         normalizedStatus = normalizedStatus.toLowerCase(Locale.ROOT);
         if (!ASSIGNED_ORDER_STATUSES.contains(normalizedStatus)) {
-            throw new BadRequestException("Trạng thái đơn giao hàng không hợp lệ. Giá trị hợp lệ: ready_for_delivery, out_for_delivery, delivered, completed");
+            throw new BadRequestException("Trạng thái đơn giao hàng không hợp lệ. Giá trị hợp lệ: ready_for_delivery, out_for_delivery, delivered, completed, failed_delivery_attempt");
         }
 
         return normalizedStatus;
@@ -390,5 +411,21 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
         }
 
         return value.trim();
+    }
+
+    @Override
+    @Transactional
+    public void notifyArrival(Long deliveryStaffId, Long orderId) {
+        OrderEntity order = findAssignedOrderById(orderId, deliveryStaffId);
+        String message = "Đơn hàng #" + order.getId() + " đang chuẩn bị được giao tới bạn";
+        notifyCustomer(order, message, buildOrderLink(order.getId()));
+        
+        emailService.sendOrderStatusUpdate(
+                order,
+                "Chuẩn bị giao hàng",
+                "Nhân viên giao hàng của AgriMarket đang trên đường vận chuyển đơn hàng " 
+                + (order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId()) 
+                + " của bạn. Vui lòng chuẩn bị nhận hàng và giữ liên lạc điện thoại nhé!"
+        );
     }
 }

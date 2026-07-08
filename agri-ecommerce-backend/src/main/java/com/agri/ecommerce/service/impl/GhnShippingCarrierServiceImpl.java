@@ -46,6 +46,14 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
     @Value("${app.shipping.ghn.shop-id:}")
     private String shopId;
 
+    @Value("${app.shipping.ghn.from-district-id:1542}")
+    private int fallbackFromDistrictId;
+
+    @Value("${app.shipping.ghn.from-ward-code:1B1506}")
+    private String fallbackFromWardCode;
+
+    private volatile ResolvedOrigin cachedOrigin;
+
     public GhnShippingCarrierServiceImpl(OrderItemRepository orderItemRepository, PaymentRepository paymentRepository) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(5));
@@ -189,9 +197,10 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             }
 
             HttpHeaders headers = buildHeaders();
+            ResolvedOrigin origin = resolveOrigin();
             FeeRequest feeRequest = FeeRequest.builder()
-                    .fromDistrictId(1454) // Mock Shop District: Quận 12, HCM
-                    .fromWardCode("21211") // Mock Shop Ward
+                    .fromDistrictId(origin.getDistrictId())
+                    .fromWardCode(origin.getWardCode())
                     .toDistrictId(loc.getDistrictId())
                     .toWardCode(loc.getWardCode())
                     .weight((int) Math.max(weightInGrams, 500))
@@ -340,6 +349,82 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
         private int provinceId;
         private int districtId;
         private String wardCode;
+    }
+
+    @Data
+    @AllArgsConstructor
+    private static class ResolvedOrigin {
+        private int districtId;
+        private String wardCode;
+    }
+
+    private ResolvedOrigin resolveOrigin() {
+        ResolvedOrigin cached = cachedOrigin;
+        if (cached != null) {
+            return cached;
+        }
+
+        ResolvedOrigin shopOrigin = resolveShopOrigin();
+        if (shopOrigin != null) {
+            cachedOrigin = shopOrigin;
+            return shopOrigin;
+        }
+
+        String wardCode = fallbackFromWardCode == null ? "" : fallbackFromWardCode.trim();
+        if (fallbackFromDistrictId > 0 && !wardCode.isBlank()) {
+            return new ResolvedOrigin(fallbackFromDistrictId, wardCode);
+        }
+
+        return new ResolvedOrigin(1542, "1B1506");
+    }
+
+    private ResolvedOrigin resolveShopOrigin() {
+        if (shopId == null || shopId.isBlank()) {
+            return null;
+        }
+
+        try {
+            HttpHeaders headers = buildHeaders();
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<GhnResponse> response = restTemplate.exchange(
+                    apiUrl + "/v2/shop/all",
+                    HttpMethod.GET,
+                    entity,
+                    GhnResponse.class
+            );
+
+            if (response.getBody() == null || response.getBody().getCode() != 200 || response.getBody().getData() == null) {
+                return null;
+            }
+
+            Map<String, Object> data = (Map<String, Object>) response.getBody().getData();
+            List<Map<String, Object>> shops = (List<Map<String, Object>>) data.get("shops");
+            if (shops == null || shops.isEmpty()) {
+                return null;
+            }
+
+            Map<String, Object> selectedShop = shops.stream()
+                    .filter(shop -> shopId.equals(String.valueOf(shop.get("_id"))))
+                    .findFirst()
+                    .orElse(shops.get(0));
+            Object districtIdValue = selectedShop.get("district_id");
+            Object wardCodeValue = selectedShop.get("ward_code");
+            if (!(districtIdValue instanceof Number districtId) || wardCodeValue == null) {
+                return null;
+            }
+
+            String wardCode = String.valueOf(wardCodeValue).trim();
+            if (wardCode.isBlank()) {
+                return null;
+            }
+
+            log.info("[GHN API] Resolved shop origin from GHN shop {}: district={}, ward={}",
+                    selectedShop.get("_id"), districtId.intValue(), wardCode);
+            return new ResolvedOrigin(districtId.intValue(), wardCode);
+        } catch (Exception e) {
+            log.warn("[GHN API] Could not resolve shop origin from GHN /v2/shop/all: {}", e.getMessage());
+            return null;
+        }
     }
 
     private ResolvedLocation resolveLocation(String pName, String dName, String wName) {
