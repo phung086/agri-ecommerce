@@ -3,6 +3,7 @@ import { AUTH_SCOPES, clearAuthSession, getAuthToken, getCurrentAuthScope } from
 
 const axiosClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -86,9 +87,13 @@ axiosClient.interceptors.response.use(
     const apiError = error?.response?.data;
     const errorDetail =
       typeof apiError?.errors === "string" ? apiError.errors : null;
+    const timeoutMessage = error?.code === "ECONNABORTED"
+      ? "Máy chủ phản hồi quá lâu. Vui lòng thử lại sau vài giây."
+      : null;
     const message =
       errorDetail ||
       apiError?.message ||
+      timeoutMessage ||
       error?.message ||
       "Có lỗi xảy ra, vui lòng thử lại.";
 
