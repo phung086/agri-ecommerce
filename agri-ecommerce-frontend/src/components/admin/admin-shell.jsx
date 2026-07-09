@@ -6,7 +6,6 @@ import {
   BarChart3,
   Bell,
   ChevronRight,
-  Clock3,
   FolderTree,
   LayoutDashboard,
   Leaf,
@@ -14,7 +13,6 @@ import {
   Menu,
   MessageSquare,
   PackageCheck,
-  Search,
   ShieldCheck,
   ShoppingCart,
   Store,
@@ -345,16 +343,6 @@ export function AdminShell({ children }) {
               <p className="hidden text-sm text-muted-foreground sm:block">
                 Quản trị đơn hàng, tồn kho và trải nghiệm mua nông sản tươi.
               </p>
-            </div>
-
-            <div className="hidden h-10 w-72 items-center gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50/70 px-3 text-sm text-muted-foreground lg:flex">
-              <Search className="size-4 text-emerald-700" />
-              <span className="truncate">Tìm đơn, sản phẩm, khách hàng...</span>
-            </div>
-
-            <div className="hidden items-center gap-2 rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 xl:flex">
-              <Clock3 className="size-4" />
-              Ca giao sáng
             </div>
 
             <Button

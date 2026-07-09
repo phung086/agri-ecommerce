@@ -298,8 +298,6 @@ const exactTranslations = {
   "Đóng menu": "Close menu",
   "Quản trị đơn hàng, tồn kho và trải nghiệm mua nông sản tươi.":
     "Manage orders, inventory, and the fresh-produce shopping experience.",
-  "Tìm đơn, sản phẩm, khách hàng...": "Search orders, products, customers...",
-  "Ca giao sáng": "Morning delivery shift",
   "Thông báo": "Notifications",
   "Chỉnh sửa hồ sơ admin": "Edit admin profile",
   "Quản trị viên": "Administrator",

@@ -95,7 +95,6 @@ const ORDER_FILTERS = [
   { value: "redelivery", label: "Chờ giao lại" },
   { value: "returning", label: "Đang hoàn" },
   { value: "returned", label: "Đã hoàn" },
-  { value: "cancelled", label: "Đã hủy" },
 ];
 
 const SHIPPING_STATUS_GROUPS = {
