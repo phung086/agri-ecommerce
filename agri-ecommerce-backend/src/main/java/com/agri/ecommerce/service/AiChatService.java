@@ -12,9 +12,10 @@ public interface AiChatService {
     /**
      * Xử lý tin nhắn từ khách vãng lai hoặc user đã đăng nhập.
      *
-     * @param request   request chứa message và guestToken
+     * @param request   request chứa message, guestToken và context frontend
      * @param userId    ID user nếu đã đăng nhập (null nếu khách vãng lai)
+     * @param role      vai trò đã xác thực: GUEST, CUSTOMER, DELIVERY, STAFF, ADMIN
      * @return AiChatResponse chứa câu trả lời và sản phẩm gợi ý
      */
-    AiChatResponse chat(AiChatRequest request, Long userId);
+    AiChatResponse chat(AiChatRequest request, Long userId, String role);
 }
