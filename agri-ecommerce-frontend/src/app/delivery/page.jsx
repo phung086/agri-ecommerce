@@ -2101,7 +2101,6 @@ export default function DeliveryPage() {
                     { label: "Đã giao", value: formatNumber(stats.delivered), icon: CheckCircle2, color: "text-emerald-700", bg: "bg-emerald-50", money: false },
                     { label: "Giao thất bại", value: formatNumber(stats.failed), icon: AlertCircle, color: "text-red-700", bg: "bg-red-50", money: false },
                     { label: "Đã hoàn", value: formatNumber(stats.returned), icon: RefreshCw, color: "text-orange-700", bg: "bg-orange-50", money: false },
-                    { label: "Đã hủy", value: formatNumber(stats.cancelled), icon: X, color: "text-slate-600", bg: "bg-slate-100", money: false },
                     { label: "Tổng COD", value: formatCurrency(stats.totalCod), icon: Wallet, color: "text-red-700", bg: "bg-red-50", money: true },
                     { label: "Tổng phí ship", value: formatCurrency(stats.totalShippingFee), icon: CircleDollarSign, color: "text-emerald-700", bg: "bg-emerald-50", money: true },
                   ].map((item) => {
