@@ -265,7 +265,7 @@ export default function AdminDashboardPage() {
         <StatCard
           title="Doanh thu"
           value={formatCurrency(orderStats.revenue)}
-          description="Từ đơn đã giao hoặc hoàn tất"
+          description="Từ đơn đã hoàn tất"
           icon={CircleDollarSign}
           tone="green"
         />
