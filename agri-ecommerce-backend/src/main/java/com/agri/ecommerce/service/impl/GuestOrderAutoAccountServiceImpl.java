@@ -104,12 +104,13 @@ public class GuestOrderAutoAccountServiceImpl implements GuestOrderAutoAccountSe
             return userRepository.save(existing);
         }
 
+        String preferredEmail = resolvePreferredEmail(order, generatedEmail);
         RoleEntity customerRole = roleRepository.findByName(CUSTOMER_ROLE)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer role was not found in database"));
 
         UserEntity newUser = UserEntity.builder()
                 .name(defaultText(order.getShippingName(), phone))
-                .email(generatedEmail)
+                .email(preferredEmail)
                 .password(passwordEncoder.encode(DEFAULT_GUEST_PASSWORD))
                 .status(UserStatus.active)
                 .phoneNumber(phone)
@@ -124,6 +125,10 @@ public class GuestOrderAutoAccountServiceImpl implements GuestOrderAutoAccountSe
         user.setName(defaultText(order.getShippingName(), user.getName()));
         user.setPhoneNumber(phone);
         user.setAddress(buildFullAddress(order));
+        String preferredEmail = resolvePreferredEmail(order, user.getEmail());
+        if (preferredEmail != null && !preferredEmail.equalsIgnoreCase(user.getEmail())) {
+            user.setEmail(preferredEmail);
+        }
         if (user.getStatus() == null) {
             user.setStatus(UserStatus.active);
         }
@@ -156,6 +161,25 @@ public class GuestOrderAutoAccountServiceImpl implements GuestOrderAutoAccountSe
         return user != null
                 && user.getEmail() != null
                 && user.getEmail().toLowerCase(Locale.ROOT).endsWith(DEFAULT_GUEST_EMAIL_SUFFIX);
+    }
+
+    private String resolvePreferredEmail(OrderEntity order, String fallbackEmail) {
+        String guestEmail = normalizeEmail(order == null ? null : order.getGuestEmail());
+        if (guestEmail != null) {
+            Optional<UserEntity> existingByGuestEmail = userRepository.findByEmail(guestEmail);
+            if (existingByGuestEmail.isEmpty()) {
+                return guestEmail;
+            }
+        }
+        return fallbackEmail;
+    }
+
+    private String normalizeEmail(String value) {
+        String email = cleanBlank(value);
+        if (email == null || !email.contains("@")) {
+            return null;
+        }
+        return email.toLowerCase(Locale.ROOT);
     }
 
     private String buildDefaultGuestEmail(String phone) {
