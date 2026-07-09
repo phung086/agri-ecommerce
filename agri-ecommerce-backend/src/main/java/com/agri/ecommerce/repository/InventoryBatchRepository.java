@@ -34,7 +34,7 @@ public interface InventoryBatchRepository extends JpaRepository<InventoryBatchEn
     @Query("select batch from InventoryBatchEntity batch where batch.id = :id")
     Optional<InventoryBatchEntity> findByIdForUpdate(@Param("id") Long id);
 
-    @Query("SELECT b FROM InventoryBatchEntity b WHERE b.product.id = :productId AND b.remainingQuantity > 0 AND (b.expiryDate IS NULL OR b.expiryDate > :now) ORDER BY b.expiryDate ASC NULLS LAST, b.createdAt ASC")
+    @Query("SELECT b FROM InventoryBatchEntity b WHERE b.product.id = :productId AND b.remainingQuantity > 0 AND (b.expiryDate IS NULL OR b.expiryDate > :now) ORDER BY CASE WHEN b.expiryDate IS NULL THEN 1 ELSE 0 END, b.expiryDate ASC, b.createdAt ASC")
     List<InventoryBatchEntity> findAvailableBatchesFefo(@Param("productId") Long productId, @Param("now") LocalDateTime now);
 
     @Query("SELECT b FROM InventoryBatchEntity b WHERE b.product.id = :productId AND b.remainingQuantity > 0 AND b.expiryDate > :now ORDER BY b.expiryDate ASC")
