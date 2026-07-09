@@ -1629,9 +1629,10 @@ export default function Home() {
 
     const nextQuantity = Math.min(item.quantity + 1, item.stock || 99);
     if (nextQuantity === item.quantity) {
-      setCartError("Số lượng đã đạt tồn kho hiện tại.");
+      setCartError("Xin lỗi bạn, sản phẩm này chỉ còn " + (item.stock || 0) + " cái thôi!");
       return;
     }
+
 
     if (item.cartItemId) {
       setCartUpdating(true);
@@ -1659,6 +1660,7 @@ export default function Home() {
 
     if (item.quantity <= 1) {
       await removeCartItem(id);
+
       return;
     }
 
@@ -1734,14 +1736,6 @@ export default function Home() {
 
     if (cart.length === 0) {
       setCartError("Giỏ hàng đang trống.");
-      return;
-    }
-
-    const session = getActiveCustomerSession();
-
-    if (!session) {
-      setCartError("Vui lòng đăng nhập tài khoản khách hàng trước khi thanh toán.");
-      router.push("/profile");
       return;
     }
 

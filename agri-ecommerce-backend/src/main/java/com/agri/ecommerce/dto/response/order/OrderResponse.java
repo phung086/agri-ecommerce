@@ -65,6 +65,12 @@ public class OrderResponse {
 
     private String deliveryFailureReason;
 
+    private String returnReason;
+
+    private String returnNote;
+
+    private LocalDateTime returnedAt;
+
     private String trackingNumber;
 
     private String shippingProvider;

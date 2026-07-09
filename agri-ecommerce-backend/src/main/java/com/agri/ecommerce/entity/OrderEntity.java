@@ -73,6 +73,15 @@ public class OrderEntity {
     @Column(name = "delivery_failure_reason")
     private String deliveryFailureReason;
 
+    @Column(name = "return_reason", columnDefinition = "TEXT")
+    private String returnReason;
+
+    @Column(name = "return_note", columnDefinition = "TEXT")
+    private String returnNote;
+
+    @Column(name = "returned_at")
+    private LocalDateTime returnedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shipping_address_id")
     private ShippingAddressEntity shippingAddress;

@@ -2,6 +2,7 @@ package com.agri.ecommerce.controller.delivery;
 
 import com.agri.ecommerce.dto.request.order.DeliveryConfirmRequest;
 import com.agri.ecommerce.dto.request.order.DeliveryFailureRequest;
+import com.agri.ecommerce.dto.request.order.DeliveryStatusUpdateRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
@@ -140,6 +141,21 @@ public class DeliveryOrderController {
 
         return ResponseEntity.ok(
                 ApiResponse.success("Cập nhật kết quả giao hàng thất bại thành công", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Cập nhật trạng thái giao hàng theo luồng hợp lệ")
+    @PatchMapping("/{orderId}/status")
+    public ResponseEntity<ApiResponse<OrderResponse>> updateDeliveryStatus(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID đơn hàng", example = "1")
+            @PathVariable Long orderId,
+            @Valid @RequestBody DeliveryStatusUpdateRequest request
+    ) {
+        OrderResponse response = deliveryOrderService.updateDeliveryStatus(principal.getId(), orderId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Cập nhật trạng thái giao hàng thành công", response, HttpStatus.OK.value())
         );
     }
 

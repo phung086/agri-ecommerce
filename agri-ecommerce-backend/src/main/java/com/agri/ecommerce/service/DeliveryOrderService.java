@@ -2,6 +2,7 @@ package com.agri.ecommerce.service;
 
 import com.agri.ecommerce.dto.request.order.DeliveryConfirmRequest;
 import com.agri.ecommerce.dto.request.order.DeliveryFailureRequest;
+import com.agri.ecommerce.dto.request.order.DeliveryStatusUpdateRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
@@ -19,6 +20,8 @@ public interface DeliveryOrderService {
     OrderResponse markDelivered(Long deliveryStaffId, Long orderId, DeliveryConfirmRequest request);
 
     OrderResponse markFailedAttempt(Long deliveryStaffId, Long orderId, DeliveryFailureRequest request);
+
+    OrderResponse updateDeliveryStatus(Long deliveryStaffId, Long orderId, DeliveryStatusUpdateRequest request);
 
     void notifyArrival(Long deliveryStaffId, Long orderId);
 }
