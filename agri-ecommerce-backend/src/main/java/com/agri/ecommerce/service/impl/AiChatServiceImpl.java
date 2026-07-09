@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -47,6 +48,12 @@ public class AiChatServiceImpl implements AiChatService {
     private static final String FALLBACK_ERROR_EN =
             "Apologies, I'm having a brief network hiccup. " +
             "Please retry in a few seconds or browse products on our homepage.";
+
+    private static final String QUOTA_FALLBACK_VI =
+            "AI đang đạt giới hạn gọi Gemini tạm thời, nhưng hệ thống vẫn có thể hỗ trợ bạn bằng dữ liệu sản phẩm hiện có.";
+
+    private static final String QUOTA_FALLBACK_EN =
+            "The Gemini quota is temporarily exhausted, but the system can still help using the current product data.";
 
     // System prompt định hướng chatbot
     private static final String SYSTEM_PROMPT = """
@@ -235,43 +242,13 @@ public class AiChatServiceImpl implements AiChatService {
             messages.addAll(chatHistory);
             messages.add(UserMessage.from(buildLanguageScopedUserMessage(userMessage, locale)));
 
-            // Retry logic: thử tối đa 2 lần nếu gặp lỗi tạm thời
-            String reply = null;
-            int maxRetries = 2;
-            for (int attempt = 1; attempt <= maxRetries; attempt++) {
-                try {
-                    reply = assistant.chat(messages);
-                    if (reply != null && !reply.isBlank()) {
-                        break;
-                    }
-                    if (attempt < maxRetries) {
-                        log.warn("[AI Chat] LLM trả về null/rỗng ở lần thử {}, thử lại...", attempt);
-                        Thread.sleep(1500L * attempt);
-                    }
-                } catch (Exception retryEx) {
-                    log.warn("[AI Chat] Lỗi lần thử {}: {}", attempt, retryEx.getMessage());
-                    if (attempt < maxRetries) {
-                        Thread.sleep(2000L * attempt);
-                    } else {
-                        throw retryEx;
-                    }
-                }
-            }
-
-            if (reply == null || reply.isBlank()) {
-                log.warn("[AI Chat] LLM Assistant trả về response null/rỗng sau {} lần thử", maxRetries);
-                return "en".equalsIgnoreCase(locale) ? FALLBACK_ERROR_EN : FALLBACK_ERROR;
-            }
-
-            return reply.trim();
+            return assistant.chat(messages).trim();
 
         } catch (Exception ex) {
             log.error("[AI Chat] Lỗi khi gọi LLM Assistant: {}", ex.getClass().getSimpleName() + " — " + ex.getMessage());
             String errorMsg = ex.getMessage() != null ? ex.getMessage() : "";
-            if (errorMsg.contains("RESOURCE_EXHAUSTED") || errorMsg.contains("quota") || errorMsg.contains("429")) {
-                return "en".equalsIgnoreCase(locale) ? 
-                        "The AI chatbot is currently receiving too many requests (quota limit). Please try again in 1 minute!" :
-                        "Hệ thống tư vấn AI đang tạm thời nhận quá nhiều yêu cầu (vượt quá lượt dùng thử của tài khoản miễn phí). Bạn vui lòng đợi khoảng 1 phút rồi thử lại nhé! Trong lúc đó, bạn có thể xem các sản phẩm trực tiếp ở trang chủ nha.";
+            if (isQuotaError(errorMsg)) {
+                return buildQuotaFallbackWithLocalData(userMessage, locale);
             }
             return "en".equalsIgnoreCase(locale) ? FALLBACK_ERROR_EN : FALLBACK_ERROR;
         }
@@ -326,6 +303,153 @@ public class AiChatServiceImpl implements AiChatService {
             chatMessageRepository.save(builder.build());
         } catch (Exception ex) {
             log.warn("[AI Chat] Không thể lưu chat message vào DB: {}", ex.getMessage());
+        }
+    }
+
+    // === Fallback without Gemini ===
+
+    private String buildQuotaFallbackWithLocalData(String userMessage, String locale) {
+        boolean en = "en".equalsIgnoreCase(locale);
+        if (!isProductAdviceQuestion(userMessage)) {
+            return en
+                    ? QUOTA_FALLBACK_EN + " Please try again later, or browse products and orders directly from the menu."
+                    : QUOTA_FALLBACK_VI + " Bạn có thể thử lại sau, hoặc vào menu để xem sản phẩm, giỏ hàng và đơn hàng trực tiếp.";
+        }
+
+        try {
+            String keyword = inferSearchKeyword(userMessage);
+            Double maxPrice = inferMaxPrice(userMessage);
+            List<Map<String, Object>> products = aiChatTools.searchProducts(keyword, null, maxPrice);
+
+            if (products == null || products.isEmpty()) {
+                return en
+                        ? QUOTA_FALLBACK_EN + " I did not find matching products right now. Please try a different keyword or view all products on the homepage."
+                        : QUOTA_FALLBACK_VI + " Hiện mình chưa tìm thấy sản phẩm phù hợp. Bạn thử đổi từ khóa hoặc xem tất cả sản phẩm ở trang chủ nhé.";
+            }
+
+            StringBuilder builder = new StringBuilder();
+            if (en) {
+                builder.append(QUOTA_FALLBACK_EN)
+                        .append("\n\nHere are some available products you can check:\n");
+            } else {
+                builder.append(QUOTA_FALLBACK_VI)
+                        .append("\n\nMình tìm nhanh được một số sản phẩm phù hợp để bạn tham khảo:\n");
+            }
+
+            int limit = Math.min(5, products.size());
+            for (int i = 0; i < limit; i++) {
+                Map<String, Object> product = products.get(i);
+                builder.append(i + 1).append(". ")
+                        .append(value(product.get("name")))
+                        .append(" - ")
+                        .append(formatPrice(product.get("price")))
+                        .append("/")
+                        .append(value(product.get("unit")));
+                Object stock = product.get("stock");
+                if (stock != null) {
+                    builder.append(en ? " (Stock: " : " (Còn: ").append(stock).append(")");
+                }
+                builder.append("\n");
+            }
+
+            builder.append(en
+                    ? "\nYou can open the suggested product cards below to view details or add them to cart."
+                    : "\nBạn có thể bấm vào các thẻ sản phẩm gợi ý bên dưới để xem chi tiết hoặc thêm vào giỏ hàng.");
+            return builder.toString();
+        } catch (Exception fallbackEx) {
+            log.warn("[AI Chat] Không thể dùng local product fallback khi Gemini quota lỗi: {}", fallbackEx.getMessage());
+            return en
+                    ? QUOTA_FALLBACK_EN + " Please try again later or browse products on the homepage."
+                    : QUOTA_FALLBACK_VI + " Bạn thử lại sau hoặc xem sản phẩm trực tiếp ở trang chủ nhé.";
+        }
+    }
+
+    private boolean isQuotaError(String errorMsg) {
+        if (errorMsg == null) {
+            return false;
+        }
+        return errorMsg.contains("RESOURCE_EXHAUSTED")
+                || errorMsg.toLowerCase(java.util.Locale.ROOT).contains("quota")
+                || errorMsg.contains("429");
+    }
+
+    private boolean isProductAdviceQuestion(String message) {
+        String normalized = normalizeText(message);
+        return normalized.contains("tu van")
+                || normalized.contains("goi y")
+                || normalized.contains("san pham")
+                || normalized.contains("gio hang")
+                || normalized.contains("rau")
+                || normalized.contains("cu")
+                || normalized.contains("trai cay")
+                || normalized.contains("hoa qua")
+                || normalized.contains("thit")
+                || normalized.contains("ca")
+                || normalized.contains("duoi")
+                || normalized.contains("khoang")
+                || normalized.contains("100k")
+                || normalized.contains("50k");
+    }
+
+    private String inferSearchKeyword(String message) {
+        String normalized = normalizeText(message);
+        if (normalized.contains("trai cay") || normalized.contains("hoa qua") || normalized.contains("fruit")) {
+            return "trái cây";
+        }
+        if (normalized.contains("rau") || normalized.contains("cu") || normalized.contains("vegetable")) {
+            return "rau";
+        }
+        if (normalized.contains("thit") || normalized.contains("meat")) {
+            return "thịt";
+        }
+        if (normalized.contains("ca") || normalized.contains("fish")) {
+            return "cá";
+        }
+        if (normalized.contains("sua") || normalized.contains("milk")) {
+            return "sữa";
+        }
+        return null;
+    }
+
+    private Double inferMaxPrice(String message) {
+        String normalized = normalizeText(message);
+        java.util.regex.Matcher kMatcher = java.util.regex.Pattern.compile("(\\d+)\\s*k").matcher(normalized);
+        if (kMatcher.find()) {
+            return Double.parseDouble(kMatcher.group(1)) * 1000D;
+        }
+
+        java.util.regex.Matcher numberMatcher = java.util.regex.Pattern.compile("(\\d{2,})(?:[\\.,]\\d{3})*").matcher(normalized);
+        if (numberMatcher.find()) {
+            String raw = numberMatcher.group(0).replace(".", "").replace(",", "");
+            return Double.parseDouble(raw);
+        }
+        return null;
+    }
+
+    private String normalizeText(String value) {
+        if (value == null) {
+            return "";
+        }
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        String normalized = java.text.Normalizer.normalize(lower, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replace('đ', 'd');
+        return normalized;
+    }
+
+    private String value(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private String formatPrice(Object value) {
+        if (value == null) {
+            return "0đ";
+        }
+        try {
+            java.math.BigDecimal price = new java.math.BigDecimal(String.valueOf(value));
+            return String.format(java.util.Locale.forLanguageTag("vi-VN"), "%,.0fđ", price);
+        } catch (Exception ex) {
+            return String.valueOf(value) + "đ";
         }
     }
 
