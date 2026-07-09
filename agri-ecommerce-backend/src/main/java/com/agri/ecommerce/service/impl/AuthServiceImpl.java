@@ -43,7 +43,6 @@ public class AuthServiceImpl implements AuthService {
     private static final String INVALID_LOGIN_MESSAGE = "Email/phone or password is incorrect";
     private static final String GENERIC_RESET_MESSAGE = "If the email exists, password reset instructions are ready.";
     private static final String RESET_TOKEN_DIGEST_ALGORITHM = "SHA-256";
-    private static final String DEFAULT_GUEST_EMAIL_SUFFIX = "@agrimarket.default";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
@@ -203,8 +202,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (isVietnamPhoneCredential(credential)) {
-            Optional<UserEntity> userByPhone = userRepository.findFirstByPhoneNumberOrderByIdAsc(credential);
-            return userByPhone.filter(this::isDefaultGuestAccount);
+            return userRepository.findFirstByPhoneNumberOrderByIdAsc(credential);
         }
 
         return userRepository.findByEmail(credential);
@@ -212,12 +210,6 @@ public class AuthServiceImpl implements AuthService {
 
     private boolean isVietnamPhoneCredential(String credential) {
         return credential != null && credential.matches("^0\\d{9}$");
-    }
-
-    private boolean isDefaultGuestAccount(UserEntity user) {
-        return user != null
-                && user.getEmail() != null
-                && user.getEmail().toLowerCase().endsWith(DEFAULT_GUEST_EMAIL_SUFFIX);
     }
 
     private AuthResponse buildAuthResponse(UserEntity user) {
