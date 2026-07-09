@@ -4,9 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
-  CheckCircle,
   Database,
-  History,
   Package,
   Plus,
   RefreshCw,
@@ -161,9 +159,7 @@ export default function AdminInventoryPage() {
 
       const failed = [summaryResult, productsResult, batchesResult, alertsResult, transactionsResult, adminProductsResult]
         .filter((result) => result.status === "rejected");
-      if (failed.length > 0) {
-        toast.warning("Một phần dữ liệu kho chưa tải được. Hãy thử làm mới lại.");
-      }
+      if (failed.length > 0) toast.warning("Một phần dữ liệu kho chưa tải được. Hãy thử làm mới lại.");
     } catch (error) {
       console.error("Failed to load inventory data:", error);
       toast.error(error?.message || "Không thể tải thông tin kho hàng");
@@ -188,7 +184,6 @@ export default function AdminInventoryPage() {
       toast.error("Vui lòng nhập đủ sản phẩm, mã lô, giá nhập, số lượng và hạn sử dụng");
       return;
     }
-
     if (form.manufactureDate && form.expiryDate <= form.manufactureDate) {
       toast.error("Hạn sử dụng phải sau ngày sản xuất");
       return;
@@ -223,8 +218,9 @@ export default function AdminInventoryPage() {
   async function runAction(action, successMessage) {
     setActionLoading(true);
     try {
-      await action();
-      toast.success(successMessage);
+      const result = await action();
+      const message = typeof successMessage === "function" ? successMessage(result) : successMessage;
+      toast.success(message);
       await loadData();
     } catch (error) {
       console.error("Inventory action failed:", error);
@@ -238,34 +234,25 @@ export default function AdminInventoryPage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Quản lý kho & hạn sử dụng"
-        description="Đồng bộ sản phẩm với kho, quản lý lô hàng, ngày nhập, ngày sản xuất, hạn sử dụng và nhật ký xuất nhập."
+        description="Đồng bộ sản phẩm với kho, quản lý lô hàng, ngày nhập, ngày sản xuất, hạn sử dụng, vị trí lưu trữ và voucher xả hàng cận date."
         image="/market-assets/fresh-market-hero.png"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => runAction(adminService.backfillLegacyBatches, "Đã đồng bộ sản phẩm cũ vào lô legacy")}
+          <ActionButton onClick={() => runAction(adminService.backfillLegacyBatches, "Đã đồng bộ sản phẩm cũ vào lô legacy")} disabled={actionLoading} tone="sky" icon={Database}>Đồng bộ SP cũ</ActionButton>
+          <ActionButton onClick={() => runAction(adminService.seedInventoryDemoData, "Đã bổ sung dữ liệu demo NSX/HSD/NCC/vị trí")} disabled={actionLoading} tone="emerald" icon={CalendarDays}>Bổ sung demo date</ActionButton>
+          <ActionButton
+            onClick={() => runAction(
+              () => adminService.generateNearExpiryCoupons({ days: 3, discountPercentage: 20 }),
+              (result) => `Đã tạo/cập nhật ${result?.createdOrUpdatedCouponCount || 0} voucher xả hàng cận date`
+            )}
             disabled={actionLoading}
-            className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-sky-200 bg-sky-50 px-4 text-sm font-black text-sky-800 transition hover:bg-sky-100 disabled:opacity-50"
+            tone="rose"
+            icon={AlertTriangle}
           >
-            <Database className="size-4" />
-            Đồng bộ SP cũ
-          </button>
-          <button
-            onClick={() => runAction(adminService.recalculateInventory, "Đã tính lại tồn kho từ lô hàng")}
-            disabled={actionLoading}
-            className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-amber-200 bg-amber-50 px-4 text-sm font-black text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
-          >
-            <RotateCcw className="size-4" />
-            Tính lại tồn kho
-          </button>
-          <button
-            onClick={() => runAction(adminService.triggerScan, "Quét kho hoàn tất")}
-            disabled={actionLoading}
-            className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw className={`size-4 ${actionLoading ? "animate-spin" : ""}`} />
-            Quét hạn
-          </button>
+            Tạo voucher cận date
+          </ActionButton>
+          <ActionButton onClick={() => runAction(adminService.recalculateInventory, "Đã tính lại tồn kho từ lô hàng")} disabled={actionLoading} tone="amber" icon={RotateCcw}>Tính lại tồn kho</ActionButton>
+          <ActionButton onClick={() => runAction(adminService.triggerScan, "Quét kho hoàn tất")} disabled={actionLoading} tone="slate" icon={RefreshCw}>Quét hạn</ActionButton>
           <button
             onClick={() => setShowImportModal(true)}
             disabled={actionLoading}
@@ -279,9 +266,13 @@ export default function AdminInventoryPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Package} title="Tổng sản phẩm" value={summary?.totalProducts} caption="Không tính sản phẩm ẩn" />
-        <MetricCard icon={Store} title="Tồn kho sản phẩm" value={summary?.totalStockUnits} caption={`Theo products.stock`} />
+        <MetricCard icon={Store} title="Tồn kho sản phẩm" value={summary?.totalStockUnits} caption="Theo products.stock" />
         <MetricCard icon={CalendarDays} title="Lô cần cập nhật date" value={summary?.needDateUpdateBatches} caption="Legacy/chưa có HSD" />
-        <MetricCard icon={AlertTriangle} title="Lô cận/hết hạn" value={(summary?.nearExpiryBatches || 0) + (summary?.expiredBatches || 0)} caption="Cần xử lý sớm" />
+        <MetricCard icon={AlertTriangle} title="Lô cận/hết hạn" value={(summary?.nearExpiryBatches || 0) + (summary?.expiredBatches || 0)} caption="Có thể tạo voucher xả hàng" />
+      </div>
+
+      <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+        Luồng demo chuẩn: bấm <b>Đồng bộ SP cũ</b> để tạo lô legacy → bấm <b>Bổ sung demo date</b> để thêm NSX/HSD/NCC/vị trí → bấm <b>Tạo voucher cận date</b> để sinh mã giảm giá sản phẩm cho các lô sắp hết hạn.
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
@@ -290,11 +281,7 @@ export default function AdminInventoryPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`rounded-full px-4 py-2 text-sm font-black transition ${
-                activeTab === tab.key
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+              className={`rounded-full px-4 py-2 text-sm font-black transition ${activeTab === tab.key ? "bg-emerald-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
             >
               {tab.label}
             </button>
@@ -303,18 +290,9 @@ export default function AdminInventoryPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="Tìm sản phẩm/lô/kho..."
-              className="h-10 rounded-[8px] border border-slate-200 pl-9 pr-3 text-sm outline-none transition focus:border-emerald-500"
-            />
+            <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm sản phẩm/lô/kho..." className="h-10 rounded-[8px] border border-slate-200 pl-9 pr-3 text-sm outline-none transition focus:border-emerald-500" />
           </div>
-          <select
-            value={batchStatus}
-            onChange={(event) => setBatchStatus(event.target.value)}
-            className="h-10 rounded-[8px] border border-slate-200 px-3 text-sm font-semibold outline-none transition focus:border-emerald-500"
-          >
+          <select value={batchStatus} onChange={(event) => setBatchStatus(event.target.value)} className="h-10 rounded-[8px] border border-slate-200 px-3 text-sm font-semibold outline-none transition focus:border-emerald-500">
             <option value="">Tất cả trạng thái lô</option>
             <option value="ACTIVE">Khả dụng</option>
             <option value="NEAR_EXPIRY">Cận date</option>
@@ -350,54 +328,28 @@ export default function AdminInventoryPage() {
                 <h3 className="text-lg font-black text-slate-950">Nhập kho lô hàng mới</h3>
                 <p className="mt-1 text-sm font-semibold text-slate-500">Mỗi lô cần có ngày nhập, NSX và HSD để hệ thống kiểm soát date.</p>
               </div>
-              <button onClick={() => setShowImportModal(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-600">
-                Đóng
-              </button>
+              <button onClick={() => setShowImportModal(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-600">Đóng</button>
             </div>
 
             <form onSubmit={handleImportSubmit} className="grid gap-4 md:grid-cols-2">
               <Field label="Sản phẩm *" className="md:col-span-2">
                 <select name="productId" value={form.productId} onChange={handleInputChange} required className="input">
                   <option value="">-- Chọn sản phẩm --</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>{product.name} ({product.unit || "đơn vị"})</option>
-                  ))}
+                  {products.map((product) => <option key={product.id} value={product.id}>{product.name} ({product.unit || "đơn vị"})</option>)}
                 </select>
               </Field>
-              <Field label="Mã lô *">
-                <input name="batchNumber" value={form.batchNumber} onChange={handleInputChange} required placeholder="VD: RAU-202607-001" className="input" />
-              </Field>
-              <Field label="Giá nhập *">
-                <input type="number" min="1" name="importPrice" value={form.importPrice} onChange={handleInputChange} required className="input" />
-              </Field>
-              <Field label="Số lượng nhập *">
-                <input type="number" min="1" name="originalQuantity" value={form.originalQuantity} onChange={handleInputChange} required className="input" />
-              </Field>
-              <Field label="Ngày nhập">
-                <input type="date" name="receivedAt" value={form.receivedAt} onChange={handleInputChange} className="input" />
-              </Field>
-              <Field label="Ngày sản xuất">
-                <input type="date" name="manufactureDate" value={form.manufactureDate} onChange={handleInputChange} className="input" />
-              </Field>
-              <Field label="Hạn sử dụng *">
-                <input type="date" name="expiryDate" value={form.expiryDate} onChange={handleInputChange} required className="input" />
-              </Field>
-              <Field label="Nhà cung cấp">
-                <input name="supplierName" value={form.supplierName} onChange={handleInputChange} placeholder="VD: HTX Rau sạch Hà Đông" className="input" />
-              </Field>
-              <Field label="Vị trí kho">
-                <input name="storageLocation" value={form.storageLocation} onChange={handleInputChange} placeholder="VD: Kho A - Kệ 02" className="input" />
-              </Field>
-              <Field label="Ghi chú" className="md:col-span-2">
-                <textarea name="note" value={form.note} onChange={handleInputChange} rows={3} className="input" placeholder="Ghi chú kiểm định, nguồn gốc, điều kiện bảo quản..." />
-              </Field>
+              <Field label="Mã lô *"><input name="batchNumber" value={form.batchNumber} onChange={handleInputChange} required placeholder="VD: RAU-202607-001" className="input" /></Field>
+              <Field label="Giá nhập *"><input type="number" min="1" name="importPrice" value={form.importPrice} onChange={handleInputChange} required className="input" /></Field>
+              <Field label="Số lượng nhập *"><input type="number" min="1" name="originalQuantity" value={form.originalQuantity} onChange={handleInputChange} required className="input" /></Field>
+              <Field label="Ngày nhập"><input type="date" name="receivedAt" value={form.receivedAt} onChange={handleInputChange} className="input" /></Field>
+              <Field label="Ngày sản xuất"><input type="date" name="manufactureDate" value={form.manufactureDate} onChange={handleInputChange} className="input" /></Field>
+              <Field label="Hạn sử dụng *"><input type="date" name="expiryDate" value={form.expiryDate} onChange={handleInputChange} required className="input" /></Field>
+              <Field label="Nhà cung cấp"><input name="supplierName" value={form.supplierName} onChange={handleInputChange} placeholder="VD: HTX Rau sạch Hà Đông" className="input" /></Field>
+              <Field label="Vị trí kho"><input name="storageLocation" value={form.storageLocation} onChange={handleInputChange} placeholder="VD: Kho A - Kệ 02" className="input" /></Field>
+              <Field label="Ghi chú" className="md:col-span-2"><textarea name="note" value={form.note} onChange={handleInputChange} rows={3} className="input" placeholder="Ghi chú kiểm định, nguồn gốc, điều kiện bảo quản..." /></Field>
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 md:col-span-2">
-                <button type="button" onClick={() => setShowImportModal(false)} className="rounded-[8px] px-4 py-2 text-sm font-black text-slate-500 hover:bg-slate-100">
-                  Hủy
-                </button>
-                <button type="submit" disabled={actionLoading} className="rounded-[8px] bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50">
-                  {actionLoading ? "Đang nhập..." : "Nhập kho"}
-                </button>
+                <button type="button" onClick={() => setShowImportModal(false)} className="rounded-[8px] px-4 py-2 text-sm font-black text-slate-500 hover:bg-slate-100">Hủy</button>
+                <button type="submit" disabled={actionLoading} className="rounded-[8px] bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50">{actionLoading ? "Đang nhập..." : "Nhập kho"}</button>
               </div>
             </form>
           </div>
@@ -405,69 +357,46 @@ export default function AdminInventoryPage() {
       )}
 
       <style jsx>{`
-        .input {
-          width: 100%;
-          border-radius: 0.5rem;
-          border: 1px solid #e2e8f0;
-          padding: 0.625rem 0.75rem;
-          font-size: 0.875rem;
-          outline: none;
-          transition: border-color 0.15s ease;
-        }
-        .input:focus {
-          border-color: #10b981;
-        }
+        .input { width: 100%; border-radius: 0.5rem; border: 1px solid #e2e8f0; padding: 0.625rem 0.75rem; font-size: 0.875rem; outline: none; transition: border-color 0.15s ease; }
+        .input:focus { border-color: #10b981; }
       `}</style>
     </div>
   );
 }
 
-function Field({ label, children, className = "" }) {
+function ActionButton({ children, onClick, disabled, icon: Icon, tone = "slate" }) {
+  const tones = {
+    sky: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+    rose: "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100",
+    amber: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
+    slate: "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+  };
   return (
-    <label className={`block ${className}`}>
-      <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-500">{label}</span>
+    <button onClick={onClick} disabled={disabled} className={`inline-flex h-10 items-center gap-2 rounded-[8px] border px-4 text-sm font-black transition disabled:opacity-50 ${tones[tone] || tones.slate}`}>
+      <Icon className="size-4" />
       {children}
-    </label>
+    </button>
   );
+}
+
+function Field({ label, children, className = "" }) {
+  return <label className={`block ${className}`}><span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-500">{label}</span>{children}</label>;
 }
 
 function InventoryProductsTable({ products }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-        <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-600">
-          <tr>
-            <th className="px-5 py-3">Sản phẩm</th>
-            <th className="px-5 py-3">Tồn kho</th>
-            <th className="px-5 py-3">Theo lô</th>
-            <th className="px-5 py-3">Hạn gần nhất</th>
-            <th className="px-5 py-3">Trạng thái tươi</th>
-          </tr>
-        </thead>
+        <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-600"><tr><th className="px-5 py-3">Sản phẩm</th><th className="px-5 py-3">Tồn kho</th><th className="px-5 py-3">Theo lô</th><th className="px-5 py-3">Hạn gần nhất</th><th className="px-5 py-3">Trạng thái tươi</th></tr></thead>
         <tbody className="divide-y divide-slate-100">
-          {products.length === 0 ? (
-            <tr><td colSpan={5} className="px-5 py-10 text-center font-semibold text-slate-400">Chưa có dữ liệu sản phẩm kho.</td></tr>
-          ) : products.map((product) => (
+          {products.length === 0 ? <tr><td colSpan={5} className="px-5 py-10 text-center font-semibold text-slate-400">Chưa có dữ liệu sản phẩm kho.</td></tr> : products.map((product) => (
             <tr key={product.productId} className="hover:bg-slate-50">
-              <td className="px-5 py-4">
-                <p className="font-black text-slate-900">{product.productName}</p>
-                <p className="text-xs font-semibold text-slate-400">#{product.productId} · {product.categoryName || "Chưa phân loại"}</p>
-              </td>
+              <td className="px-5 py-4"><p className="font-black text-slate-900">{product.productName}</p><p className="text-xs font-semibold text-slate-400">#{product.productId} · {product.categoryName || "Chưa phân loại"}</p></td>
               <td className="px-5 py-4 font-black text-slate-900">{product.stock || 0} {product.unit || ""}</td>
-              <td className="px-5 py-4 text-xs font-semibold text-slate-500">
-                <p>Tracked: {product.batchTrackedStock || 0}</p>
-                <p>Chưa khớp: {product.untrackedStock || 0}</p>
-                <p>Lô thiếu date: {product.needDateUpdateBatchCount || 0}</p>
-              </td>
-              <td className="px-5 py-4 text-xs font-bold text-slate-700">
-                <p>{formatDate(product.earliestExpiryDate)}</p>
-                {product.daysUntilExpiry != null && <p className="text-slate-400">Còn {product.daysUntilExpiry} ngày</p>}
-              </td>
-              <td className="px-5 py-4">
-                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusBadgeClass(String(product.freshnessStatus || "ACTIVE").toUpperCase())}`}>
-                  {freshnessLabel(product.freshnessStatus)}
-                </span>
-              </td>
+              <td className="px-5 py-4 text-xs font-semibold text-slate-500"><p>Tracked: {product.batchTrackedStock || 0}</p><p>Chưa khớp: {product.untrackedStock || 0}</p><p>Lô thiếu date: {product.needDateUpdateBatchCount || 0}</p></td>
+              <td className="px-5 py-4 text-xs font-bold text-slate-700"><p>{formatDate(product.earliestExpiryDate)}</p>{product.daysUntilExpiry != null && <p className="text-slate-400">Còn {product.daysUntilExpiry} ngày</p>}</td>
+              <td className="px-5 py-4"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusBadgeClass(String(product.freshnessStatus || "ACTIVE").toUpperCase())}`}>{freshnessLabel(product.freshnessStatus)}</span></td>
             </tr>
           ))}
         </tbody>
@@ -480,48 +409,16 @@ function BatchesTable({ batches, emptyText = "Chưa có lô hàng nào." }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-        <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-600">
-          <tr>
-            <th className="px-5 py-3">Lô hàng</th>
-            <th className="px-5 py-3">Sản phẩm</th>
-            <th className="px-5 py-3">Số lượng</th>
-            <th className="px-5 py-3">Ngày nhập / NSX / HSD</th>
-            <th className="px-5 py-3">Vị trí</th>
-            <th className="px-5 py-3">Trạng thái</th>
-          </tr>
-        </thead>
+        <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-600"><tr><th className="px-5 py-3">Lô hàng</th><th className="px-5 py-3">Sản phẩm</th><th className="px-5 py-3">Số lượng</th><th className="px-5 py-3">Ngày nhập / NSX / HSD</th><th className="px-5 py-3">Vị trí</th><th className="px-5 py-3">Trạng thái</th></tr></thead>
         <tbody className="divide-y divide-slate-100">
-          {batches.length === 0 ? (
-            <tr><td colSpan={6} className="px-5 py-10 text-center font-semibold text-slate-400">{emptyText}</td></tr>
-          ) : batches.map((batch) => (
+          {batches.length === 0 ? <tr><td colSpan={6} className="px-5 py-10 text-center font-semibold text-slate-400">{emptyText}</td></tr> : batches.map((batch) => (
             <tr key={batch.id} className="hover:bg-slate-50">
-              <td className="px-5 py-4">
-                <p className="font-mono font-black text-slate-900">{batch.batchNumber}</p>
-                {batch.legacyBatch && <p className="mt-1 text-xs font-black text-sky-600">Legacy stock</p>}
-              </td>
-              <td className="px-5 py-4">
-                <p className="font-black text-slate-900">{batch.productName}</p>
-                <p className="text-xs font-semibold text-slate-400">#{batch.productId} · {batch.categoryName || "Chưa phân loại"}</p>
-              </td>
-              <td className="px-5 py-4">
-                <p className="font-black text-slate-900">{batch.remainingQuantity || 0}/{batch.originalQuantity || 0}</p>
-                <p className="text-xs font-semibold text-slate-400">Giá nhập: {formatCurrency(batch.importPrice)}</p>
-              </td>
-              <td className="px-5 py-4 text-xs font-semibold text-slate-600">
-                <p>Nhập: {formatDate(batch.receivedAt || batch.createdAt)}</p>
-                <p>NSX: {formatDate(batch.manufactureDate)}</p>
-                <p>HSD: {formatDate(batch.expiryDate)}</p>
-                {batch.daysUntilExpiry != null && <p className="text-slate-400">Còn {batch.daysUntilExpiry} ngày</p>}
-              </td>
-              <td className="px-5 py-4 text-xs font-semibold text-slate-500">
-                <p>{batch.storageLocation || "Chưa cập nhật vị trí"}</p>
-                <p>{batch.supplierName || "Chưa cập nhật NCC"}</p>
-              </td>
-              <td className="px-5 py-4">
-                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusBadgeClass(batch.status)}`}>
-                  {statusLabel(batch.status)}
-                </span>
-              </td>
+              <td className="px-5 py-4"><p className="font-mono font-black text-slate-900">{batch.batchNumber}</p>{batch.legacyBatch && <p className="mt-1 text-xs font-black text-sky-600">Legacy stock</p>}</td>
+              <td className="px-5 py-4"><p className="font-black text-slate-900">{batch.productName}</p><p className="text-xs font-semibold text-slate-400">#{batch.productId} · {batch.categoryName || "Chưa phân loại"}</p></td>
+              <td className="px-5 py-4"><p className="font-black text-slate-900">{batch.remainingQuantity || 0}/{batch.originalQuantity || 0}</p><p className="text-xs font-semibold text-slate-400">Giá nhập: {formatCurrency(batch.importPrice)}</p></td>
+              <td className="px-5 py-4 text-xs font-semibold text-slate-600"><p>Nhập: {formatDate(batch.receivedAt || batch.createdAt)}</p><p>NSX: {formatDate(batch.manufactureDate)}</p><p>HSD: {formatDate(batch.expiryDate)}</p>{batch.daysUntilExpiry != null && <p className="text-slate-400">Còn {batch.daysUntilExpiry} ngày</p>}</td>
+              <td className="px-5 py-4 text-xs font-semibold text-slate-500"><p>{batch.storageLocation || "Chưa cập nhật vị trí"}</p><p>{batch.supplierName || "Chưa cập nhật NCC"}</p></td>
+              <td className="px-5 py-4"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusBadgeClass(batch.status)}`}>{statusLabel(batch.status)}</span></td>
             </tr>
           ))}
         </tbody>
@@ -534,29 +431,13 @@ function TransactionsTable({ transactions }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-        <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-600">
-          <tr>
-            <th className="px-5 py-3">Thời gian</th>
-            <th className="px-5 py-3">Sản phẩm / Lô</th>
-            <th className="px-5 py-3">Số lượng</th>
-            <th className="px-5 py-3">Loại</th>
-            <th className="px-5 py-3">Tồn trước/sau</th>
-            <th className="px-5 py-3">Ghi chú</th>
-          </tr>
-        </thead>
+        <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-600"><tr><th className="px-5 py-3">Thời gian</th><th className="px-5 py-3">Sản phẩm / Lô</th><th className="px-5 py-3">Số lượng</th><th className="px-5 py-3">Loại</th><th className="px-5 py-3">Tồn trước/sau</th><th className="px-5 py-3">Ghi chú</th></tr></thead>
         <tbody className="divide-y divide-slate-100">
-          {transactions.length === 0 ? (
-            <tr><td colSpan={6} className="px-5 py-10 text-center font-semibold text-slate-400">Chưa có nhật ký kho.</td></tr>
-          ) : transactions.map((tx) => (
+          {transactions.length === 0 ? <tr><td colSpan={6} className="px-5 py-10 text-center font-semibold text-slate-400">Chưa có nhật ký kho.</td></tr> : transactions.map((tx) => (
             <tr key={tx.id} className="hover:bg-slate-50">
               <td className="px-5 py-4 text-xs font-semibold text-slate-500">{formatDateTime(tx.createdAt)}</td>
-              <td className="px-5 py-4">
-                <p className="font-black text-slate-900">{tx.productName}</p>
-                {tx.batchNumber && <p className="font-mono text-xs font-semibold text-slate-400">Lô: {tx.batchNumber}</p>}
-              </td>
-              <td className={`px-5 py-4 font-mono font-black ${Number(tx.quantity || 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                {Number(tx.quantity || 0) >= 0 ? `+${tx.quantity || 0}` : tx.quantity}
-              </td>
+              <td className="px-5 py-4"><p className="font-black text-slate-900">{tx.productName}</p>{tx.batchNumber && <p className="font-mono text-xs font-semibold text-slate-400">Lô: {tx.batchNumber}</p>}</td>
+              <td className={`px-5 py-4 font-mono font-black ${Number(tx.quantity || 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>{Number(tx.quantity || 0) >= 0 ? `+${tx.quantity || 0}` : tx.quantity}</td>
               <td className="px-5 py-4 text-xs font-black text-slate-700">{tx.type}</td>
               <td className="px-5 py-4 text-xs font-semibold text-slate-500">{tx.previousStock ?? "---"} → {tx.newStock ?? "---"}</td>
               <td className="px-5 py-4 text-xs font-semibold text-slate-500">{tx.note || "---"}</td>
