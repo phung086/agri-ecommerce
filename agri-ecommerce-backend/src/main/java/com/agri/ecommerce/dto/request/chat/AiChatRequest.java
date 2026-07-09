@@ -38,4 +38,28 @@ public class AiChatRequest {
             requiredMode = Schema.RequiredMode.NOT_REQUIRED
     )
     private String guestToken;
+
+    @Size(max = 50, message = "Audience không được vượt quá 50 ký tự")
+    @Schema(
+            description = "Ngữ cảnh người dùng từ frontend: auto, customer, admin, delivery.",
+            example = "customer",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED
+    )
+    private String audience;
+
+    @Size(max = 50, message = "Context type không được vượt quá 50 ký tự")
+    @Schema(
+            description = "Loại ngữ cảnh màn hình/câu hỏi: auto, product, order, payment, admin, delivery.",
+            example = "auto",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED
+    )
+    private String contextType;
+
+    @Size(max = 255, message = "Current path không được vượt quá 255 ký tự")
+    @Schema(
+            description = "Đường dẫn frontend hiện tại để AI hiểu người dùng đang ở màn hình nào.",
+            example = "/profile/orders",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED
+    )
+    private String currentPath;
 }

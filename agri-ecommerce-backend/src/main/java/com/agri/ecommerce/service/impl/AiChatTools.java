@@ -9,15 +9,14 @@ import com.agri.ecommerce.entity.ProductImageEntity;
 import com.agri.ecommerce.repository.CategoryRepository;
 import com.agri.ecommerce.repository.CouponRepository;
 import com.agri.ecommerce.repository.OrderRepository;
-import com.agri.ecommerce.repository.ProductRepository;
 import com.agri.ecommerce.repository.ProductImageRepository;
+import com.agri.ecommerce.repository.ProductRepository;
 import com.agri.ecommerce.repository.UserRepository;
 import dev.langchain4j.agent.tool.Tool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -38,6 +37,17 @@ public class AiChatTools {
 
     public static final ThreadLocal<String> localeHolder =
             ThreadLocal.withInitial(() -> "vi");
+
+    public static final ThreadLocal<Long> currentUserIdHolder = new ThreadLocal<>();
+
+    public static final ThreadLocal<String> currentRoleHolder =
+            ThreadLocal.withInitial(() -> "GUEST");
+
+    public static final ThreadLocal<String> currentPathHolder = new ThreadLocal<>();
+
+    public static final ThreadLocal<String> audienceHolder = new ThreadLocal<>();
+
+    public static final ThreadLocal<String> contextTypeHolder = new ThreadLocal<>();
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
@@ -153,23 +163,71 @@ public class AiChatTools {
                 }).collect(Collectors.toList());
     }
 
-    @Tool("Lấy danh sách đơn hàng đã mua gần đây của người dùng dựa trên ID người dùng")
-    public List<Map<String, Object>> getOrderHistory(Long userId) {
-        log.info("[AI Tool] Gọi getOrderHistory cho userId={}", userId);
-        if (userId == null) {
-            return List.of();
+    @Tool("Lấy danh sách đơn hàng gần đây của người dùng đang đăng nhập. Không nhận userId từ câu hỏi; dữ liệu luôn được giới hạn theo JWT hiện tại.")
+    public List<Map<String, Object>> getMyOrderHistory() {
+        Long currentUserId = requireCurrentUserId();
+        log.info("[AI Tool] Gọi getMyOrderHistory cho currentUserId={}, role={}", currentUserId, currentRole());
+        if (currentUserId == null) {
+            return List.of(Map.of("error", "Bạn cần đăng nhập để xem đơn hàng của mình."));
         }
 
-        List<OrderEntity> orders = orderRepository.findByUser_Id(userId, PageRequest.of(0, 10)).getContent();
+        List<OrderEntity> orders = orderRepository.findByUser_Id(currentUserId, PageRequest.of(0, 10)).getContent();
         return orders.stream().map(o -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", o.getId());
-            map.put("orderNumber", o.getId()); // Dùng ID làm số đơn hàng
+            map.put("orderNumber", o.getId());
             map.put("status", o.getStatus());
             map.put("totalPrice", o.getTotalPrice());
             map.put("createdAt", o.getCreatedAt());
             return map;
         }).collect(Collectors.toList());
+    }
+
+    @Tool("Lấy thông tin tài khoản thành viên của người dùng đang đăng nhập, gồm điểm tích lũy, hạng thành viên và tổng chi tiêu. Không nhận userId từ câu hỏi; dữ liệu luôn được giới hạn theo JWT hiện tại.")
+    public Map<String, Object> getMyUserProfile() {
+        Long currentUserId = requireCurrentUserId();
+        log.info("[AI Tool] Gọi getMyUserProfile cho currentUserId={}, role={}", currentUserId, currentRole());
+        if (currentUserId == null) {
+            return Map.of("error", "Bạn cần đăng nhập để xem thông tin tài khoản của mình.");
+        }
+
+        return userRepository.findById(currentUserId).map(user -> {
+            java.time.LocalDateTime allTimeStart = java.time.LocalDateTime.of(2000, 1, 1, 0, 0);
+            java.math.BigDecimal totalSpent = orderRepository.calculateTotalSpendingSince(currentUserId, allTimeStart);
+            if (totalSpent == null) {
+                totalSpent = java.math.BigDecimal.ZERO;
+            }
+
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", user.getId());
+            map.put("name", user.getName());
+            map.put("email", user.getEmail());
+            map.put("phone", user.getPhoneNumber());
+            map.put("points", user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0);
+            map.put("membershipTier", user.getMembershipTier() != null ? user.getMembershipTier() : "BRONZE");
+            map.put("totalSpent", totalSpent);
+
+            java.math.BigDecimal silverThreshold = new java.math.BigDecimal("1000000.00");
+            java.math.BigDecimal goldThreshold = new java.math.BigDecimal("2500000.00");
+            java.math.BigDecimal platinumThreshold = new java.math.BigDecimal("4000000.00");
+
+            map.put("silverThreshold", silverThreshold);
+            map.put("goldThreshold", goldThreshold);
+            map.put("platinumThreshold", platinumThreshold);
+
+            return map;
+        }).orElse(Map.of("error", "Không tìm thấy người dùng."));
+    }
+
+    @Tool("Lấy cấu hình các hạng thành viên bao gồm chi tiêu tối thiểu yêu cầu cho hạng Đồng (Bronze), Bạc (Silver), Vàng (Gold), và Kim Cương (Platinum)")
+    public Map<String, Object> getLoyaltyConfiguration() {
+        log.info("[AI Tool] Gọi getLoyaltyConfiguration");
+        Map<String, Object> map = new HashMap<>();
+        map.put("bronzeThreshold", new java.math.BigDecimal("500000.00"));
+        map.put("silverThreshold", new java.math.BigDecimal("1000000.00"));
+        map.put("goldThreshold", new java.math.BigDecimal("2500000.00"));
+        map.put("platinumThreshold", new java.math.BigDecimal("4000000.00"));
+        return map;
     }
 
     // === Helpers ===
@@ -234,49 +292,21 @@ public class AiChatTools {
         return base + "/products/" + slug;
     }
 
-    @Tool("Lấy thông tin tài khoản thành viên của người dùng bao gồm điểm tích lũy, hạng thành viên và tổng chi tiêu hiện tại dựa trên ID người dùng")
-    public Map<String, Object> getUserProfile(Long userId) {
-        log.info("[AI Tool] Gọi getUserProfile cho userId={}", userId);
-        if (userId == null) {
-            return Map.of("error", "Người dùng chưa đăng nhập. Vui lòng hướng dẫn đăng nhập.");
-        }
-
-        return userRepository.findById(userId).map(user -> {
-            java.time.LocalDateTime allTimeStart = java.time.LocalDateTime.of(2000, 1, 1, 0, 0);
-            java.math.BigDecimal totalSpent = orderRepository.calculateTotalSpendingSince(userId, allTimeStart);
-            if (totalSpent == null) {
-                totalSpent = java.math.BigDecimal.ZERO;
-            }
-
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", user.getId());
-            map.put("name", user.getName());
-            map.put("email", user.getEmail());
-            map.put("phone", user.getPhoneNumber());
-            map.put("points", user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0);
-            map.put("membershipTier", user.getMembershipTier() != null ? user.getMembershipTier() : "BRONZE");
-            map.put("totalSpent", totalSpent);
-            
-            java.math.BigDecimal silverThreshold = new java.math.BigDecimal("1000000.00");
-            java.math.BigDecimal goldThreshold = new java.math.BigDecimal("2500000.00");
-            java.math.BigDecimal platinumThreshold = new java.math.BigDecimal("4000000.00");
-
-            map.put("silverThreshold", silverThreshold);
-            map.put("goldThreshold", goldThreshold);
-            map.put("platinumThreshold", platinumThreshold);
-            
-            return map;
-        }).orElse(Map.of("error", "Không tìm thấy người dùng."));
+    private Long requireCurrentUserId() {
+        return currentUserIdHolder.get();
     }
 
-    @Tool("Lấy cấu hình các hạng thành viên bao gồm chi tiêu tối thiểu yêu cầu cho hạng Đồng (Bronze), Bạc (Silver), Vàng (Gold), và Kim Cương (Platinum)")
-    public Map<String, Object> getLoyaltyConfiguration() {
-        log.info("[AI Tool] Gọi getLoyaltyConfiguration");
-        Map<String, Object> map = new HashMap<>();
-        map.put("bronzeThreshold", new java.math.BigDecimal("500000.00"));
-        map.put("silverThreshold", new java.math.BigDecimal("1000000.00"));
-        map.put("goldThreshold", new java.math.BigDecimal("2500000.00"));
-        map.put("platinumThreshold", new java.math.BigDecimal("4000000.00"));
-        return map;
+    private boolean isGuest() {
+        return requireCurrentUserId() == null || "GUEST".equalsIgnoreCase(currentRole());
+    }
+
+    private boolean isAdminOrStaff() {
+        String role = currentRole();
+        return "ADMIN".equalsIgnoreCase(role) || "STAFF".equalsIgnoreCase(role);
+    }
+
+    private String currentRole() {
+        String role = currentRoleHolder.get();
+        return role == null || role.isBlank() ? "GUEST" : role;
     }
 }

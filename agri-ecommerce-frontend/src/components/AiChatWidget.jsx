@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Bot, Leaf, Loader2, MessageCircle, Send, X } from "lucide-react";
 import { getAssetUrl } from "@/lib/admin-utils";
+import {
+  getAuthSession,
+  getCurrentAuthScope,
+  isAuthSessionExpired,
+} from "@/lib/auth-storage";
 import { useLanguage } from "@/i18n/language-provider";
 
 const API_BASE_URL = (
@@ -158,15 +163,26 @@ export default function AiChatWidget() {
     setLoading(true);
 
     try {
+      const authScope = getCurrentAuthScope();
+      const authSession = getAuthSession(authScope);
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (authSession?.accessToken && !isAuthSessionExpired(authSession)) {
+        headers.Authorization = `${authSession.tokenType || "Bearer"} ${authSession.accessToken}`;
+      }
+
       const response = await fetch(`${API_BASE_URL}/public/ai-chat/messages`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           message,
           guestToken: guestTokenRef.current || undefined,
           locale: requestLocale,
+          audience: authScope,
+          contextType: "auto",
+          currentPath: typeof window !== "undefined" ? window.location.pathname : "",
         }),
       });
 
