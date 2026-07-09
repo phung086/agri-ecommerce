@@ -1,5 +1,6 @@
 package com.agri.ecommerce.dto.response.order;
 
+import com.agri.ecommerce.dto.response.user.UserResponse;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -86,4 +87,18 @@ public class OrderResponse {
     private Integer pointsUsed;
 
     private Integer pointsEarned;
+
+    /**
+     * JWT trả về riêng cho luồng guest checkout auto-account.
+     * Frontend dùng token này để lưu customer session và mở thẳng /profile?tab=orders.
+     */
+    private String guestAutoLoginToken;
+
+    private String guestAutoLoginEmail;
+
+    private Long guestAutoLoginExpiresIn;
+
+    private UserResponse guestAutoLoginUser;
+
+    private String guestDefaultPassword;
 }
