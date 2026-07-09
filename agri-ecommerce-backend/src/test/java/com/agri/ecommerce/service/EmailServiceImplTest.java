@@ -4,6 +4,7 @@ import com.agri.ecommerce.entity.OrderEntity;
 import com.agri.ecommerce.entity.UserEntity;
 import com.agri.ecommerce.repository.OrderItemRepository;
 import com.agri.ecommerce.repository.OrderRepository;
+import com.agri.ecommerce.repository.PaymentRepository;
 import com.agri.ecommerce.service.impl.EmailServiceImpl;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -36,13 +37,16 @@ class EmailServiceImplTest {
     @Mock
     private OrderRepository orderRepository;
 
+    @Mock
+    private PaymentRepository paymentRepository;
+
     private EmailServiceImpl emailService;
     private HttpServer emailRelayServer;
     private final List<RecordedRequest> recordedRequests = new CopyOnWriteArrayList<>();
 
     @BeforeEach
     void setUp() {
-        emailService = new EmailServiceImpl(orderItemRepository, orderRepository);
+        emailService = new EmailServiceImpl(orderItemRepository, orderRepository, paymentRepository);
     }
 
     @AfterEach
@@ -64,13 +68,14 @@ class EmailServiceImplTest {
         OrderEntity order = order();
         when(orderRepository.findById(99L)).thenReturn(Optional.of(order));
         when(orderItemRepository.findByOrder_IdOrderByIdAsc(99L)).thenReturn(List.of());
+        when(paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(99L)).thenReturn(Optional.empty());
 
         emailService.sendOrderInvoice(OrderEntity.builder().id(99L).build());
 
         assertThat(recordedRequests).hasSize(1);
         RecordedRequest request = recordedRequests.getFirst();
         assertThat(request.method()).isEqualTo("POST");
-        assertThat(request.idempotencyKey()).isEqualTo("agri-order-invoice-99");
+        assertThat(request.idempotencyKey()).startsWith("agri-order-invoice-99-");
         assertThat(request.body()).contains("\"secret\":\"secret_test\"");
         assertThat(request.body()).contains("\"to\":\"customer@example.com\"");
         assertThat(request.body()).contains("\"name\":\"AgriMarket\"");
