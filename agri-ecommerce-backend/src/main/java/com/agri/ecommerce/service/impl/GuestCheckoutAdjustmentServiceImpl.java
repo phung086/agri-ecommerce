@@ -52,16 +52,27 @@ public class GuestCheckoutAdjustmentServiceImpl implements GuestCheckoutAdjustme
             return preview;
         }
 
+        BigDecimal subtotal = normalizeMoney(preview.getSubtotal());
+        BigDecimal originalShippingFee = restoreOriginalShippingFee(subtotal, normalizeMoney(preview.getShippingFee()));
         preview.setPaymentMethod(normalizeGuestPaymentMethod(request.getPaymentMethod()));
+
         String couponCode = cleanBlank(request.getCouponCode());
         if (couponCode == null) {
+            BigDecimal totalPrice = subtotal.add(originalShippingFee).setScale(2, RoundingMode.HALF_UP);
+            preview.setCouponCode(null);
+            preview.setCouponValid(false);
+            preview.setCouponMessage("No coupon applied");
+            preview.setDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            preview.setCouponDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            preview.setShippingFee(originalShippingFee);
+            preview.setTotalPrice(totalPrice);
             return preview;
         }
 
         CouponPreviewAdjustment adjustment = calculatePreviewAdjustment(
                 couponCode,
-                normalizeMoney(preview.getSubtotal()),
-                normalizeMoney(preview.getShippingFee()),
+                subtotal,
+                originalShippingFee,
                 preview.getItems() == null ? List.of() : preview.getItems()
         );
 
@@ -72,12 +83,12 @@ public class GuestCheckoutAdjustmentServiceImpl implements GuestCheckoutAdjustme
         if (!adjustment.valid()) {
             preview.setDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
             preview.setCouponDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
-            preview.setTotalPrice(normalizeMoney(preview.getSubtotal()).add(normalizeMoney(preview.getShippingFee())));
+            preview.setShippingFee(originalShippingFee);
+            preview.setTotalPrice(subtotal.add(originalShippingFee).setScale(2, RoundingMode.HALF_UP));
             preview.setCanCheckout(false);
             return preview;
         }
 
-        BigDecimal subtotal = normalizeMoney(preview.getSubtotal());
         BigDecimal totalPrice = subtotal
                 .subtract(adjustment.discountAmount())
                 .add(adjustment.shippingFee())
@@ -106,10 +117,12 @@ public class GuestCheckoutAdjustmentServiceImpl implements GuestCheckoutAdjustme
         List<OrderItemEntity> items = orderItemRepository.findByOrder_IdOrderByIdAsc(orderId);
 
         String paymentMethod = normalizeGuestPaymentMethod(request.getPaymentMethod());
+        BigDecimal subtotal = normalizeMoney(order.getSubtotal());
+        BigDecimal originalShippingFee = restoreOriginalShippingFee(subtotal, normalizeMoney(order.getShippingFee()));
         CouponOrderAdjustment adjustment = calculateOrderAdjustment(
                 cleanBlank(request.getCouponCode()),
-                normalizeMoney(order.getSubtotal()),
-                normalizeMoney(order.getShippingFee()),
+                subtotal,
+                originalShippingFee,
                 items
         );
 
@@ -117,7 +130,7 @@ public class GuestCheckoutAdjustmentServiceImpl implements GuestCheckoutAdjustme
         order.setCouponCode(adjustment.couponCode());
         order.setDiscountAmount(adjustment.discountAmount());
         order.setShippingFee(adjustment.shippingFee());
-        BigDecimal totalPrice = normalizeMoney(order.getSubtotal())
+        BigDecimal totalPrice = subtotal
                 .subtract(adjustment.discountAmount())
                 .add(adjustment.shippingFee())
                 .setScale(2, RoundingMode.HALF_UP);
@@ -168,10 +181,10 @@ public class GuestCheckoutAdjustmentServiceImpl implements GuestCheckoutAdjustme
             String type = normalizeCouponType(coupon);
             if (COUPON_TYPE_FREESHIP.equals(type)) {
                 if (hasFreeship) {
-                    return CouponPreviewAdjustment.invalid(coupon.getCode(), "Chỉ được áp dụng tối đa 1 mã miễn phí vận chuyển", baseShippingFee);
+                    return CouponPreviewAdjustment.invalid(coupon.getCode(), "Chỉ được áp dụng tối đa 1 mã vận chuyển", baseShippingFee);
                 }
                 hasFreeship = true;
-                shippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                shippingFee = applyShippingCoupon(coupon, shippingFee);
             } else if (COUPON_TYPE_PRODUCT_DISCOUNT.equals(type)) {
                 if (coupon.getProductId() == null || items.stream().noneMatch(item -> coupon.getProductId().equals(item.getProductId()))) {
                     return CouponPreviewAdjustment.invalid(coupon.getCode(), "Đơn hàng không chứa sản phẩm áp dụng mã này", baseShippingFee);
@@ -223,10 +236,10 @@ public class GuestCheckoutAdjustmentServiceImpl implements GuestCheckoutAdjustme
             String type = normalizeCouponType(coupon);
             if (COUPON_TYPE_FREESHIP.equals(type)) {
                 if (hasFreeship) {
-                    throw new BadRequestException("Chỉ được áp dụng tối đa 1 mã miễn phí vận chuyển");
+                    throw new BadRequestException("Chỉ được áp dụng tối đa 1 mã vận chuyển");
                 }
                 hasFreeship = true;
-                shippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                shippingFee = applyShippingCoupon(coupon, shippingFee);
             } else if (COUPON_TYPE_PRODUCT_DISCOUNT.equals(type)) {
                 if (coupon.getProductId() == null || items.stream().noneMatch(item -> item.getProduct() != null && coupon.getProductId().equals(item.getProduct().getId()))) {
                     throw new BadRequestException("Đơn hàng không chứa sản phẩm áp dụng mã này");
@@ -317,6 +330,42 @@ public class GuestCheckoutAdjustmentServiceImpl implements GuestCheckoutAdjustme
             discount = eligibleAmount;
         }
         return discount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal applyShippingCoupon(CouponEntity coupon, BigDecimal currentShippingFee) {
+        BigDecimal fee = normalizeMoney(currentShippingFee);
+        BigDecimal reduction;
+        if (DISCOUNT_TYPE_FIXED_AMOUNT.equals(normalizeDiscountType(coupon)) && coupon.getDiscountAmount() != null) {
+            reduction = normalizeMoney(coupon.getDiscountAmount());
+        } else if (coupon.getDiscountPercentage() != null && coupon.getDiscountPercentage() > 0) {
+            reduction = fee.multiply(BigDecimal.valueOf(coupon.getDiscountPercentage()))
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        } else {
+            reduction = fee;
+        }
+
+        if (reduction.compareTo(fee) > 0) {
+            reduction = fee;
+        }
+        BigDecimal nextFee = fee.subtract(reduction).setScale(2, RoundingMode.HALF_UP);
+        return nextFee.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : nextFee;
+    }
+
+    /**
+     * OrderServiceImpl đang có ưu đãi vận chuyển tự động theo subtotal.
+     * Guest flow mới yêu cầu không hardcode giảm ship; chỉ voucher mới được giảm.
+     * Hàm này khôi phục phí GHN ban đầu trước khi áp dụng voucher guest.
+     */
+    private BigDecimal restoreOriginalShippingFee(BigDecimal subtotal, BigDecimal currentShippingFee) {
+        BigDecimal fee = normalizeMoney(currentShippingFee);
+        if (subtotal == null) {
+            return fee;
+        }
+        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0
+                && subtotal.compareTo(new BigDecimal("300000.00")) < 0) {
+            return fee.add(new BigDecimal("20000.00")).setScale(2, RoundingMode.HALF_UP);
+        }
+        return fee;
     }
 
     private List<String> parseCouponCodes(String couponCode) {
