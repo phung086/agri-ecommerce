@@ -26,6 +26,24 @@ public class InventoryProductResponse {
 
     private Integer stock;
 
+    private Integer batchTrackedStock;
+
+    private Integer untrackedStock;
+
+    private Integer activeBatchCount;
+
+    private Integer needDateUpdateBatchCount;
+
+    private LocalDateTime latestImportDate;
+
+    private LocalDateTime latestManufactureDate;
+
+    private LocalDateTime earliestExpiryDate;
+
+    private String freshnessStatus;
+
+    private Integer daysUntilExpiry;
+
     private String unit;
 
     private String status;
