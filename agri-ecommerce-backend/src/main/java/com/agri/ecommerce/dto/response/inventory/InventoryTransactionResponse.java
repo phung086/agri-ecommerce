@@ -17,6 +17,10 @@ public class InventoryTransactionResponse {
     private String batchNumber;
     private Integer quantity;
     private String type;
+    private Integer previousStock;
+    private Integer newStock;
+    private String referenceType;
+    private Long referenceId;
     private String note;
     private LocalDateTime createdAt;
 }

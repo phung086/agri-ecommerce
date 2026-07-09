@@ -37,6 +37,10 @@ public class ProductMapper {
                 .categorySlug(category == null ? null : category.getSlug())
                 .thumbnail(images.isEmpty() ? null : images.getFirst())
                 .images(images)
+                .latestImportDate(product.getLatestImportDate())
+                .latestManufactureDate(product.getLatestManufactureDate())
+                .earliestExpiryDate(product.getEarliestExpiryDate())
+                .freshnessStatus(product.getFreshnessStatus())
                 .build();
     }
 }

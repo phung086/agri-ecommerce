@@ -1,12 +1,15 @@
 package com.agri.ecommerce.controller.admin;
 
+import com.agri.ecommerce.dto.request.inventory.InventoryBatchCreateRequest;
 import com.agri.ecommerce.dto.request.inventory.InventoryStockAdjustmentRequest;
 import com.agri.ecommerce.dto.request.inventory.InventoryStockSetRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
+import com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse;
 import com.agri.ecommerce.dto.response.inventory.InventoryProductResponse;
 import com.agri.ecommerce.dto.response.inventory.InventoryStockMutationResponse;
 import com.agri.ecommerce.dto.response.inventory.InventorySummaryResponse;
+import com.agri.ecommerce.dto.response.inventory.InventoryTransactionResponse;
 import com.agri.ecommerce.service.AdminInventoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -18,7 +21,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Admin - Inventory", description = "Inventory, stock alert, and quick stock management APIs")
+import java.util.List;
+
+@Tag(name = "Admin - Inventory", description = "Inventory, stock alert, batch/lot, expiry and transaction management APIs")
 @RestController
 @RequestMapping("/api/admin/inventory")
 @RequiredArgsConstructor
@@ -35,115 +40,128 @@ public class AdminInventoryController {
             @RequestParam(defaultValue = "10") Integer threshold
     ) {
         InventorySummaryResponse response = adminInventoryService.getSummary(threshold);
-
-        return ResponseEntity.ok(
-                ApiResponse.success("Inventory summary loaded successfully", response, HttpStatus.OK.value())
-        );
+        return ResponseEntity.ok(ApiResponse.success("Inventory summary loaded successfully", response, HttpStatus.OK.value()));
     }
 
-    @Operation(summary = "Get low-stock and out-of-stock alerts")
+    @Operation(summary = "Get inventory product list with stock/date alerts")
     @GetMapping("/alerts")
     public ResponseEntity<ApiResponse<PageResponse<InventoryProductResponse>>> getStockAlerts(
-            @Parameter(description = "Search keyword", example = "rau")
-            @RequestParam(required = false) String keyword,
-
-            @Parameter(description = "Category slug", example = "rau-cu")
-            @RequestParam(required = false) String categorySlug,
-
-            @Parameter(description = "Product status", example = "in_stock")
-            @RequestParam(required = false) String status,
-
-            @Parameter(description = "Low stock threshold", example = "10")
-            @RequestParam(defaultValue = "10") Integer threshold,
-
-            @Parameter(description = "Include products above threshold", example = "false")
-            @RequestParam(defaultValue = "false") Boolean includeOk,
-
-            @Parameter(description = "Page index starting from 0", example = "0")
-            @RequestParam(defaultValue = "0") int page,
-
-            @Parameter(description = "Page size", example = "20")
-            @RequestParam(defaultValue = "20") int size,
-
-            @Parameter(description = "Sort by field,direction", example = "stock,asc")
-            @RequestParam(defaultValue = "stock,asc") String sort
+            @Parameter(description = "Search keyword", example = "rau") @RequestParam(required = false) String keyword,
+            @Parameter(description = "Category slug", example = "rau-cu") @RequestParam(required = false) String categorySlug,
+            @Parameter(description = "Product status", example = "in_stock") @RequestParam(required = false) String status,
+            @Parameter(description = "Low stock threshold", example = "10") @RequestParam(defaultValue = "10") Integer threshold,
+            @Parameter(description = "Include products above threshold", example = "true") @RequestParam(defaultValue = "true") Boolean includeOk,
+            @Parameter(description = "Page index starting from 0", example = "0") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size", example = "20") @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "Sort by field,direction", example = "stock,asc") @RequestParam(defaultValue = "stock,asc") String sort
     ) {
         PageResponse<InventoryProductResponse> response = adminInventoryService.getStockAlerts(
-                keyword,
-                categorySlug,
-                status,
-                threshold,
-                includeOk,
-                page,
-                size,
-                sort
+                keyword, categorySlug, status, threshold, includeOk, page, size, sort
         );
-
-        return ResponseEntity.ok(
-                ApiResponse.success("Inventory alerts loaded successfully", response, HttpStatus.OK.value())
-        );
+        return ResponseEntity.ok(ApiResponse.success("Inventory products loaded successfully", response, HttpStatus.OK.value()));
     }
 
     @Operation(summary = "Set product stock")
     @PatchMapping("/products/{productId}/stock")
     public ResponseEntity<ApiResponse<InventoryStockMutationResponse>> setStock(
-            @Parameter(description = "Product ID", example = "1")
-            @PathVariable Long productId,
+            @Parameter(description = "Product ID", example = "1") @PathVariable Long productId,
             @Valid @RequestBody InventoryStockSetRequest request
     ) {
         InventoryStockMutationResponse response = adminInventoryService.setStock(productId, request);
-
-        return ResponseEntity.ok(
-                ApiResponse.success("Product stock updated successfully", response, HttpStatus.OK.value())
-        );
+        return ResponseEntity.ok(ApiResponse.success("Product stock updated successfully", response, HttpStatus.OK.value()));
     }
 
     @Operation(summary = "Increase or decrease product stock")
     @PatchMapping("/products/{productId}/stock/adjust")
     public ResponseEntity<ApiResponse<InventoryStockMutationResponse>> adjustStock(
-            @Parameter(description = "Product ID", example = "1")
-            @PathVariable Long productId,
+            @Parameter(description = "Product ID", example = "1") @PathVariable Long productId,
             @Valid @RequestBody InventoryStockAdjustmentRequest request
     ) {
         InventoryStockMutationResponse response = adminInventoryService.adjustStock(productId, request);
-
-        return ResponseEntity.ok(
-                ApiResponse.success("Product stock adjusted successfully", response, HttpStatus.OK.value())
-        );
+        return ResponseEntity.ok(ApiResponse.success("Product stock adjusted successfully", response, HttpStatus.OK.value()));
     }
 
     @Operation(summary = "Get list of inventory batches")
     @GetMapping("/batches")
-    public ResponseEntity<ApiResponse<java.util.List<com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse>>> getBatches() {
-        return ResponseEntity.ok(
-                ApiResponse.success("Batches loaded successfully", adminInventoryService.getBatches(), HttpStatus.OK.value())
-        );
+    public ResponseEntity<ApiResponse<List<InventoryBatchResponse>>> getBatches(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long productId,
+            @RequestParam(defaultValue = "false") Boolean includeDepleted
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Batches loaded successfully",
+                adminInventoryService.getBatches(status, productId, includeDepleted),
+                HttpStatus.OK.value()
+        ));
+    }
+
+    @Operation(summary = "Get batches of a product")
+    @GetMapping("/products/{productId}/batches")
+    public ResponseEntity<ApiResponse<List<InventoryBatchResponse>>> getProductBatches(@PathVariable Long productId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Product batches loaded successfully",
+                adminInventoryService.getProductBatches(productId),
+                HttpStatus.OK.value()
+        ));
     }
 
     @Operation(summary = "Import new inventory batch")
     @PostMapping("/batches")
-    public ResponseEntity<ApiResponse<com.agri.ecommerce.dto.response.inventory.InventoryBatchResponse>> createBatch(
-            @Valid @RequestBody com.agri.ecommerce.dto.request.inventory.InventoryBatchCreateRequest request
-    ) {
+    public ResponseEntity<ApiResponse<InventoryBatchResponse>> createBatch(@Valid @RequestBody InventoryBatchCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 ApiResponse.success("Batch imported successfully", adminInventoryService.createBatch(request), HttpStatus.CREATED.value())
         );
     }
 
+    @Operation(summary = "Get expiry and missing-date inventory alerts")
+    @GetMapping("/expiry-alerts")
+    public ResponseEntity<ApiResponse<List<InventoryBatchResponse>>> getExpiryAlerts(
+            @RequestParam(defaultValue = "3") Integer days
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Expiry alerts loaded successfully",
+                adminInventoryService.getExpiryAlerts(days),
+                HttpStatus.OK.value()
+        ));
+    }
+
     @Operation(summary = "Get inventory transaction logs")
     @GetMapping("/transactions")
-    public ResponseEntity<ApiResponse<java.util.List<com.agri.ecommerce.dto.response.inventory.InventoryTransactionResponse>>> getTransactions() {
-        return ResponseEntity.ok(
-                ApiResponse.success("Transactions loaded successfully", adminInventoryService.getTransactions(), HttpStatus.OK.value())
-        );
+    public ResponseEntity<ApiResponse<List<InventoryTransactionResponse>>> getTransactions(
+            @RequestParam(required = false) Long productId,
+            @RequestParam(required = false) Long batchId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Transactions loaded successfully",
+                adminInventoryService.getTransactions(productId, batchId),
+                HttpStatus.OK.value()
+        ));
+    }
+
+    @Operation(summary = "Backfill existing product stock into legacy batches")
+    @PostMapping("/backfill-legacy-batches")
+    public ResponseEntity<ApiResponse<InventorySummaryResponse>> backfillLegacyBatches() {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Legacy product stock synchronized into inventory batches",
+                adminInventoryService.backfillLegacyBatches(),
+                HttpStatus.OK.value()
+        ));
+    }
+
+    @Operation(summary = "Recalculate product stock from inventory batches")
+    @PostMapping("/recalculate")
+    public ResponseEntity<ApiResponse<InventorySummaryResponse>> recalculateProductStockFromBatches() {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Product stock recalculated from batches successfully",
+                adminInventoryService.recalculateProductStockFromBatches(),
+                HttpStatus.OK.value()
+        ));
     }
 
     @Operation(summary = "Manually trigger inventory scan for expired and near-expiry goods")
     @PostMapping("/scan")
     public ResponseEntity<ApiResponse<Void>> triggerScan() {
         inventoryScheduler.runDailyInventoryScan();
-        return ResponseEntity.ok(
-                ApiResponse.success("Inventory scan completed successfully", null, HttpStatus.OK.value())
-        );
+        return ResponseEntity.ok(ApiResponse.success("Inventory scan completed successfully", null, HttpStatus.OK.value()));
     }
 }

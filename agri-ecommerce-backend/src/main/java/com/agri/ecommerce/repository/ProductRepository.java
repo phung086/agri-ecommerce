@@ -30,6 +30,10 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long>, J
     @EntityGraph(attributePaths = "category")
     Optional<ProductEntity> findById(Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select product from ProductEntity product where product.id = :id")
+    Optional<ProductEntity> findByIdForUpdate(@Param("id") Long id);
+
     @EntityGraph(attributePaths = "category")
     List<ProductEntity> findByStatus(String status, Pageable pageable);
 

@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -45,4 +46,12 @@ public class ProductResponse {
     private String thumbnail;
 
     private List<String> images;
+
+    private LocalDateTime latestImportDate;
+
+    private LocalDateTime latestManufactureDate;
+
+    private LocalDateTime earliestExpiryDate;
+
+    private String freshnessStatus;
 }
