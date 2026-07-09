@@ -11,6 +11,7 @@ import com.agri.ecommerce.service.AiChatService;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.service.AiServices;
 import lombok.extern.slf4j.Slf4j;
@@ -137,6 +138,9 @@ public class AiChatServiceImpl implements AiChatService {
         String guestToken = resolveGuestToken(request.getGuestToken(), userId);
         String locale = normalizeLocale(request.getLocale());
 
+        // Lấy lịch sử tin nhắn gần đây trước khi lưu tin nhắn mới
+        List<ChatMessage> chatHistory = getRecentChatHistory(userId, guestToken);
+
         // Lưu tin nhắn user vào DB (luôn lưu dù AI có bật hay không)
         saveChatMessage(userId, guestToken, SENDER_USER, message);
 
@@ -157,7 +161,7 @@ public class AiChatServiceImpl implements AiChatService {
 
         try {
             // Gọi LLM thông qua Assistant (tự động xử lý Tool Calling)
-            aiReply = callLlm(message, locale, userId);
+            aiReply = callLlm(message, locale, userId, chatHistory);
 
             // Lấy danh sách sản phẩm gợi ý do tool thu thập được trong quá trình chạy
             suggestedProducts = new java.util.ArrayList<>(AiChatTools.suggestedProductsHolder.get());
@@ -180,7 +184,7 @@ public class AiChatServiceImpl implements AiChatService {
 
     // === LLM Call ===
 
-    private String callLlm(String userMessage, String locale, Long userId) {
+    private String callLlm(String userMessage, String locale, Long userId, List<ChatMessage> chatHistory) {
         try {
             String responseLanguage = "Vietnamese only (tiếng Việt)";
             if ("en".equalsIgnoreCase(locale)) {
@@ -195,10 +199,10 @@ public class AiChatServiceImpl implements AiChatService {
                         + ". Hãy sử dụng ID này nếu họ hỏi về lịch sử đơn hàng của họ.";
             }
 
-            List<ChatMessage> messages = List.of(
-                    SystemMessage.from(customSystemPrompt),
-                    UserMessage.from(buildLanguageScopedUserMessage(userMessage, locale))
-            );
+            List<ChatMessage> messages = new java.util.ArrayList<>();
+            messages.add(SystemMessage.from(customSystemPrompt));
+            messages.addAll(chatHistory);
+            messages.add(UserMessage.from(buildLanguageScopedUserMessage(userMessage, locale)));
 
             String reply = assistant.chat(messages);
 
@@ -212,6 +216,38 @@ public class AiChatServiceImpl implements AiChatService {
         } catch (Exception ex) {
             log.error("[AI Chat] Lỗi khi gọi LLM Assistant: {}", ex.getClass().getSimpleName() + " — " + ex.getMessage());
             return "en".equalsIgnoreCase(locale) ? FALLBACK_ERROR_EN : FALLBACK_ERROR;
+        }
+    }
+
+    private List<ChatMessage> getRecentChatHistory(Long userId, String guestToken) {
+        try {
+            org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+                0, 10, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id")
+            );
+            List<ChatMessageEntity> entities;
+            if (userId != null) {
+                entities = chatMessageRepository.findByUser_Id(userId, pageable).getContent();
+            } else if (guestToken != null) {
+                entities = chatMessageRepository.findByGuestToken(guestToken, pageable).getContent();
+            } else {
+                entities = List.of();
+            }
+
+            List<ChatMessageEntity> chronological = new java.util.ArrayList<>(entities);
+            java.util.Collections.reverse(chronological);
+
+            List<ChatMessage> history = new java.util.ArrayList<>();
+            for (ChatMessageEntity entity : chronological) {
+                if ("user".equalsIgnoreCase(entity.getSender())) {
+                    history.add(UserMessage.from(entity.getMessage()));
+                } else if ("bot".equalsIgnoreCase(entity.getSender())) {
+                    history.add(AiMessage.from(entity.getMessage()));
+                }
+            }
+            return history;
+        } catch (Exception ex) {
+            log.warn("[AI Chat] Không thể lấy lịch sử chat: {}", ex.getMessage());
+            return List.of();
         }
     }
 

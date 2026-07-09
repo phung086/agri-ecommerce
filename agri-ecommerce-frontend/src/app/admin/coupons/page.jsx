@@ -63,6 +63,8 @@ const blankCouponForm = {
   expiresAt: "",
   usageLimit: "",
   active: true,
+  requiredMembershipTier: "",
+  guestAllowed: true,
 };
 
 const COUPON_TYPE_LABELS = {
@@ -122,6 +124,8 @@ function buildCouponPayload(form) {
     usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
     minOrderValue: form.minOrderValue ? Number(form.minOrderValue) : null,
     active: Boolean(form.active),
+    requiredMembershipTier: form.requiredMembershipTier || null,
+    guestAllowed: Boolean(form.guestAllowed),
   };
 
   if ((couponType === "ORDER_DISCOUNT" || couponType === "PRODUCT_DISCOUNT") && discountType === "FIXED_AMOUNT") {
@@ -278,6 +282,8 @@ export default function AdminCouponsPage() {
       expiresAt: toDateInput(coupon.expiresAt),
       usageLimit: String(coupon.usageLimit ?? ""),
       active: Boolean(coupon.active),
+      requiredMembershipTier: coupon.requiredMembershipTier || "",
+      guestAllowed: coupon.guestAllowed !== false,
     });
     setError("");
     setDialogOpen(true);
@@ -722,6 +728,45 @@ export default function AdminCouponsPage() {
                 >
                   <option value="active">Đang bật</option>
                   <option value="inactive">Đã tắt</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="coupon-tier">Hạng thành viên tối thiểu</Label>
+                <select
+                  id="coupon-tier"
+                  value={form.requiredMembershipTier || ""}
+                  onChange={(event) => {
+                    const tier = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      requiredMembershipTier: tier,
+                      guestAllowed: tier ? false : current.guestAllowed,
+                    }));
+                  }}
+                  className="h-8 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50"
+                >
+                  <option value="">Tất cả (Không giới hạn)</option>
+                  <option value="BRONZE">Đồng trở lên</option>
+                  <option value="SILVER">Bạc trở lên</option>
+                  <option value="GOLD">Vàng trở lên</option>
+                  <option value="PLATINUM">Bạch Kim trở lên</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="coupon-guest-allowed">Cho phép khách vãng lai dùng</Label>
+                <select
+                  id="coupon-guest-allowed"
+                  value={form.guestAllowed ? "true" : "false"}
+                  disabled={!!form.requiredMembershipTier}
+                  onChange={(event) =>
+                    updateForm("guestAllowed", event.target.value === "true")
+                  }
+                  className="h-8 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:opacity-50"
+                >
+                  <option value="true">Có cho phép</option>
+                  <option value="false">Không cho phép</option>
                 </select>
               </div>
             </div>

@@ -37,8 +37,11 @@ public class CouponMapper {
                 .expired(expired)
                 .usageExhausted(usageExhausted)
                 .available(available)
+                .requiredMembershipTier(coupon.getRequiredMembershipTier())
+                .guestAllowed(coupon.getGuestAllowed() != null ? coupon.getGuestAllowed() : true)
                 .createdAt(coupon.getCreatedAt())
                 .updatedAt(coupon.getUpdatedAt())
                 .build();
+
     }
 }

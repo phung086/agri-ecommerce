@@ -40,6 +40,10 @@ import {
   getAuthSession,
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
+import { cartService } from "@/services/cart.service";
+import { marketplaceService } from "@/services/marketplace.service";
+import { reviewService } from "@/services/review.service";
+import { wishlistService } from "@/services/wishlist.service";
 import {
   addGuestCartItem,
   clearGuestCart,
@@ -47,10 +51,6 @@ import {
   removeGuestCartItem,
   updateGuestCartItem,
 } from "@/lib/guest-cart-storage";
-import { cartService } from "@/services/cart.service";
-import { marketplaceService } from "@/services/marketplace.service";
-import { reviewService } from "@/services/review.service";
-import { wishlistService } from "@/services/wishlist.service";
 import { useLanguage } from "@/i18n/language-provider";
 import { localizeProduct, localizeCategory } from "@/i18n/localized-fields";
 
@@ -355,10 +355,10 @@ function mapGuestCartStorageToHomeItems(items) {
   return (items || []).map((item, index) => ({
     id: String(item.productId),
     slug: item.productSlug || String(item.productId),
-    name: item.productName || "San pham trong gio",
+    name: item.productName || "Sản phẩm trong giỏ",
     nameEn: item.productNameEn || "",
     price: Number(item.productPrice || 0),
-    unit: item.unit || "san pham",
+    unit: item.unit || "sản phẩm",
     unitEn: item.unitEn || "",
     stock: Number(item.stock ?? 0),
     quantity: Number(item.quantity || 0),
@@ -1285,7 +1285,12 @@ export default function Home() {
   useEffect(() => {
     let ignore = false;
     const slugs = Array.from(
-      new Set(productCards.map((product) => product.slug).filter(Boolean))
+      new Set(
+        productCards
+          .filter((product) => !product.id.startsWith("fallback-"))
+          .map((product) => product.slug)
+          .filter(Boolean)
+      )
     );
 
     if (slugs.length === 0) {
@@ -1498,7 +1503,7 @@ export default function Home() {
 
     const nextItems = addGuestCartItem(product, 1);
     setCart(mapGuestCartStorageToHomeItems(nextItems));
-    setCartNotice("Gio hang dang luu tam tren trinh duyet. Ban co the thanh toan nhanh khong can dang nhap.");
+    setCartNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Bạn có thể thanh toán nhanh không cần đăng nhập.");
     showAddToCartFeedback(product);
     return true;
   }
@@ -1620,17 +1625,17 @@ export default function Home() {
     setCartNotice("");
     setCartError("");
     const item = cart.find((currentItem) => currentItem.id === id);
+    if (!item) return;
 
-    if (item?.cartItemId) {
-      const nextQuantity = Math.min(item.quantity + 1, item.stock || 99);
+    const nextQuantity = Math.min(item.quantity + 1, item.stock || 99);
+    if (nextQuantity === item.quantity) {
+      setCartError("Xin lỗi bạn, sản phẩm này chỉ còn " + (item.stock || 0) + " cái thôi!");
+      return;
+    }
 
-      if (nextQuantity === item.quantity) {
-        setCartError("Số lượng đã đạt tồn kho hiện tại.");
-        return;
-      }
 
+    if (item.cartItemId) {
       setCartUpdating(true);
-
       try {
         const response = await cartService.updateItem(item.cartItemId, {
           quantity: nextQuantity,
@@ -1641,33 +1646,31 @@ export default function Home() {
       } finally {
         setCartUpdating(false);
       }
-
-      return;
+    } else {
+      const nextItems = updateGuestCartItem(Number(id), nextQuantity);
+      setCart(mapGuestCartStorageToHomeItems(nextItems));
     }
-
-    setCart(
-      mapGuestCartStorageToHomeItems(
-        updateGuestCartItem(id, Math.min(item.quantity + 1, item.stock || 99))
-      )
-    );
   }
 
   async function decreaseCartItem(id) {
     setCartNotice("");
     setCartError("");
     const item = cart.find((currentItem) => currentItem.id === id);
+    if (!item) return;
 
-    if (item?.cartItemId) {
-      if (item.quantity <= 1) {
-        await removeCartItem(id);
-        return;
-      }
+    if (item.quantity <= 1) {
+      await removeCartItem(id);
 
+      return;
+    }
+
+    const nextQuantity = item.quantity - 1;
+
+    if (item.cartItemId) {
       setCartUpdating(true);
-
       try {
         const response = await cartService.updateItem(item.cartItemId, {
-          quantity: item.quantity - 1,
+          quantity: nextQuantity,
         });
         setCart(mapCartResponseToItems(response));
       } catch (error) {
@@ -1675,21 +1678,20 @@ export default function Home() {
       } finally {
         setCartUpdating(false);
       }
-
-      return;
+    } else {
+      const nextItems = updateGuestCartItem(Number(id), nextQuantity);
+      setCart(mapGuestCartStorageToHomeItems(nextItems));
     }
-
-    setCart(mapGuestCartStorageToHomeItems(updateGuestCartItem(id, item.quantity - 1)));
   }
 
   async function removeCartItem(id) {
     setCartNotice("");
     setCartError("");
     const item = cart.find((currentItem) => currentItem.id === id);
+    if (!item) return;
 
-    if (item?.cartItemId) {
+    if (item.cartItemId) {
       setCartUpdating(true);
-
       try {
         const response = await cartService.removeItem(item.cartItemId);
         setCart(mapCartResponseToItems(response));
@@ -1698,11 +1700,10 @@ export default function Home() {
       } finally {
         setCartUpdating(false);
       }
-
-      return;
+    } else {
+      const nextItems = removeGuestCartItem(Number(id));
+      setCart(mapGuestCartStorageToHomeItems(nextItems));
     }
-
-    setCart(mapGuestCartStorageToHomeItems(removeGuestCartItem(id)));
   }
 
   async function clearCart() {
@@ -1713,7 +1714,6 @@ export default function Home() {
 
     if (hasServerCartItems) {
       setCartUpdating(true);
-
       try {
         const response = await cartService.clearCart();
         setCart(mapCartResponseToItems(response));
@@ -1723,12 +1723,11 @@ export default function Home() {
       } finally {
         setCartUpdating(false);
       }
-
-      return;
+    } else {
+      clearGuestCart();
+      setCart([]);
+      setCartNotice("Đã xóa toàn bộ giỏ hàng.");
     }
-
-    clearGuestCart();
-    setCart([]);
   }
 
   function handleCheckout() {

@@ -23,4 +23,8 @@ public interface OrderService {
     OrderResponse cancelOrder(Long userId, Long orderId, OrderStatusNoteRequest request);
 
     OrderResponse completeOrder(Long userId, Long orderId, OrderStatusNoteRequest request);
+
+    OrderResponse trackOrder(Long orderId, String phone);
+
+    OrderResponse trackOrderByGhnCode(String trackingCode, String phone);
 }

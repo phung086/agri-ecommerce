@@ -43,4 +43,9 @@ public class CouponUpdateRequest {
     private Integer usageLimit;
 
     private Boolean active;
+
+    private String requiredMembershipTier;
+
+    private Boolean guestAllowed;
 }
+

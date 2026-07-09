@@ -221,7 +221,14 @@ function AuthPanel({ onAuthenticated }) {
   const [error, setError] = useState("");
   const [phoneError, setPhoneError] = useState("");
 
+  // Tracking State
+  const [trackOrderId, setTrackOrderId] = useState("");
+  const [trackPhone, setTrackPhone] = useState("");
+  const [trackedOrder, setTrackedOrder] = useState(null);
+  const [trackMethod, setTrackMethod] = useState("id");
+
   const isLogin = mode === "login";
+  const isTrack = mode === "track";
 
   // Validate phone number: must be 0 followed by 9 digits
   function validatePhoneNumber(phone) {
@@ -249,6 +256,44 @@ function AuthPanel({ onAuthenticated }) {
       }
     } else {
       setRegisterForm((current) => ({ ...current, [field]: value }));
+    }
+  }
+
+  async function handleTrackOrder(event) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    setTrackedOrder(null);
+    setLoading(true);
+
+    const codeOrId = trackOrderId.trim();
+    if (!codeOrId || !trackPhone.trim()) {
+      setError("Vui lòng nhập đầy đủ thông tin tra cứu.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      let response;
+      if (trackMethod === "ghn") {
+        response = await orderService.trackByGhnCode(codeOrId, trackPhone.trim());
+      } else {
+        const parsedId = Number(codeOrId);
+        if (isNaN(parsedId)) {
+          throw new Error("Mã đơn hàng phải là một số hợp lệ.");
+        }
+        response = await orderService.trackGuestOrder(parsedId, trackPhone.trim());
+      }
+      setTrackedOrder(response?.data ?? response);
+      setNotice("Tìm thấy thông tin đơn hàng!");
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Không tìm thấy đơn hàng khớp với thông tin đã cung cấp."
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -358,7 +403,11 @@ function AuthPanel({ onAuthenticated }) {
             Tài khoản khách hàng
           </p>
           <h2 className="mt-1 text-2xl font-black tracking-normal text-emerald-950">
-            {isLogin ? "Đăng nhập hồ sơ" : "Tạo tài khoản mới"}
+            {isTrack
+              ? "Tra cứu đơn hàng"
+              : isLogin
+              ? "Đăng nhập hồ sơ"
+              : "Tạo tài khoản mới"}
           </h2>
         </div>
         <div className="relative">
@@ -370,7 +419,7 @@ function AuthPanel({ onAuthenticated }) {
           >
             <UserRound className="size-5" />
           </button>
-          
+
           {showRoleDropdown && (
             <div className="absolute right-0 top-full z-50 mt-1.5 w-40 rounded-[8px] border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 slide-in-from-top-1 duration-150">
               <button
@@ -398,11 +447,12 @@ function AuthPanel({ onAuthenticated }) {
         </div>
       </div>
 
-      {/* Tabs Đăng nhập/Đăng ký */}
-      <div className="mb-5 grid grid-cols-2 gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50/70 p-1">
+      {/* Tabs Đăng nhập/Đăng ký/Tra cứu đơn */}
+      <div className="mb-5 grid grid-cols-3 gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50/70 p-1">
         {[
           { value: "login", label: "Đăng nhập" },
           { value: "register", label: "Đăng ký" },
+          { value: "track", label: "Tra cứu đơn" },
         ].map((item) => (
           <button
             key={item.value}
@@ -411,6 +461,7 @@ function AuthPanel({ onAuthenticated }) {
               setMode(item.value);
               setError("");
               setNotice("");
+              setTrackedOrder(null);
             }}
             className={`h-9 rounded-[8px] text-sm font-black transition ${
               mode === item.value
@@ -423,154 +474,348 @@ function AuthPanel({ onAuthenticated }) {
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {!isLogin && (
+      {isTrack ? (
+        <div className="space-y-5">
+          {!trackedOrder ? (
+            <form onSubmit={handleTrackOrder} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Phương thức tra cứu</Label>
+                <div className="grid grid-cols-2 gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50/50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrackMethod("id");
+                      setError("");
+                    }}
+                    className={`h-8 rounded-[6px] text-xs font-bold transition ${
+                      trackMethod === "id"
+                        ? "bg-white text-emerald-800 shadow-sm"
+                        : "text-slate-500 hover:text-emerald-700"
+                    }`}
+                  >
+                    Mã đơn hàng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrackMethod("ghn");
+                      setError("");
+                    }}
+                    className={`h-8 rounded-[6px] text-xs font-bold transition ${
+                      trackMethod === "ghn"
+                        ? "bg-white text-emerald-800 shadow-sm"
+                        : "text-slate-500 hover:text-emerald-700"
+                    }`}
+                  >
+                    Mã vận đơn GHN
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="track-order-id">
+                  {trackMethod === "ghn" ? "Mã vận đơn GHN" : "Mã đơn hàng"}
+                </Label>
+                <Input
+                  id="track-order-id"
+                  type="text"
+                  value={trackOrderId}
+                  onChange={(e) => setTrackOrderId(e.target.value)}
+                  placeholder={
+                    trackMethod === "ghn"
+                      ? "Nhập mã vận đơn GHN (ví dụ: GHN12345678)"
+                      : "Nhập mã số đơn hàng (ví dụ: 12)"
+                  }
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="track-phone">Số điện thoại nhận hàng</Label>
+                <Input
+                  id="track-phone"
+                  type="tel"
+                  value={trackPhone}
+                  onChange={(e) => setTrackPhone(e.target.value)}
+                  placeholder="Nhập số điện thoại đặt hàng"
+                  required
+                />
+              </div>
+
+              {error && (
+                <div className="rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="h-11 w-full bg-emerald-600 font-bold hover:bg-emerald-700"
+                disabled={loading}
+              >
+                {loading ? "Đang tra cứu..." : "Tra cứu trạng thái"}
+                {!loading && <Send className="size-4" />}
+              </Button>
+            </form>
+          ) : (
+            <div className="space-y-4 text-slate-800">
+              <div className="flex items-center justify-between border-b pb-3">
+                <div>
+                  <h3 className="font-black text-slate-900">Đơn hàng #{trackedOrder.id}</h3>
+                  <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                    Mã vận đơn GHN: <span className="font-mono text-emerald-700 font-bold">{trackedOrder.trackingNumber || "Chưa có"}</span>
+                  </p>
+                </div>
+                <StatusBadge status={trackedOrder.status} />
+              </div>
+
+              {/* Status Timeline */}
+              {trackedOrder.statusHistory?.length > 0 && (
+                <div className="space-y-2.5 rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-xs">
+                  <p className="font-black uppercase tracking-wider text-slate-400 text-[10px]">Lịch sử trạng thái</p>
+                  <div className="space-y-2 border-l border-emerald-150 pl-3">
+                    {trackedOrder.statusHistory.map((history) => (
+                      <div key={history.id} className="relative">
+                        <span className="absolute -left-[16.5px] top-1 size-2.5 rounded-full border border-white bg-emerald-500" />
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <StatusBadge status={history.status} />
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            {formatDate(history.changedAt)}
+                          </span>
+                        </div>
+                        {history.note && (
+                          <p className="mt-0.5 text-slate-500 font-medium">{history.note}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Delivery info */}
+              {trackedOrder.shippingAddress && (
+                <div className="rounded-lg border border-sky-100 bg-sky-50/40 p-3 text-xs space-y-1">
+                  <p className="font-black uppercase tracking-wider text-sky-800 text-[10px]">Thông tin giao hàng</p>
+                  <p className="font-bold text-slate-900 mt-1">
+                    {trackedOrder.shippingAddress.fullName} - {trackedOrder.shippingAddress.phone}
+                  </p>
+                  <p className="text-slate-600 leading-normal">
+                    {trackedOrder.shippingAddress.address}, {trackedOrder.shippingAddress.city}
+                  </p>
+                </div>
+              )}
+
+              {/* Products list */}
+              {trackedOrder.items?.length > 0 && (
+                <div className="rounded-lg border border-slate-100 bg-white p-3 text-xs space-y-2">
+                  <p className="font-black uppercase tracking-wider text-slate-400 text-[10px]">Sản phẩm</p>
+                  <div className="divide-y divide-slate-100">
+                    {trackedOrder.items.map((item) => (
+                      <div key={item.id} className="flex justify-between py-1.5 items-center">
+                        <div className="max-w-[70%]">
+                          <p className="font-bold text-slate-800">{item.productName}</p>
+                          <p className="text-slate-400 mt-0.5">x{item.quantity}</p>
+                        </div>
+                        <span className="font-bold text-slate-700">
+                          {formatCurrency(item.lineTotal || item.price * item.quantity)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Costs Breakdown */}
+              <div className="rounded-lg border border-emerald-100 bg-[#f7faf4] p-3 text-xs space-y-1.5 font-semibold text-slate-600">
+                <div className="flex justify-between">
+                  <span>Tạm tính</span>
+                  <span>{formatCurrency(trackedOrder.subtotal)}</span>
+                </div>
+                {trackedOrder.couponDiscountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold">
+                    <span>Mã giảm giá</span>
+                    <span>-{formatCurrency(trackedOrder.couponDiscountAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Phí giao hàng</span>
+                  <span>{trackedOrder.shippingFee === 0 ? "Miễn phí" : formatCurrency(trackedOrder.shippingFee)}</span>
+                </div>
+                <div className="flex justify-between border-t border-emerald-100 pt-2 font-black text-slate-900 text-sm">
+                  <span>Tổng thanh toán</span>
+                  <span className="text-emerald-700">{formatCurrency(trackedOrder.totalPrice)}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 w-full"
+                  onClick={() => {
+                    setTrackedOrder(null);
+                    setError("");
+                    setNotice("");
+                  }}
+                >
+                  Tra cứu đơn khác
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {!isLogin && (
+            <div className="space-y-2">
+              <Label htmlFor="register-name">Họ và tên</Label>
+              <div className="relative">
+                <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  id="register-name"
+                  value={registerForm.name}
+                  onChange={(event) => updateRegister("name", event.target.value)}
+                  className="h-11 pl-9"
+                  placeholder="Nguyễn Văn A"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="register-name">Họ và tên</Label>
+            <Label htmlFor={isLogin ? "login-email" : "register-email"}>
+              Địa chỉ email
+            </Label>
             <div className="relative">
-              <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <Input
-                id="register-name"
-                value={registerForm.name}
-                onChange={(event) => updateRegister("name", event.target.value)}
+                id={isLogin ? "login-email" : "register-email"}
+                type="email"
+                value={isLogin ? loginForm.email : registerForm.email}
+                onChange={(event) =>
+                  isLogin
+                    ? updateLogin("email", event.target.value)
+                    : updateRegister("email", event.target.value)
+                }
                 className="h-11 pl-9"
-                placeholder="Nguyễn Văn A"
+                placeholder="customer@example.com"
+                autoComplete="email"
                 required
               />
             </div>
           </div>
-        )}
 
-        <div className="space-y-2">
-          <Label htmlFor={isLogin ? "login-email" : "register-email"}>
-            Địa chỉ email
-          </Label>
-          <div className="relative">
-            <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              id={isLogin ? "login-email" : "register-email"}
-              type="email"
-              value={isLogin ? loginForm.email : registerForm.email}
-              onChange={(event) =>
-                isLogin
-                  ? updateLogin("email", event.target.value)
-                  : updateRegister("email", event.target.value)
-              }
-              className="h-11 pl-9"
-              placeholder="customer@example.com"
-              autoComplete="email"
-              required
-            />
+          <div className="space-y-2">
+            <Label htmlFor={isLogin ? "login-password" : "register-password"}>
+              Mật khẩu
+            </Label>
+            <div className="relative">
+              <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                id={isLogin ? "login-password" : "register-password"}
+                type={showPassword ? "text" : "password"}
+                value={isLogin ? loginForm.password : registerForm.password}
+                onChange={(event) =>
+                  isLogin
+                    ? updateLogin("password", event.target.value)
+                    : updateRegister("password", event.target.value)
+                }
+                className="h-11 pl-9 pr-10"
+                placeholder={isLogin ? "Nhập mật khẩu" : "Tối thiểu 6 ký tự"}
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                minLength={isLogin ? undefined : 6}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-[8px] text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700"
+                aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              >
+                {showPassword ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-2">
-          <Label htmlFor={isLogin ? "login-password" : "register-password"}>
-            Mật khẩu
-          </Label>
-          <div className="relative">
-            <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              id={isLogin ? "login-password" : "register-password"}
-              type={showPassword ? "text" : "password"}
-              value={isLogin ? loginForm.password : registerForm.password}
-              onChange={(event) =>
-                isLogin
-                  ? updateLogin("password", event.target.value)
-                  : updateRegister("password", event.target.value)
-              }
-              className="h-11 pl-9 pr-10"
-              placeholder={isLogin ? "Nhập mật khẩu" : "Tối thiểu 6 ký tự"}
-              autoComplete={isLogin ? "current-password" : "new-password"}
-              minLength={isLogin ? undefined : 6}
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((current) => !current)}
-              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-[8px] text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700"
-              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-            >
-              {showPassword ? (
-                <EyeOff className="size-4" />
-              ) : (
-                <Eye className="size-4" />
-              )}
-            </button>
-          </div>
-        </div>
+          {!isLogin && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="register-phone">Số điện thoại</Label>
+                <div className="relative">
+                  <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    id="register-phone"
+                    type="tel"
+                    value={registerForm.phoneNumber}
+                    onChange={(event) =>
+                      updateRegister("phoneNumber", event.target.value)
+                    }
+                    className={`h-11 pl-9 ${phoneError ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
+                    placeholder="090xxxxxxxx"
+                    maxLength="10"
+                    required
+                  />
+                </div>
+                {phoneError && (
+                  <p className="text-sm font-medium text-red-600">{phoneError}</p>
+                )}
+              </div>
 
-        {!isLogin && (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="register-phone">Số điện thoại</Label>
-              <div className="relative">
-                <Phone className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  id="register-phone"
-                  type="tel"
-                  value={registerForm.phoneNumber}
-                  onChange={(event) =>
-                    updateRegister("phoneNumber", event.target.value)
-                  }
-                  className={`h-11 pl-9 ${phoneError ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
-                  placeholder="090xxxxxxxx"
-                  maxLength="10"
-                  required
+              <div className="border-t border-emerald-100/50 pt-4 mt-2">
+                <Label className="mb-3 block text-sm font-black text-emerald-800">Địa chỉ giao hàng mặc định (Việt Nam)</Label>
+                <VietnamAddressFields
+                  value={registerAddress}
+                  onChange={setRegisterAddress}
+                  idPrefix="register-address"
+                  className="bg-emerald-50/20 p-3 rounded-lg border border-emerald-100/50"
                 />
               </div>
-              {phoneError && (
-                <p className="text-sm font-medium text-red-600">{phoneError}</p>
-              )}
-            </div>
+            </>
+          )}
 
-            <div className="border-t border-emerald-100/50 pt-4 mt-2">
-              <Label className="mb-3 block text-sm font-black text-emerald-800">Địa chỉ giao hàng mặc định (Việt Nam)</Label>
-              <VietnamAddressFields
-                value={registerAddress}
-                onChange={setRegisterAddress}
-                idPrefix="register-address"
-                className="bg-emerald-50/20 p-3 rounded-lg border border-emerald-100/50"
+          {isLogin && (
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(event) => setRemember(event.target.checked)}
+                className="size-4 rounded border-emerald-200 text-emerald-600 focus:ring-emerald-500"
               />
+              Ghi nhớ đăng nhập trên thiết bị này
+            </label>
+          )}
+
+          {error && (
+            <div className="rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+              {error}
             </div>
-          </>
-        )}
+          )}
 
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(event) => setRemember(event.target.checked)}
-            className="size-4 rounded border-emerald-200 text-emerald-600 focus:ring-emerald-500"
-          />
-          Ghi nhớ đăng nhập trên thiết bị này
-        </label>
+          {notice && (
+            <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+              {notice}
+            </div>
+          )}
 
-        {error && (
-          <div className="rounded-[8px] border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-            {error}
-          </div>
-        )}
-
-        {notice && (
-          <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-            {notice}
-          </div>
-        )}
-
-        <Button
-          type="submit"
-          className="h-11 w-full bg-emerald-600 font-bold hover:bg-emerald-700"
-          disabled={loading}
-        >
-          {loading
-            ? "Đang xử lý..."
-            : isLogin
+          <Button
+            type="submit"
+            className="h-11 w-full bg-emerald-600 font-bold hover:bg-emerald-700"
+            disabled={loading}
+          >
+            {loading
+              ? "Đang xử lý..."
+              : isLogin
               ? "Đăng nhập"
               : "Đăng ký tài khoản"}
-          {!loading && <CheckCircle2 className="size-4" />}
-        </Button>
-      </form>
+            {!loading && <CheckCircle2 className="size-4" />}
+          </Button>
+        </form>
+      )}
     </section>
   );
 }

@@ -22,6 +22,12 @@ public class CouponEntity {
     @Column(name = "product_id")
     private Long productId;
 
+    @Column(name = "required_membership_tier", length = 20)
+    private String requiredMembershipTier;
+
+    @Column(name = "guest_allowed", nullable = false)
+    private Boolean guestAllowed;
+
     @Column(nullable = false, unique = true, length = 255)
     private String code;
 
@@ -85,6 +91,10 @@ public class CouponEntity {
 
         if (this.active == null) {
             this.active = true;
+        }
+
+        if (this.guestAllowed == null) {
+            this.guestAllowed = true;
         }
     }
 

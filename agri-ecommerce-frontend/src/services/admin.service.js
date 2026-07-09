@@ -27,6 +27,18 @@ export const adminService = {
     return unwrapApiData(response);
   },
 
+  getDashboardSummary: async () => {
+    const response = await axiosClient.get("/admin/dashboard/summary");
+    return unwrapApiData(response);
+  },
+
+  getLowStockProducts: async (params = {}) => {
+    const response = await axiosClient.get("/admin/dashboard/low-stock-products", {
+      params,
+    });
+    return unwrapApiData(response);
+  },
+
   getCategories: async () => {
     const response = await axiosClient.get("/admin/categories");
     return unwrapApiData(response);

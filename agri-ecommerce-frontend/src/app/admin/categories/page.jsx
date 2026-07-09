@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   FolderTree,
+  Globe2,
   ImageIcon,
   ImagePlus,
   Layers,
@@ -38,6 +39,7 @@ import {
 import { useLanguage } from "@/i18n/language-provider";
 import { localizeCategory } from "@/i18n/localized-fields";
 import { adminService } from "@/services/admin.service";
+import { marketplaceService } from "@/services/marketplace.service";
 
 const blankCategoryForm = {
   name: "",
@@ -58,10 +60,12 @@ function buildCategoryPayload(form) {
 export default function AdminCategoriesPage() {
   const { locale } = useLanguage();
   const [categories, setCategories] = useState([]);
+  const [publicCategories, setPublicCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [error, setError] = useState("");
+  const [publicCategoryError, setPublicCategoryError] = useState("");
   const [notice, setNotice] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -75,22 +79,34 @@ export default function AdminCategoriesPage() {
     async function loadCategories() {
       setLoading(true);
       setError("");
+      setPublicCategoryError("");
 
-      try {
-        const response = await adminService.getCategories();
+      const [adminResult, publicResult] = await Promise.allSettled([
+        adminService.getCategories(),
+        marketplaceService.getCategories(),
+      ]);
 
-        if (mounted) {
-          setCategories(Array.isArray(response) ? response : []);
-        }
-      } catch (err) {
-        if (mounted) {
-          setError(getApiErrorMessage(err));
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+      if (!mounted) {
+        return;
       }
+
+      if (adminResult.status === "fulfilled") {
+        setCategories(Array.isArray(adminResult.value) ? adminResult.value : []);
+      } else {
+        setCategories([]);
+        setError(getApiErrorMessage(adminResult.reason));
+      }
+
+      if (publicResult.status === "fulfilled") {
+        setPublicCategories(
+          Array.isArray(publicResult.value) ? publicResult.value : []
+        );
+      } else {
+        setPublicCategories([]);
+        setPublicCategoryError(getApiErrorMessage(publicResult.reason));
+      }
+
+      setLoading(false);
     }
 
     loadCategories();
@@ -114,12 +130,43 @@ export default function AdminCategoriesPage() {
     });
   }, [categories, searchTerm]);
 
+  const publicCategoryKeys = useMemo(() => {
+    const keys = new Set();
+
+    publicCategories.forEach((category) => {
+      if (category.id !== undefined && category.id !== null) {
+        keys.add(`id:${category.id}`);
+      }
+
+      if (category.slug) {
+        keys.add(`slug:${category.slug}`);
+      }
+    });
+
+    return keys;
+  }, [publicCategories]);
+
   const categoryStats = useMemo(() => {
     const withImage = categories.filter((category) => category.image).length;
     const withoutImage = categories.length - withImage;
+    const notOnWeb =
+      publicCategoryError || publicCategories.length === 0
+        ? 0
+        : categories.filter(
+            (category) =>
+              !publicCategoryKeys.has(`id:${category.id}`) &&
+              !publicCategoryKeys.has(`slug:${category.slug}`)
+          ).length;
 
-    return { withImage, withoutImage };
-  }, [categories]);
+    return { withImage, withoutImage, notOnWeb };
+  }, [categories, publicCategories.length, publicCategoryError, publicCategoryKeys]);
+
+  function isCategoryOnWeb(category) {
+    return (
+      publicCategoryKeys.has(`id:${category.id}`) ||
+      publicCategoryKeys.has(`slug:${category.slug}`)
+    );
+  }
 
   function updateForm(field, value) {
     setForm((current) => ({
@@ -154,16 +201,31 @@ export default function AdminCategoriesPage() {
   async function refreshCategories() {
     setLoading(true);
     setError("");
+    setPublicCategoryError("");
     setNotice("");
 
-    try {
-      const response = await adminService.getCategories();
-      setCategories(Array.isArray(response) ? response : []);
-    } catch (err) {
-      setError(getApiErrorMessage(err));
-    } finally {
-      setLoading(false);
+    const [adminResult, publicResult] = await Promise.allSettled([
+      adminService.getCategories(),
+      marketplaceService.getCategories(),
+    ]);
+
+    if (adminResult.status === "fulfilled") {
+      setCategories(Array.isArray(adminResult.value) ? adminResult.value : []);
+    } else {
+      setCategories([]);
+      setError(getApiErrorMessage(adminResult.reason));
     }
+
+    if (publicResult.status === "fulfilled") {
+      setPublicCategories(
+        Array.isArray(publicResult.value) ? publicResult.value : []
+      );
+    } else {
+      setPublicCategories([]);
+      setPublicCategoryError(getApiErrorMessage(publicResult.reason));
+    }
+
+    setLoading(false);
   }
 
   function openCreateDialog() {
@@ -206,6 +268,15 @@ export default function AdminCategoriesPage() {
 
         return [savedCategory, ...current];
       });
+      setPublicCategories((current) => {
+        if (editingCategory) {
+          return current.map((category) =>
+            category.id === savedCategory.id ? savedCategory : category
+          );
+        }
+
+        return [savedCategory, ...current];
+      });
       setDialogOpen(false);
       setNotice(
         editingCategory
@@ -237,6 +308,9 @@ export default function AdminCategoriesPage() {
       setCategories((current) =>
         current.filter((item) => item.id !== category.id)
       );
+      setPublicCategories((current) =>
+        current.filter((item) => item.id !== category.id)
+      );
       setNotice(`Đã xóa danh mục "${category.name}".`);
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -259,7 +333,7 @@ export default function AdminCategoriesPage() {
         </Button>
       </AdminPageHeader>
 
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Tổng danh mục"
           value={categories.length}
@@ -275,9 +349,18 @@ export default function AdminCategoriesPage() {
           tone="blue"
         />
         <StatCard
-          title="Chưa có ảnh"
-          value={categoryStats.withoutImage}
-          description="Có thể bổ sung trong form"
+          title="Đang hiện trên web"
+          value={publicCategoryError ? "!" : publicCategories.length}
+          description={
+            publicCategoryError ? "Chưa đối soát được" : "Đọc từ public API"
+          }
+          icon={Globe2}
+          tone="green"
+        />
+        <StatCard
+          title="Lệch với web"
+          value={categoryStats.notOnWeb}
+          description="Có trong admin nhưng chưa thấy ở public"
           icon={Layers}
           tone="amber"
         />
@@ -317,6 +400,12 @@ export default function AdminCategoriesPage() {
         </div>
       )}
 
+      {!error && publicCategoryError && (
+        <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          Chưa đối soát được danh mục với public API: {publicCategoryError}
+        </div>
+      )}
+
       <DataTable
         columns={["Danh mục", "Slug", "Mô tả", "Nguồn", "Thao tác"]}
         data={filteredCategories}
@@ -325,6 +414,8 @@ export default function AdminCategoriesPage() {
         emptyText="Không tìm thấy danh mục"
         renderRow={(category) => {
           const displayCategory = localizeCategory(category, locale) || category;
+          const categoryOnWeb =
+            !publicCategoryError && isCategoryOnWeb(category);
 
           return (
           <TableRow key={category.id}>
@@ -357,8 +448,18 @@ export default function AdminCategoriesPage() {
               {displayCategory.description || "Chưa có mô tả"}
             </TableCell>
             <TableCell className="px-4">
-              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
-                API
+              <span
+                className={`rounded-md px-2 py-1 text-xs font-bold ${
+                  categoryOnWeb
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-amber-50 text-amber-700"
+                }`}
+              >
+                {categoryOnWeb
+                  ? "Trên web"
+                  : publicCategoryError
+                    ? "Chưa đối soát"
+                    : "Chưa thấy trên web"}
               </span>
             </TableCell>
             <TableCell className="px-4">

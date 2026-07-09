@@ -19,6 +19,14 @@ import {
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   formatCurrency,
   formatNumber,
   getApiErrorMessage,
@@ -97,6 +105,7 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState("");
   const [clearing, setClearing] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -189,7 +198,7 @@ export default function CartPage() {
 
     if (stock > 0 && nextQuantity > stock) {
       setNotice("");
-      setError("Số lượng đã đạt tồn kho hiện tại.");
+      setError(`Xin lỗi bạn, sản phẩm này chỉ còn ${stock} cái thôi!`);
       return;
     }
 
@@ -236,17 +245,15 @@ export default function CartPage() {
     }
   }
 
-  async function clearCart() {
+  function clearCart() {
     if (cartItems.length === 0) {
       return;
     }
+    setIsConfirmOpen(true);
+  }
 
-    const confirmed = window.confirm("Xóa toàn bộ sản phẩm trong giỏ hàng?");
-
-    if (!confirmed) {
-      return;
-    }
-
+  async function executeClearCart() {
+    setIsConfirmOpen(false);
     setClearing(true);
     setNotice("");
     setError("");
@@ -310,9 +317,9 @@ export default function CartPage() {
       <div className="mx-auto w-full max-w-[1480px] space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         <AdminPageHeader
           title="Giỏ hàng"
-          description="Kiểm tra sản phẩm, số lượng và tổng tiền trước khi chuyển sang checkout."
+          description="Xem lại những gì bạn đã chọn — chỉnh sửa thoải mái trước khi đặt hàng nhé!"
           image="/market-assets/fresh-market-hero.png"
-          badges={["Customer API", "Review order", "Cart"]}
+          badges={["Giỏ hàng", "Nông sản sạch"]}
         >
           <Button
             type="button"
@@ -442,9 +449,9 @@ export default function CartPage() {
                               {formatCurrency(item.productPrice)} /{" "}
                               {item.unit || "sản phẩm"}
                             </p>
-                            <p className="mt-1 text-xs font-bold text-emerald-700">
-                              Tồn kho: {formatNumber(stock)}
-                            </p>
+                             <p className="mt-1 text-xs font-bold text-emerald-700">
+                               Còn lại: {formatNumber(stock)} sản phẩm
+                             </p>
 
                             <div className="mt-4 flex h-10 w-fit items-center rounded-[8px] border border-emerald-100 bg-white">
                               <button
@@ -526,7 +533,7 @@ export default function CartPage() {
                 </div>
                 {stockWarnings > 0 && (
                   <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
-                    {stockWarnings} sản phẩm đang ở mức tồn kho tối đa đã chọn.
+                    {stockWarnings} sản phẩm đã đạt số lượng tối đa có thể mua.
                   </div>
                 )}
                 <div className="flex justify-between border-t border-emerald-100 pt-4 text-base font-black text-slate-950">
@@ -554,6 +561,37 @@ export default function CartPage() {
           </div>
         )}
       </div>
+
+      {/* Dialog xác nhận xóa toàn bộ giỏ hàng */}
+      <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+        <DialogContent className="sm:max-w-[420px] p-6 bg-white rounded-[8px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-slate-900 flex items-center gap-2">
+              <Trash2 className="size-5 text-rose-650" />
+              Xác nhận xóa giỏ hàng?
+            </DialogTitle>
+            <DialogDescription className="text-sm font-semibold text-slate-500 mt-2">
+              Tất cả các sản phẩm nông sản bạn đã chọn sẽ bị xóa khỏi giỏ hàng. Bạn có chắc chắn muốn thực hiện hành động này?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsConfirmOpen(false)}
+              className="h-10 px-4 rounded-[8px] border border-slate-200 bg-white hover:bg-slate-50 text-sm font-bold text-slate-655 transition"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={executeClearCart}
+              className="h-10 px-5 rounded-[8px] bg-rose-600 hover:bg-rose-700 text-sm font-bold text-white transition flex items-center gap-1.5"
+            >
+              Xác nhận xóa
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   BadgePercent,
@@ -12,6 +13,7 @@ import {
   Leaf,
   Loader2,
   MapPin,
+  Minus,
   PackageCheck,
   Plus,
   RefreshCw,
@@ -20,6 +22,7 @@ import {
   ShoppingBasket,
   Tag,
   TicketPercent,
+  Trash2,
   X,
   Coins,
   Truck,
@@ -54,6 +57,8 @@ import {
   mapGuestCartItemsToCartResponse,
   readGuestCart,
   toGuestCheckoutItems,
+  updateGuestCartItem,
+  removeGuestCartItem,
 } from "@/lib/guest-cart-storage";
 import {
   PHONE_PATTERN_SOURCE,
@@ -267,7 +272,7 @@ function checkCouponTierAllowed(couponCode = "", userTier = "BRONZE") {
 }
 
 /* ─── Coupon Autocomplete widget ──────────────────────────────────────────── */
-function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, cartItems = [] }) {
+function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, cartItems = [], isGuest }) {
   const [isOpen, setIsOpen] = useState(false);
   const [allCoupons, setAllCoupons] = useState([]);
   const [selectedCoupons, setSelectedCoupons] = useState([]);
@@ -281,7 +286,7 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
     promotionService
       .getPublicCoupons({ size: 50 })
       .then((page) => setAllCoupons(page?.content ?? []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Khi mở dialog, clone appliedCoupons sang selectedCoupons
@@ -324,8 +329,14 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
 
   // Kiểm tra trạng thái hợp lệ và lý do vô hiệu hóa của coupon
   function getCouponStatusInfo(coupon) {
+    // 0. Kiểm tra quyền của khách vãng lai
+    if (isGuest) {
+      if (coupon.guestAllowed === false || coupon.requiredMembershipTier || ["SILVER10", "GOLD25", "PLATINUM50", "PLATINUM10", "GOLD5", "BRONZE5"].includes(coupon.code)) {
+        return { disabled: true, reason: "Đăng nhập tài khoản để sử dụng mã này" };
+      }
+    }
     // 1. Kiểm tra hạng thành viên
-    if (!checkCouponTierAllowed(coupon.code, membershipTier)) {
+    if (!isGuest && !checkCouponTierAllowed(coupon.code, membershipTier)) {
       const required = coupon.code.startsWith("SILVER") ? "Bạc" : coupon.code.startsWith("GOLD") ? "Vàng" : "Kim Cương";
       return { disabled: true, reason: `Yêu cầu hạng: ${required} trở lên` };
     }
@@ -335,13 +346,43 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
     }
     // 3. Kiểm tra sản phẩm trong giỏ hàng (với PRODUCT_DISCOUNT)
     if (coupon.couponType === "PRODUCT_DISCOUNT" && coupon.productId != null) {
-      const hasProduct = cartItems.some(item => Number(item.product?.id) === Number(coupon.productId));
+      const hasProduct = cartItems.some(item => Number(item.product?.id) === Number(coupon.productId) || Number(item.productId) === Number(coupon.productId));
       if (!hasProduct) {
         return { disabled: true, reason: "Giỏ hàng không chứa sản phẩm áp dụng mã" };
       }
     }
     return { disabled: false, reason: null };
   }
+
+  // Sắp xếp các coupon theo độ ưu tiên: đủ điều kiện lên trước, không đủ điều kiện xuống sau.
+  // Trong các mã đủ điều kiện, sắp xếp theo số tiền giảm được ước tính từ cao xuống thấp.
+  function getSortWeight(coupon) {
+    const status = getCouponStatusInfo(coupon);
+    if (status.disabled) {
+      return -1000000;
+    }
+    if (coupon.couponType === "FREESHIP" || isFreeshipCoupon(coupon)) {
+      if (coupon.code === "SHIPFREE") {
+        return 30000;
+      }
+      return Number(coupon.discountAmount || 20000);
+    }
+    return getEstimatedDiscountAmount(coupon, subtotal);
+  }
+
+  const sortedFreeshipCoupons = useMemo(() => {
+    return [...freeshipCoupons].sort((a, b) => getSortWeight(b) - getSortWeight(a));
+  }, [freeshipCoupons, subtotal, membershipTier, isGuest, cartItems]);
+
+  const sortedOrderCoupons = useMemo(() => {
+    return [...orderCoupons].sort((a, b) => getSortWeight(b) - getSortWeight(a));
+  }, [orderCoupons, subtotal, membershipTier, isGuest, cartItems]);
+
+  const sortedProductCoupons = useMemo(() => {
+    return [...productCoupons].sort((a, b) => getSortWeight(b) - getSortWeight(a));
+  }, [productCoupons, subtotal, membershipTier, isGuest, cartItems]);
+
+
 
   // Toggle tick chọn coupon
   function handleToggleCoupon(coupon) {
@@ -523,11 +564,11 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
           {/* Voucher list wrapper */}
           <div className="max-h-[350px] overflow-y-auto p-5 space-y-5">
             {/* Freeship Section */}
-            {freeshipCoupons.length > 0 && (
+            {sortedFreeshipCoupons.length > 0 && (
               <div className="space-y-2">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã vận chuyển (Chọn tối đa 1)</p>
                 <div className="grid gap-2.5">
-                  {freeshipCoupons.map((coupon) => {
+                  {sortedFreeshipCoupons.map((coupon) => {
                     const status = getCouponStatusInfo(coupon);
                     const isSelected = selectedCoupons.some(c => c.id === coupon.id);
                     return (
@@ -549,11 +590,11 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
             )}
 
             {/* Order discount Section */}
-            {orderCoupons.length > 0 && (
+            {sortedOrderCoupons.length > 0 && (
               <div className="space-y-2">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã đơn hàng & VIP (Chọn tối đa 1)</p>
                 <div className="grid gap-2.5">
-                  {orderCoupons.map((coupon) => {
+                  {sortedOrderCoupons.map((coupon) => {
                     const status = getCouponStatusInfo(coupon);
                     const isSelected = selectedCoupons.some(c => c.id === coupon.id);
                     return (
@@ -575,11 +616,11 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
             )}
 
             {/* Product discount Section */}
-            {productCoupons.length > 0 && (
+            {sortedProductCoupons.length > 0 && (
               <div className="space-y-2">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã sản phẩm (Chọn chồng nhiều mã khác sản phẩm)</p>
                 <div className="grid gap-2.5">
-                  {productCoupons.map((coupon) => {
+                  {sortedProductCoupons.map((coupon) => {
                     const status = getCouponStatusInfo(coupon);
                     const isSelected = selectedCoupons.some(c => c.id === coupon.id);
                     return (
@@ -644,19 +685,33 @@ function CouponCard({ coupon, isSelected, disabled, disabledReason, onToggle, ic
   return (
     <div
       onClick={() => !disabled && onToggle()}
-      className={`relative flex rounded-[12px] border bg-white overflow-hidden min-h-[90px] shadow-sm select-none transition-all duration-200 ${
-        disabled
+      className={`relative flex rounded-[12px] border bg-white overflow-hidden min-h-[90px] shadow-sm select-none transition-all duration-200 ${disabled
           ? "opacity-50 cursor-not-allowed border-slate-100 bg-slate-50"
           : isSelected
-          ? "border-emerald-500 ring-2 ring-emerald-500/10 cursor-pointer"
-          : "border-slate-100 hover:border-slate-200 cursor-pointer"
-      }`}
+            ? "border-emerald-500 ring-2 ring-emerald-500/10 cursor-pointer"
+            : "border-slate-100 hover:border-slate-200 cursor-pointer"
+        }`}
     >
       {/* Left side ticket style */}
-      <div className={`w-20 shrink-0 flex flex-col items-center justify-center text-white ${disabled ? "bg-slate-400" : themeColor} px-2`}>
-        {icon}
-        <span className="text-[10px] font-black tracking-widest mt-1 uppercase">{coupon.couponType === "FREESHIP" ? "Ship" : "Save"}</span>
-      </div>
+      {(() => {
+        const isFreeship = isFreeshipCoupon(coupon);
+        const isFixed = coupon?.discountType === "FIXED_AMOUNT";
+        let leftBadge = "";
+        if (isFreeship) {
+          leftBadge = "Miễn phí";
+        } else if (isFixed) {
+          const amt = Number(coupon.discountAmount || 0);
+          leftBadge = amt >= 1000 ? `-${amt / 1000}k` : `-${amt}đ`;
+        } else {
+          leftBadge = `-${coupon.discountPercentage || 0}%`;
+        }
+        return (
+          <div className={`w-20 shrink-0 flex flex-col items-center justify-center text-white ${disabled ? "bg-slate-400" : themeColor} px-1`}>
+            {icon}
+            <span className="text-[11px] font-black tracking-normal mt-1 uppercase text-center">{leftBadge}</span>
+          </div>
+        );
+      })()}
 
       {/* Ticket circle hole effect */}
       <div className="absolute left-[76px] top-1/2 -translate-y-1/2 flex flex-col justify-between h-5 w-2 z-10">
@@ -673,7 +728,7 @@ function CouponCard({ coupon, isSelected, disabled, disabledReason, onToggle, ic
               type="checkbox"
               checked={isSelected}
               disabled={disabled}
-              onChange={() => {}} // Div handle click
+              onChange={() => { }} // Div handle click
               className="size-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
           </div>
@@ -940,15 +995,65 @@ export default function CheckoutPage() {
         if (!cancelled) {
           setAuthStatus("guest");
           setCart(mapGuestCartItemsToCartResponse(readGuestCart()));
-          setAddresses([]);
-          setSelectedAddressId("");
           setPaymentMethod("cash");
           setAppliedCoupons([]);
           setUsePoints(false);
           setLoyaltyPoints(0);
           setMembershipTier("GUEST");
-          setShowAddressForm(true);
-          setAddressForm(createBlankAddressForm());
+
+          // Recover guest profile from localStorage
+          let guestAddr = null;
+          let profileObj = null;
+          try {
+            const rawProfile = window.localStorage.getItem("agri-market:guest-profile");
+            if (rawProfile) {
+              profileObj = JSON.parse(rawProfile);
+              if (profileObj && profileObj.fullName && profileObj.phone) {
+                guestAddr = {
+                  id: "guest-addr",
+                  fullName: profileObj.fullName,
+                  phone: profileObj.phone,
+                  address: profileObj.detailedAddress,
+                  city: profileObj.provinceName || profileObj.city,
+                  defaultAddress: true,
+                  provinceCode: profileObj.provinceCode,
+                  provinceName: profileObj.provinceName,
+                  districtCode: profileObj.districtCode,
+                  districtName: profileObj.districtName,
+                  wardCode: profileObj.wardCode,
+                  wardName: profileObj.wardName,
+                };
+              }
+            }
+          } catch (e) {
+            console.error("Failed to parse guest profile", e);
+          }
+
+          if (guestAddr) {
+            setAddresses([guestAddr]);
+            setSelectedAddressId("guest-addr");
+            setGuestEmail(profileObj?.email || "");
+            const restoredForm = {
+              fullName: profileObj.fullName || "",
+              phone: profileObj.phone || "",
+              provinceCode: profileObj.provinceCode || "",
+              provinceName: profileObj.provinceName || "",
+              districtCode: profileObj.districtCode || "",
+              districtName: profileObj.districtName || "",
+              wardCode: profileObj.wardCode || "",
+              wardName: profileObj.wardName || "",
+              address: profileObj.detailedAddress ? profileObj.detailedAddress.split(",")[0].trim() : "",
+              defaultAddress: true,
+            };
+            setAddressForm(restoredForm);
+            setShowAddressForm(false);
+          } else {
+            setAddresses([]);
+            setSelectedAddressId("");
+            setShowAddressForm(true);
+            setAddressForm(createBlankAddressForm());
+          }
+
           setPreview(null);
           setLoading(false);
         }
@@ -1004,26 +1109,41 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    if (
-      authStatus !== "authenticated" ||
-      loading ||
-      !checkoutPayload.shippingAddressId ||
-      cartItems.length === 0
-    ) {
+    if (loading || cartItems.length === 0) {
+      return undefined;
+    }
+
+    let canPreview = false;
+    if (isGuestCheckout) {
+      canPreview = Boolean(
+        checkoutPayload.guestFullName &&
+        checkoutPayload.guestPhone &&
+        checkoutPayload.guestCity &&
+        checkoutPayload.guestAddress &&
+        addressForm.districtCode &&
+        addressForm.wardCode
+      );
+    } else {
+      canPreview = Boolean(checkoutPayload.shippingAddressId);
+    }
+
+    if (!canPreview) {
+      setPreview(null);
       return undefined;
     }
 
     const timeoutId = window.setTimeout(() => {
-      requestCheckoutPreview({ showErrors: true });
+      requestCheckoutPreview({ showErrors: false });
     }, 120);
 
     return () => window.clearTimeout(timeoutId);
   }, [
-    addressBookVersion,
-    authStatus,
-    cartItems.length,
     checkoutPayload,
+    isGuestCheckout,
     loading,
+    cartItems.length,
+    addressForm.districtCode,
+    addressForm.wardCode,
     requestCheckoutPreview,
   ]);
 
@@ -1092,14 +1212,121 @@ export default function CheckoutPage() {
   function closeAddressForm() {
     if (addresses.length === 0) return;
     setPhoneError("");
-    setAddressForm(createBlankAddressForm(false));
+    if (!isGuestCheckout) {
+      setAddressForm(createBlankAddressForm(false));
+    }
     setShowAddressForm(false);
+  }
+
+  async function handleUpdateQuantity(item, newQty) {
+    if (newQty <= 0) {
+      await handleRemoveItem(item);
+      return;
+    }
+
+    if (newQty > item.stock) {
+      toast.error(`Chỉ còn ${item.stock} sản phẩm trong kho.`);
+      return;
+    }
+
+    setPreview(null);
+
+    if (isGuestCheckout) {
+      const nextItems = updateGuestCartItem(item.productId, newQty);
+      setCart(mapGuestCartItemsToCartResponse(nextItems));
+      window.dispatchEvent(new Event("storage"));
+    } else {
+      try {
+        const nextCart = await cartService.updateItem(item.id, { quantity: newQty });
+        setCart(nextCart);
+        window.dispatchEvent(new Event("storage"));
+      } catch (err) {
+        setError(getErrorMessage(err, "Không thể cập nhật số lượng sản phẩm."));
+      }
+    }
+  }
+
+  async function handleRemoveItem(item) {
+    setPreview(null);
+
+    if (isGuestCheckout) {
+      const nextItems = removeGuestCartItem(item.productId);
+      setCart(mapGuestCartItemsToCartResponse(nextItems));
+      window.dispatchEvent(new Event("storage"));
+    } else {
+      try {
+        const nextCart = await cartService.removeItem(item.id);
+        setCart(nextCart);
+        window.dispatchEvent(new Event("storage"));
+      } catch (err) {
+        setError(getErrorMessage(err, "Không thể xóa sản phẩm khỏi giỏ hàng."));
+      }
+    }
   }
 
   async function handleSaveAddress(event) {
     event.preventDefault();
     if (isGuestCheckout) {
-      await requestCheckoutPreview({ showErrors: true, clearMessages: true });
+      if (!validateAddress()) return;
+
+      const payload = {
+        fullName: addressForm.fullName.trim(),
+        phone: addressForm.phone.trim(),
+        city: addressForm.provinceName.trim(),
+        address: buildDetailedAddress(addressForm),
+        defaultAddress: true,
+      };
+
+      if (
+        !payload.fullName ||
+        !payload.phone ||
+        !payload.city ||
+        !addressForm.districtCode ||
+        !addressForm.wardCode ||
+        !addressForm.address.trim()
+      ) {
+        setError("Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng.");
+        return;
+      }
+
+      const guestAddr = {
+        id: "guest-addr",
+        fullName: payload.fullName,
+        phone: payload.phone,
+        address: payload.address,
+        city: payload.city,
+        defaultAddress: true,
+        provinceCode: addressForm.provinceCode,
+        provinceName: addressForm.provinceName,
+        districtCode: addressForm.districtCode,
+        districtName: addressForm.districtName,
+        wardCode: addressForm.wardCode,
+        wardName: addressForm.wardName,
+      };
+
+      const profileToSave = {
+        fullName: payload.fullName,
+        phone: payload.phone,
+        email: guestEmail.trim(),
+        detailedAddress: payload.address,
+        provinceName: addressForm.provinceName,
+        provinceCode: addressForm.provinceCode,
+        districtCode: addressForm.districtCode,
+        districtName: addressForm.districtName,
+        wardCode: addressForm.wardCode,
+        wardName: addressForm.wardName,
+      };
+
+      try {
+        window.localStorage.setItem("agri-market:guest-profile", JSON.stringify(profileToSave));
+        setAddresses([guestAddr]);
+        setSelectedAddressId("guest-addr");
+        setShowAddressForm(false);
+        setNotice("Đã lưu thông tin nhận hàng.");
+        setPreview(null);
+      } catch (err) {
+        setError("Không thể lưu thông tin nhận hàng.");
+      }
       return;
     }
 
@@ -1499,8 +1726,8 @@ export default function CheckoutPage() {
               <div className="flex justify-between">
                 <span className="text-slate-400">Phương thức thanh toán:</span>
                 <span className="font-bold text-slate-900">
-                  {paymentMethod === "vnpay" ? "VNPay Sandbox" : 
-                   paymentMethod === "paypal" ? "PayPal" : "Thanh toán khi nhận hàng (COD)"}
+                  {paymentMethod === "vnpay" ? "VNPay Sandbox" :
+                    paymentMethod === "paypal" ? "PayPal" : "Thanh toán khi nhận hàng (COD)"}
                 </span>
               </div>
               {createdOrder.totalPrice != null && (
@@ -1614,13 +1841,35 @@ export default function CheckoutPage() {
                             Tồn kho: {formatNumber(item.stock)}
                           </p>
                         </div>
-                        <div className="text-left sm:text-right">
-                          <p className="text-sm font-semibold text-slate-500">
-                            SL: {item.quantity}
+                        <div className="flex flex-col items-end justify-between min-h-[80px]">
+                          <p className="font-black text-emerald-700">
+                            {formatCurrency(item.lineTotal || (item.productPrice * item.quantity))}
                           </p>
-                          <p className="mt-1 font-black text-emerald-700">
-                            {formatCurrency(item.lineTotal)}
-                          </p>
+                          <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuantity(item, item.quantity - 1)}
+                              className="flex size-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-850"
+                              title={item.quantity === 1 ? "Xóa" : "Giảm"}
+                            >
+                              {item.quantity === 1 ? (
+                                <Trash2 className="size-3" />
+                              ) : (
+                                <Minus className="size-3" />
+                              )}
+                            </button>
+                            <span className="w-6 text-center text-xs font-bold text-slate-800">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuantity(item, item.quantity + 1)}
+                              className="flex size-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-850"
+                              title="Tăng"
+                            >
+                              <Plus className="size-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1651,8 +1900,8 @@ export default function CheckoutPage() {
                         <label
                           key={address.id}
                           className={`cursor-pointer rounded-[8px] border p-4 transition ${active
-                              ? "border-emerald-500 bg-emerald-50"
-                              : "border-emerald-100 bg-white hover:border-emerald-200"
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-emerald-100 bg-white hover:border-emerald-200"
                             }`}
                         >
                           <input
@@ -1683,7 +1932,11 @@ export default function CheckoutPage() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  openEditDialog(address);
+                                  if (isGuestCheckout) {
+                                    setShowAddressForm(true);
+                                  } else {
+                                    openEditDialog(address);
+                                  }
                                 }}
                                 className="inline-flex items-center justify-center rounded-[6px] p-1.5 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition"
                                 title="Chỉnh sửa"
@@ -1702,30 +1955,32 @@ export default function CheckoutPage() {
                                   />
                                 </svg>
                               </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  openDeleteConfirm(address.id);
-                                }}
-                                className="inline-flex items-center justify-center rounded-[6px] p-1.5 text-slate-600 hover:bg-red-50 hover:text-red-700 transition"
-                                title="Xóa"
-                              >
-                                <svg
-                                  className="size-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
+                              {!isGuestCheckout && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openDeleteConfirm(address.id);
+                                  }}
+                                  className="inline-flex items-center justify-center rounded-[6px] p-1.5 text-slate-600 hover:bg-red-50 hover:text-red-700 transition"
+                                  title="Xóa"
                                 >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
+                                  <svg
+                                    className="size-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                           <p className="mt-2 text-sm font-semibold text-slate-600">
@@ -1821,7 +2076,7 @@ export default function CheckoutPage() {
                       </div>
                       {isGuestCheckout && (
                         <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="guest-email">Email nhan hoa don (khong bat buoc)</Label>
+                          <Label htmlFor="guest-email">Email nhận hóa đơn(Không bắt buộc)</Label>
                           <Input
                             id="guest-email"
                             type="email"
@@ -1830,10 +2085,10 @@ export default function CheckoutPage() {
                               setGuestEmail(e.target.value);
                               setPreview(null);
                             }}
-                            placeholder="bo trong neu khong dung email"
+                            placeholder="Bỏ trống nếu không dùng email"
                           />
                           <p className="text-xs font-semibold text-slate-500">
-                            Khach vang lai van dat duoc hang neu khong nhap email.
+                            Hệ thống sẽ gửi hóa đơn điện tử về email này (không bắt buộc).
                           </p>
                         </div>
                       )}
@@ -1974,6 +2229,7 @@ export default function CheckoutPage() {
                     subtotal={summary.subtotal}
                     membershipTier={membershipTier}
                     cartItems={cartItems}
+                    isGuest={isGuestCheckout}
                     onApply={(nextCoupons) => {
                       setAppliedCoupons(nextCoupons);
                       setPreview(null); // reset preview so totals recalculate
@@ -2074,13 +2330,11 @@ export default function CheckoutPage() {
                       <div className="flex justify-between border-t border-emerald-100 pt-3 text-base font-black text-slate-950">
                         <span>Tổng thanh toán</span>
                         <span
-                          className={`transition-all ${
-                            previewing || isAddressSyncing ? "opacity-60" : ""
-                          } ${
-                            hasServerDiscount || hasServerFreeShipping
+                          className={`transition-all ${previewing || isAddressSyncing ? "opacity-60" : ""
+                            } ${hasServerDiscount || hasServerFreeShipping
                               ? "text-emerald-700"
                               : ""
-                          }`}
+                            }`}
                         >
                           {totalAmountLabel}
                         </span>
@@ -2169,9 +2423,7 @@ export default function CheckoutPage() {
                   </div>
 
                   <p className="text-xs leading-5 text-slate-500">
-                    Với VNPay, đơn hàng sẽ được tạo trước rồi chuyển sang cổng
-                    thanh toán; hệ thống chỉ cập nhật đã thanh toán sau khi IPN
-                    hợp lệ từ VNPay gửi về.
+                    Bạn sẽ được chuyển hướng an toàn đến cổng thanh toán VNPay để hoàn tất giao dịch. Đơn hàng của bạn sẽ được xử lý ngay sau khi thanh toán thành công!
                   </p>
                 </div>
               </section>

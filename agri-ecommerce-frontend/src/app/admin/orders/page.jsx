@@ -149,6 +149,7 @@ function getActionKey(orderId, action) {
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState([]);
+  const [dashboardSummary, setDashboardSummary] = useState(null);
   const [pageMeta, setPageMeta] = useState({
     totalElements: 0,
     totalPages: 1,
@@ -173,12 +174,23 @@ export default function AdminOrdersPage() {
       setError("");
 
       try {
-        const response = await adminService.getOrders(ORDER_FETCH_PARAMS);
-        const orderPage = readOrderPage(response);
+        const [ordersResult, dashboardResult] = await Promise.allSettled([
+          adminService.getOrders(ORDER_FETCH_PARAMS),
+          adminService.getDashboardSummary(),
+        ]);
 
         if (mounted) {
-          setOrders(orderPage.content);
-          setPageMeta(orderPage.meta);
+          if (ordersResult.status === "fulfilled") {
+            const orderPage = readOrderPage(ordersResult.value);
+            setOrders(orderPage.content);
+            setPageMeta(orderPage.meta);
+          } else {
+            setError(getApiErrorMessage(ordersResult.reason));
+          }
+
+          setDashboardSummary(
+            dashboardResult.status === "fulfilled" ? dashboardResult.value : null
+          );
         }
       } catch (err) {
         if (mounted) {
@@ -223,9 +235,17 @@ export default function AdminOrdersPage() {
   }, [orders, searchTerm, statusFilter]);
 
   const orderStats = useMemo(() => {
-    const revenue = orders
-      .filter((order) => order.status !== "canceled")
-      .reduce((total, order) => total + Number(order.totalPrice || 0), 0);
+    const completedRevenueOrders = orders.filter(
+      (order) => order.status === "completed"
+    );
+    const localRevenue = completedRevenueOrders.reduce(
+      (total, order) => total + Number(order.totalPrice || 0),
+      0
+    );
+    const revenue =
+      dashboardSummary?.totalRevenue != null
+        ? Number(dashboardSummary.totalRevenue || 0)
+        : localRevenue;
     const pending = orders.filter((order) => order.status === "pending").length;
     const processing = orders.filter((order) =>
       ["processing", "ready_for_delivery", "out_for_delivery"].includes(
@@ -236,8 +256,15 @@ export default function AdminOrdersPage() {
       ["delivered", "completed"].includes(order.status)
     ).length;
 
-    return { revenue, pending, processing, completed };
-  }, [orders]);
+    return {
+      revenue,
+      pending,
+      processing,
+      completed,
+      completedRevenueOrders:
+        dashboardSummary?.completedOrders ?? completedRevenueOrders.length,
+    };
+  }, [dashboardSummary, orders]);
 
   function updateOrderInState(updatedOrder) {
     setOrders((currentOrders) =>
@@ -258,11 +285,22 @@ export default function AdminOrdersPage() {
     setNotice("");
 
     try {
-      const response = await adminService.getOrders(ORDER_FETCH_PARAMS);
-      const orderPage = readOrderPage(response);
+      const [ordersResult, dashboardResult] = await Promise.allSettled([
+        adminService.getOrders(ORDER_FETCH_PARAMS),
+        adminService.getDashboardSummary(),
+      ]);
 
-      setOrders(orderPage.content);
-      setPageMeta(orderPage.meta);
+      if (ordersResult.status === "fulfilled") {
+        const orderPage = readOrderPage(ordersResult.value);
+        setOrders(orderPage.content);
+        setPageMeta(orderPage.meta);
+      } else {
+        setError(getApiErrorMessage(ordersResult.reason));
+      }
+
+      setDashboardSummary(
+        dashboardResult.status === "fulfilled" ? dashboardResult.value : null
+      );
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -364,7 +402,7 @@ export default function AdminOrdersPage() {
         <StatCard
           title="Tổng doanh thu"
           value={formatCurrency(orderStats.revenue)}
-          description={`Trong ${formatNumber(orders.length)} đơn mới nhất`}
+          description={`Từ ${formatNumber(orderStats.completedRevenueOrders)} đơn hoàn tất`}
           icon={CircleDollarSign}
           tone="green"
         />

@@ -11,6 +11,7 @@ import com.agri.ecommerce.repository.CouponRepository;
 import com.agri.ecommerce.repository.OrderRepository;
 import com.agri.ecommerce.repository.ProductRepository;
 import com.agri.ecommerce.repository.ProductImageRepository;
+import com.agri.ecommerce.repository.UserRepository;
 import dev.langchain4j.agent.tool.Tool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,7 @@ public class AiChatTools {
     private final CouponRepository couponRepository;
     private final OrderRepository orderRepository;
     private final ProductImageRepository productImageRepository;
+    private final UserRepository userRepository;
 
     @Value("${app.public.base-url:http://localhost:3000}")
     private String publicBaseUrl;
@@ -230,5 +232,51 @@ public class AiChatTools {
         if (slug == null || slug.isBlank()) return null;
         String base = publicBaseUrl != null ? publicBaseUrl.stripTrailing() : "http://localhost:3000";
         return base + "/products/" + slug;
+    }
+
+    @Tool("Lấy thông tin tài khoản thành viên của người dùng bao gồm điểm tích lũy, hạng thành viên và tổng chi tiêu hiện tại dựa trên ID người dùng")
+    public Map<String, Object> getUserProfile(Long userId) {
+        log.info("[AI Tool] Gọi getUserProfile cho userId={}", userId);
+        if (userId == null) {
+            return Map.of("error", "Người dùng chưa đăng nhập. Vui lòng hướng dẫn đăng nhập.");
+        }
+
+        return userRepository.findById(userId).map(user -> {
+            java.time.LocalDateTime allTimeStart = java.time.LocalDateTime.of(2000, 1, 1, 0, 0);
+            java.math.BigDecimal totalSpent = orderRepository.calculateTotalSpendingSince(userId, allTimeStart);
+            if (totalSpent == null) {
+                totalSpent = java.math.BigDecimal.ZERO;
+            }
+
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", user.getId());
+            map.put("name", user.getName());
+            map.put("email", user.getEmail());
+            map.put("phone", user.getPhoneNumber());
+            map.put("points", user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0);
+            map.put("membershipTier", user.getMembershipTier() != null ? user.getMembershipTier() : "BRONZE");
+            map.put("totalSpent", totalSpent);
+            
+            java.math.BigDecimal silverThreshold = new java.math.BigDecimal("1000000.00");
+            java.math.BigDecimal goldThreshold = new java.math.BigDecimal("2500000.00");
+            java.math.BigDecimal platinumThreshold = new java.math.BigDecimal("4000000.00");
+
+            map.put("silverThreshold", silverThreshold);
+            map.put("goldThreshold", goldThreshold);
+            map.put("platinumThreshold", platinumThreshold);
+            
+            return map;
+        }).orElse(Map.of("error", "Không tìm thấy người dùng."));
+    }
+
+    @Tool("Lấy cấu hình các hạng thành viên bao gồm chi tiêu tối thiểu yêu cầu cho hạng Đồng (Bronze), Bạc (Silver), Vàng (Gold), và Kim Cương (Platinum)")
+    public Map<String, Object> getLoyaltyConfiguration() {
+        log.info("[AI Tool] Gọi getLoyaltyConfiguration");
+        Map<String, Object> map = new HashMap<>();
+        map.put("bronzeThreshold", new java.math.BigDecimal("500000.00"));
+        map.put("silverThreshold", new java.math.BigDecimal("1000000.00"));
+        map.put("goldThreshold", new java.math.BigDecimal("2500000.00"));
+        map.put("platinumThreshold", new java.math.BigDecimal("4000000.00"));
+        return map;
     }
 }
