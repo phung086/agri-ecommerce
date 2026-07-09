@@ -8,6 +8,7 @@ import com.agri.ecommerce.dto.response.review.ProductReviewsResponse;
 import com.agri.ecommerce.dto.response.review.ReviewResponse;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.entity.ReviewEntity;
+import com.agri.ecommerce.entity.ReviewImageEntity;
 import com.agri.ecommerce.entity.UserEntity;
 import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.common.exception.ResourceNotFoundException;
@@ -16,7 +17,9 @@ import com.agri.ecommerce.repository.OrderItemRepository;
 import com.agri.ecommerce.repository.ProductRepository;
 import com.agri.ecommerce.repository.ReviewRepository;
 import com.agri.ecommerce.repository.UserRepository;
+import com.agri.ecommerce.service.CloudinaryUploadService;
 import com.agri.ecommerce.service.ReviewService;
+import com.agri.ecommerce.service.LoyaltyService;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
@@ -26,6 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -34,6 +40,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     private static final String HIDDEN_STATUS = "hidden";
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_REVIEW_IMAGES = 3;
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "rating", "createdAt", "updatedAt");
 
     private final ReviewRepository reviewRepository;
@@ -45,6 +52,10 @@ public class ReviewServiceImpl implements ReviewService {
     private final OrderItemRepository orderItemRepository;
 
     private final ReviewMapper reviewMapper;
+
+    private final LoyaltyService loyaltyService;
+
+    private final CloudinaryUploadService cloudinaryUploadService;
 
     @Override
     @Transactional(readOnly = true)
@@ -91,8 +102,11 @@ public class ReviewServiceImpl implements ReviewService {
                 .rating(request.getRating())
                 .comment(cleanBlank(request.getComment()))
                 .build();
+        replaceReviewImages(review, request.getImages());
 
-        return reviewMapper.toReviewResponse(reviewRepository.save(review));
+        ReviewEntity savedReview = reviewRepository.save(review);
+        loyaltyService.awardPointsForReview(userId, product.getName());
+        return reviewMapper.toReviewResponse(savedReview);
     }
 
     @Override
@@ -102,6 +116,11 @@ public class ReviewServiceImpl implements ReviewService {
 
         review.setRating(request.getRating());
         review.setComment(cleanBlank(request.getComment()));
+        if (request.getImages() != null) {
+            List<String> oldImages = getReviewImageUrls(review);
+            replaceReviewImages(review, request.getImages());
+            deleteRemovedImages(oldImages, getReviewImageUrls(review));
+        }
 
         return reviewMapper.toReviewResponse(reviewRepository.save(review));
     }
@@ -110,6 +129,7 @@ public class ReviewServiceImpl implements ReviewService {
     @Transactional
     public void deleteMyReview(Long userId, Long reviewId) {
         ReviewEntity review = findReviewByIdAndUserId(reviewId, userId);
+        deleteReviewImages(review);
         reviewRepository.delete(review);
     }
 
@@ -144,7 +164,64 @@ public class ReviewServiceImpl implements ReviewService {
     @Transactional
     public void deleteReviewAsAdmin(Long reviewId) {
         ReviewEntity review = findReviewById(reviewId);
+        deleteReviewImages(review);
         reviewRepository.delete(review);
+    }
+
+    private void replaceReviewImages(ReviewEntity review, List<String> imageUrls) {
+        List<String> normalizedImageUrls = normalizeReviewImages(imageUrls);
+
+        review.getImages().clear();
+        for (int index = 0; index < normalizedImageUrls.size(); index++) {
+            review.getImages().add(ReviewImageEntity.builder()
+                    .review(review)
+                    .imageUrl(normalizedImageUrls.get(index))
+                    .sortOrder(index)
+                    .build());
+        }
+    }
+
+    private List<String> normalizeReviewImages(List<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return List.of();
+        }
+
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        imageUrls.stream()
+                .map(this::cleanBlank)
+                .filter(value -> value != null)
+                .forEach(value -> {
+                    if (!value.startsWith("http://") && !value.startsWith("https://")) {
+                        throw new BadRequestException("Anh danh gia phai la URL hop le");
+                    }
+                    normalized.add(value);
+                });
+
+        if (normalized.size() > MAX_REVIEW_IMAGES) {
+            throw new BadRequestException("Chi duoc tai len toi da 3 anh danh gia");
+        }
+
+        return new ArrayList<>(normalized);
+    }
+
+    private List<String> getReviewImageUrls(ReviewEntity review) {
+        if (review.getImages() == null || review.getImages().isEmpty()) {
+            return List.of();
+        }
+
+        return review.getImages().stream()
+                .map(ReviewImageEntity::getImageUrl)
+                .toList();
+    }
+
+    private void deleteRemovedImages(List<String> oldImages, List<String> currentImages) {
+        oldImages.stream()
+                .filter(imageUrl -> !currentImages.contains(imageUrl))
+                .forEach(cloudinaryUploadService::deleteImageByUrl);
+    }
+
+    private void deleteReviewImages(ReviewEntity review) {
+        getReviewImageUrls(review).forEach(cloudinaryUploadService::deleteImageByUrl);
     }
 
     private PageResponse<ReviewResponse> toPageResponse(Page<ReviewEntity> reviewPage) {
@@ -284,4 +361,5 @@ public class ReviewServiceImpl implements ReviewService {
 
         return value.trim();
     }
+
 }

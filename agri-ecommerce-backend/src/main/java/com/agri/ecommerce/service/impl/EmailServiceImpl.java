@@ -77,12 +77,7 @@ public class EmailServiceImpl implements EmailService {
         }
 
         OrderEntity invoiceOrder = orderRepository.findById(order.getId()).orElse(order);
-        if (invoiceOrder.getUser() == null) {
-            log.warn("[Email Service] Order #{} has no user, cannot send email invoice.", invoiceOrder.getId());
-            return;
-        }
-
-        String recipientEmail = invoiceOrder.getUser().getEmail();
+        String recipientEmail = resolveRecipientEmail(invoiceOrder);
         if (recipientEmail == null || recipientEmail.trim().isBlank()) {
             log.warn("[Email Service] Recipient email is blank, skipping invoice send for Order #{}", invoiceOrder.getId());
             return;
@@ -103,7 +98,7 @@ public class EmailServiceImpl implements EmailService {
         if (mailSender == null || !hasText(fromEmail)) {
             log.info("[Email Service MOCK] 'spring.mail.username' or JavaMailSender is not configured. Logging order invoice instead.");
             log.info("[Email Service MOCK] Order ID: #{}", invoiceOrder.getId());
-            log.info("[Email Service MOCK] Customer: {} ({})", invoiceOrder.getUser().getName(), recipientEmail);
+            log.info("[Email Service MOCK] Customer: {} ({})", resolveRecipientName(invoiceOrder), recipientEmail);
             log.info("[Email Service MOCK] Subtotal: {}, Discount: {}, Shipping: {}, Total Price: {}",
                     invoiceOrder.getSubtotal(), invoiceOrder.getDiscountAmount(), invoiceOrder.getShippingFee(), invoiceOrder.getTotalPrice());
             log.info("[Email Service MOCK] Items list:");
@@ -212,6 +207,50 @@ public class EmailServiceImpl implements EmailService {
         return value != null && !value.trim().isBlank();
     }
 
+    private String resolveRecipientEmail(OrderEntity order) {
+        if (order == null) {
+            return "";
+        }
+
+        if (order.getUser() != null && hasText(order.getUser().getEmail())) {
+            return order.getUser().getEmail().trim();
+        }
+
+        return hasText(order.getGuestEmail()) ? order.getGuestEmail().trim() : "";
+    }
+
+    private String resolveRecipientName(OrderEntity order) {
+        if (order == null) {
+            return "Quy khach";
+        }
+
+        if (hasText(order.getShippingName())) {
+            return order.getShippingName().trim();
+        }
+
+        if (order.getUser() != null && hasText(order.getUser().getName())) {
+            return order.getUser().getName().trim();
+        }
+
+        return "Quy khach";
+    }
+
+    private String resolveRecipientPhone(OrderEntity order) {
+        if (order == null) {
+            return "N/A";
+        }
+
+        if (hasText(order.getShippingPhone())) {
+            return order.getShippingPhone().trim();
+        }
+
+        if (order.getUser() != null && hasText(order.getUser().getPhoneNumber())) {
+            return order.getUser().getPhoneNumber().trim();
+        }
+
+        return "N/A";
+    }
+
     private String toJsonString(String value) {
         if (value == null) {
             return "null";
@@ -253,11 +292,22 @@ public class EmailServiceImpl implements EmailService {
     private String buildInvoiceText(OrderEntity order) {
         NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
         String orderReference = order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId();
-        String recipientName = order.getShippingName() != null ? order.getShippingName() : order.getUser().getName();
+        String recipientName = resolveRecipientName(order);
+        String couponLine = hasText(order.getCouponCode()) ? "Mã giảm giá: " + order.getCouponCode().trim() + "\n" : "";
+        String pointsUsedLine = order.getPointsUsed() != null && order.getPointsUsed() > 0
+                ? "Xu đã dùng: " + order.getPointsUsed() + "\n"
+                : "";
+        int estimatedPointsEarned = order.getUser() == null ? 0 : estimatePurchasePoints(order.getTotalPrice());
+        String pointsEarnedLine = estimatedPointsEarned > 0
+                ? "Xu dự kiến nhận khi đơn hoàn tất: " + estimatedPointsEarned + "\n"
+                : "";
 
         return "Cam on ban da dat hang tai AgriMarket.\n"
                 + "Ma don hang: " + orderReference + "\n"
                 + "Nguoi nhan: " + recipientName + "\n"
+                + couponLine
+                + pointsUsedLine
+                + pointsEarnedLine
                 + "Tong cong: " + currencyFormat.format(order.getTotalPrice()) + "\n"
                 + "Don hang cua ban dang cho xu ly va se duoc cap nhat khi giao hang.";
     }
@@ -279,9 +329,36 @@ public class EmailServiceImpl implements EmailService {
                     .append("</tr>");
         }
 
-        String recipientName = order.getShippingName() != null ? order.getShippingName() : order.getUser().getName();
-        String recipientPhone = order.getShippingPhone() != null ? order.getShippingPhone() : (order.getUser().getPhoneNumber() != null ? order.getUser().getPhoneNumber() : "N/A");
+        String recipientName = resolveRecipientName(order);
+        String recipientPhone = resolveRecipientPhone(order);
         String fullAddress = order.getShippingAddressDetail() != null ? order.getShippingAddressDetail() + ", " + order.getShippingCity() : (order.getShippingAddress() != null ? order.getShippingAddress().getAddress() + ", " + order.getShippingAddress().getCity() : "N/A");
+        String couponCode = hasText(order.getCouponCode()) ? order.getCouponCode().trim() : "";
+        int pointsUsed = order.getPointsUsed() == null ? 0 : order.getPointsUsed();
+        int pointsEarned = order.getUser() == null
+                ? 0
+                : order.getPointsEarned() != null && order.getPointsEarned() > 0
+                ? order.getPointsEarned()
+                : estimatePurchasePoints(order.getTotalPrice());
+        String couponRow = hasText(couponCode)
+                ? "    <p style='margin: 5px 0;'><strong>Mã giảm giá:</strong> " + escapeHtml(couponCode) + "</p>"
+                : "";
+        String pointsUsedRow = pointsUsed > 0
+                ? "    <p style='margin: 5px 0; color: #b45309;'><strong>Xu tích lũy đã dùng:</strong> " + pointsUsed + " xu</p>"
+                : "";
+        String pointsEarnedRow = pointsEarned > 0
+                ? "    <p style='margin: 5px 0; color: #047857;'><strong>Xu tích lũy dự kiến nhận:</strong> " + pointsEarned + " xu</p>"
+                : "";
+
+        String formattedCreatedAt = "";
+        if (order.getCreatedAt() != null) {
+            try {
+                java.time.ZonedDateTime zonedDateTime = order.getCreatedAt().atZone(java.time.ZoneId.of("UTC"))
+                        .withZoneSameInstant(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+                formattedCreatedAt = zonedDateTime.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
+            } catch (Exception ex) {
+                formattedCreatedAt = String.valueOf(order.getCreatedAt());
+            }
+        }
 
         return "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);'>"
                 + "  <div style='text-align: center; margin-bottom: 20px;'>"
@@ -290,7 +367,7 @@ public class EmailServiceImpl implements EmailService {
                 + "  </div>"
                 + "  <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>"
                 + "  <h3 style='color: #333;'>Thông tin hóa đơn đặt hàng " + (order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId()) + "</h3>"
-                + "  <p style='font-size: 14px;'><strong>Ngày đặt hàng:</strong> " + escapeHtml(order.getCreatedAt()) + "</p>"
+                + "  <p style='font-size: 14px;'><strong>Ngày đặt hàng:</strong> " + escapeHtml(formattedCreatedAt) + "</p>"
                 + "  <div style='background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-size: 14px;'>"
                 + "    <h4 style='margin-top: 0; color: #2e7d32;'>Thông tin nhận hàng:</h4>"
                 + "    <p style='margin: 5px 0;'><strong>Người nhận:</strong> " + escapeHtml(recipientName) + "</p>"
@@ -312,8 +389,11 @@ public class EmailServiceImpl implements EmailService {
                 + "  </table>"
                 + "  <div style='text-align: right; font-size: 14px; line-height: 1.6;'>"
                 + "    <p style='margin: 5px 0;'><strong>Tạm tính:</strong> " + currencyFormat.format(order.getSubtotal()) + "</p>"
+                + couponRow
+                + pointsUsedRow
                 + "    <p style='margin: 5px 0; color: #d32f2f;'><strong>Khuyến mãi:</strong> -" + currencyFormat.format(order.getDiscountAmount()) + "</p>"
                 + "    <p style='margin: 5px 0;'><strong>Phí giao hàng:</strong> " + currencyFormat.format(order.getShippingFee()) + "</p>"
+                + pointsEarnedRow
                 + "    <hr style='border: 0; border-top: 1px solid #eee; margin: 10px 0;'>"
                 + "    <p style='margin: 5px 0; font-size: 16px; color: #2e7d32;'><strong>Tổng cộng:</strong> " + currencyFormat.format(order.getTotalPrice()) + "</p>"
                 + "  </div>"
@@ -337,6 +417,14 @@ public class EmailServiceImpl implements EmailService {
                 .replace("'", "&#39;");
     }
 
+    private int estimatePurchasePoints(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return 0;
+        }
+
+        return amount.multiply(new BigDecimal("0.01")).intValue();
+    }
+
     @Async
     @Override
     @Transactional(readOnly = true)
@@ -347,12 +435,7 @@ public class EmailServiceImpl implements EmailService {
         }
 
         OrderEntity targetOrder = orderRepository.findById(order.getId()).orElse(order);
-        if (targetOrder.getUser() == null) {
-            log.warn("[Email Service] Order #{} has no user, cannot send email status update.", targetOrder.getId());
-            return;
-        }
-
-        String recipientEmail = targetOrder.getUser().getEmail();
+        String recipientEmail = resolveRecipientEmail(targetOrder);
         if (recipientEmail == null || recipientEmail.trim().isBlank()) {
             log.warn("[Email Service] Recipient email is blank, skipping status update for Order #{}", targetOrder.getId());
             return;
@@ -372,7 +455,7 @@ public class EmailServiceImpl implements EmailService {
         if (mailSender == null || !hasText(fromEmail)) {
             log.info("[Email Service MOCK] 'spring.mail.username' or JavaMailSender is not configured. Logging order status update instead.");
             log.info("[Email Service MOCK] Order ID: #{}", targetOrder.getId());
-            log.info("[Email Service MOCK] Customer: {} ({})", targetOrder.getUser().getName(), recipientEmail);
+            log.info("[Email Service MOCK] Customer: {} ({})", resolveRecipientName(targetOrder), recipientEmail);
             log.info("[Email Service MOCK] Status Update: {} - {}", statusTitle, statusDescription);
             return;
         }
@@ -394,7 +477,7 @@ public class EmailServiceImpl implements EmailService {
     }
 
     private String buildStatusUpdateHtml(OrderEntity order, String statusTitle, String statusDescription) {
-        String recipientName = order.getShippingName() != null ? order.getShippingName() : order.getUser().getName();
+        String recipientName = resolveRecipientName(order);
         String orderReference = order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId();
 
         return "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);'>"

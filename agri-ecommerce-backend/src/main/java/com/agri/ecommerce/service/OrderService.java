@@ -16,6 +16,10 @@ public interface OrderService {
 
     OrderResponse checkout(Long userId, CheckoutRequest request);
 
+    CheckoutPreviewResponse previewGuestCheckout(CheckoutRequest request);
+
+    OrderResponse guestCheckout(CheckoutRequest request);
+
     OrderResponse cancelOrder(Long userId, Long orderId, OrderStatusNoteRequest request);
 
     OrderResponse completeOrder(Long userId, Long orderId, OrderStatusNoteRequest request);

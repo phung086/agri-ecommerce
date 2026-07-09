@@ -21,6 +21,7 @@ import {
   formatCurrency,
   formatNumber,
   getApiErrorMessage,
+  getAssetUrl,
   getImageBackground,
 } from "@/lib/admin-utils";
 import {
@@ -35,6 +36,7 @@ import { localizeProduct } from "@/i18n/localized-fields";
 import { marketplaceService } from "@/services/marketplace.service";
 import { reviewService } from "@/services/review.service";
 import { wishlistService } from "@/services/wishlist.service";
+import { addGuestCartItem, readGuestCart } from "@/lib/guest-cart-storage";
 
 function getActiveCustomerSession() {
   const session = getAuthSession(AUTH_SCOPES.customer);
@@ -208,7 +210,9 @@ export default function ProductDetailPage() {
       const session = getActiveCustomerSession();
 
       if (!session) {
-        setCartCount(0);
+        const guestItems = readGuestCart();
+        const count = guestItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        setCartCount(count);
         return;
       }
 
@@ -315,8 +319,11 @@ export default function ProductDetailPage() {
     const session = getActiveCustomerSession();
 
     if (!session) {
-      setError("Vui lòng đăng nhập tài khoản khách hàng trước khi thêm giỏ.");
-      router.push("/profile");
+      const nextItems = addGuestCartItem(product, 1);
+      const count = nextItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+      setCartCount(count);
+      triggerAddToCartEffect();
+      setNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Bạn có thể thanh toán nhanh không cần đăng nhập.");
       return;
     }
 
@@ -739,6 +746,22 @@ export default function ProductDetailPage() {
                           <p className="mt-3 text-sm leading-6 text-slate-600">
                             {review.comment}
                           </p>
+                        )}
+                        {Array.isArray(review.images) && review.images.length > 0 && (
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            {review.images.map((imageUrl, index) => (
+                              <div
+                                key={`${review.id}-image-${index}`}
+                                className="aspect-square overflow-hidden rounded-[8px] border border-emerald-100 bg-white"
+                              >
+                                <img
+                                  src={getAssetUrl(imageUrl)}
+                                  alt={`Anh danh gia ${index + 1}`}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </article>
                     ))}

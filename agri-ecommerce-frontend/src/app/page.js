@@ -40,6 +40,13 @@ import {
   getAuthSession,
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
+import {
+  addGuestCartItem,
+  clearGuestCart,
+  readGuestCart,
+  removeGuestCartItem,
+  updateGuestCartItem,
+} from "@/lib/guest-cart-storage";
 import { cartService } from "@/services/cart.service";
 import { marketplaceService } from "@/services/marketplace.service";
 import { reviewService } from "@/services/review.service";
@@ -342,6 +349,24 @@ function mapCartResponseToItems(cartResponse) {
       status: item.status,
     };
   });
+}
+
+function mapGuestCartStorageToHomeItems(items) {
+  return (items || []).map((item, index) => ({
+    id: String(item.productId),
+    slug: item.productSlug || String(item.productId),
+    name: item.productName || "San pham trong gio",
+    nameEn: item.productNameEn || "",
+    price: Number(item.productPrice || 0),
+    unit: item.unit || "san pham",
+    unitEn: item.unitEn || "",
+    stock: Number(item.stock ?? 0),
+    quantity: Number(item.quantity || 0),
+    imageBackground: getImageBackground(item.thumbnail),
+    imagePosition:
+      ["76% 32%", "51% 82%", "82% 74%", "94% 74%", "64% 82%"][index % 5],
+    status: item.status,
+  }));
 }
 
 function mapWishlistResponseToItems(wishlistResponse) {
@@ -1048,6 +1073,7 @@ export default function Home() {
       const session = getActiveCustomerSession();
 
       if (!session) {
+        setCart(mapGuestCartStorageToHomeItems(readGuestCart()));
         return;
       }
 
@@ -1470,20 +1496,9 @@ export default function Home() {
       }
     }
 
-    setCart((current) => {
-      const existing = current.find((item) => item.id === product.id);
-
-      if (existing) {
-        return current.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: Math.min(item.quantity + 1, product.stock || 99) }
-            : item
-        );
-      }
-
-      return [...current, { ...product, quantity: 1 }];
-    });
-    setCartNotice("Giỏ hàng đang lưu tạm trên trình duyệt. Đăng nhập để đặt hàng.");
+    const nextItems = addGuestCartItem(product, 1);
+    setCart(mapGuestCartStorageToHomeItems(nextItems));
+    setCartNotice("Gio hang dang luu tam tren trinh duyet. Ban co the thanh toan nhanh khong can dang nhap.");
     showAddToCartFeedback(product);
     return true;
   }
@@ -1630,11 +1645,9 @@ export default function Home() {
       return;
     }
 
-    setCart((current) =>
-      current.map((item) =>
-        item.id === id
-          ? { ...item, quantity: Math.min(item.quantity + 1, item.stock || 99) }
-          : item
+    setCart(
+      mapGuestCartStorageToHomeItems(
+        updateGuestCartItem(id, Math.min(item.quantity + 1, item.stock || 99))
       )
     );
   }
@@ -1666,13 +1679,7 @@ export default function Home() {
       return;
     }
 
-    setCart((current) =>
-      current
-        .map((item) =>
-          item.id === id ? { ...item, quantity: item.quantity - 1 } : item
-        )
-        .filter((item) => item.quantity > 0)
-    );
+    setCart(mapGuestCartStorageToHomeItems(updateGuestCartItem(id, item.quantity - 1)));
   }
 
   async function removeCartItem(id) {
@@ -1695,7 +1702,7 @@ export default function Home() {
       return;
     }
 
-    setCart((current) => current.filter((item) => item.id !== id));
+    setCart(mapGuestCartStorageToHomeItems(removeGuestCartItem(id)));
   }
 
   async function clearCart() {
@@ -1720,6 +1727,7 @@ export default function Home() {
       return;
     }
 
+    clearGuestCart();
     setCart([]);
   }
 
@@ -1729,14 +1737,6 @@ export default function Home() {
 
     if (cart.length === 0) {
       setCartError("Giỏ hàng đang trống.");
-      return;
-    }
-
-    const session = getActiveCustomerSession();
-
-    if (!session) {
-      setCartError("Vui lòng đăng nhập tài khoản khách hàng trước khi thanh toán.");
-      router.push("/profile");
       return;
     }
 

@@ -20,7 +20,7 @@ public class OrderEntity {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private UserEntity user;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -49,6 +49,15 @@ public class OrderEntity {
     @Column(nullable = false, length = 255)
     private String status;
 
+    @Column(name = "checkout_type", nullable = false, length = 20)
+    private String checkoutType;
+
+    @Column(name = "guest_email")
+    private String guestEmail;
+
+    @Column(name = "guest_token", length = 64)
+    private String guestToken;
+
     @Column(name = "dispatched_at")
     private LocalDateTime dispatchedAt;
 
@@ -63,6 +72,15 @@ public class OrderEntity {
 
     @Column(name = "delivery_failure_reason")
     private String deliveryFailureReason;
+
+    @Column(name = "return_reason", columnDefinition = "TEXT")
+    private String returnReason;
+
+    @Column(name = "return_note", columnDefinition = "TEXT")
+    private String returnNote;
+
+    @Column(name = "returned_at")
+    private LocalDateTime returnedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shipping_address_id")
@@ -92,6 +110,12 @@ public class OrderEntity {
     @Column(name = "shipping_status_updated_at")
     private LocalDateTime shippingStatusUpdatedAt;
 
+    @Column(name = "points_used")
+    private Integer pointsUsed;
+
+    @Column(name = "points_earned")
+    private Integer pointsEarned;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -118,6 +142,18 @@ public class OrderEntity {
 
         if (this.status == null) {
             this.status = "pending";
+        }
+
+        if (this.checkoutType == null || this.checkoutType.trim().isEmpty()) {
+            this.checkoutType = "CUSTOMER";
+        }
+
+        if (this.pointsUsed == null) {
+            this.pointsUsed = 0;
+        }
+
+        if (this.pointsEarned == null) {
+            this.pointsEarned = 0;
         }
     }
 

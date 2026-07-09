@@ -4,9 +4,11 @@ import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.config.VnpayProperties;
 import com.agri.ecommerce.dto.request.order.CheckoutRequest;
+import com.agri.ecommerce.dto.request.order.CheckoutItemRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
+import com.agri.ecommerce.dto.response.order.CheckoutPreviewResponse;
 import com.agri.ecommerce.entity.CartItemEntity;
 import com.agri.ecommerce.entity.CouponEntity;
 import com.agri.ecommerce.entity.OrderEntity;
@@ -52,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -115,12 +118,19 @@ class OrderServiceImplTest {
     @Mock
     private EmailService emailService;
 
+    @Mock
+    private LoyaltyService loyaltyService;
+
     @InjectMocks
     private OrderServiceImpl orderService;
 
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(orderService, "emailService", emailService);
+        ReflectionTestUtils.setField(orderService, "loyaltyService", loyaltyService);
+        when(loyaltyService.validateTierCoupon(any(UserEntity.class), any())).thenReturn(true);
+        when(loyaltyService.deductPointsForCheckout(any(Long.class), any(Integer.class)))
+                .thenAnswer(invocation -> invocation.getArgument(1, Integer.class));
     }
 
     @Test
@@ -202,7 +212,7 @@ class OrderServiceImplTest {
         OrderEntity order = order("pending");
         PaymentEntity payment = payment(order, "pending");
         OrderItemEntity item = orderItem(order, product, 2);
-        when(orderRepository.findByIdAndUser_Id(100L, 1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdAndUserIdForUpdate(100L, 1L)).thenReturn(Optional.of(order));
         when(paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(payment));
         when(orderItemRepository.findByOrder_IdOrderByIdAsc(100L)).thenReturn(List.of(item));
         when(productRepository.findAllByIdInForUpdate(anyIdCollection())).thenReturn(List.of(product));
@@ -229,7 +239,7 @@ class OrderServiceImplTest {
     @Test
     void cancelOrder_whenStatusIsNotPending_shouldThrowException() {
         // Given
-        when(orderRepository.findByIdAndUser_Id(100L, 1L)).thenReturn(Optional.of(order("confirmed")));
+        when(orderRepository.findByIdAndUserIdForUpdate(100L, 1L)).thenReturn(Optional.of(order("confirmed")));
 
         // When / Then
         assertThatThrownBy(() -> orderService.cancelOrder(1L, 100L, null))
@@ -242,7 +252,7 @@ class OrderServiceImplTest {
         // Given
         OrderEntity order = order("pending");
         PaymentEntity payment = payment(order, "completed");
-        when(orderRepository.findByIdAndUser_Id(100L, 1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdAndUserIdForUpdate(100L, 1L)).thenReturn(Optional.of(order));
         when(paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(payment));
 
         // When / Then
@@ -316,6 +326,116 @@ class OrderServiceImplTest {
         assertThat(response.isCouponValid()).isTrue();
         assertThat(response.getDiscountAmount().setScale(0)).isEqualTo(new BigDecimal("4000"));
         assertThat(response.getTotalPrice().setScale(0)).isEqualTo(new BigDecimal("116000"));
+    }
+
+    @Test
+    void checkout_withProductOrderFreeshipAndPoints_shouldStackControlledDiscounts() {
+        CheckoutRequest request = checkoutRequest("cash");
+        request.setCouponCode("MEAT10K,SILVER10,FREESHIP");
+        request.setUsePoints(true);
+
+        UserEntity user = user();
+        user.setLoyaltyPoints(40000);
+        ProductEntity meat = ProductEntity.builder()
+                .id(1L)
+                .name("Thit heo")
+                .price(new BigDecimal("100000.00"))
+                .stock(5)
+                .status("in_stock")
+                .build();
+        ProductEntity fish = ProductEntity.builder()
+                .id(2L)
+                .name("Ca basa")
+                .price(new BigDecimal("50000.00"))
+                .stock(5)
+                .status("in_stock")
+                .build();
+
+        CouponEntity productCoupon = CouponEntity.builder()
+                .code("MEAT10K")
+                .couponType("PRODUCT_DISCOUNT")
+                .discountType("FIXED_AMOUNT")
+                .discountAmount(new BigDecimal("10000.00"))
+                .discountPercentage(0)
+                .productId(1L)
+                .active(true)
+                .timesUsed(0)
+                .usageLimit(100)
+                .startsAt(java.time.LocalDateTime.now().minusDays(1))
+                .expiresAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        CouponEntity tierCoupon = CouponEntity.builder()
+                .code("SILVER10")
+                .couponType("ORDER_DISCOUNT")
+                .discountType("PERCENTAGE")
+                .discountPercentage(10)
+                .minOrderValue(new BigDecimal("100000.00"))
+                .active(true)
+                .timesUsed(0)
+                .usageLimit(100)
+                .startsAt(java.time.LocalDateTime.now().minusDays(1))
+                .expiresAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        CouponEntity freeshipCoupon = CouponEntity.builder()
+                .code("FREESHIP")
+                .couponType("FREESHIP")
+                .discountType("FIXED_AMOUNT")
+                .discountPercentage(0)
+                .discountAmount(BigDecimal.ZERO)
+                .active(true)
+                .timesUsed(0)
+                .usageLimit(100)
+                .startsAt(java.time.LocalDateTime.now().minusDays(1))
+                .expiresAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(shippingAddressRepository.findByIdAndUser_Id(20L, 1L)).thenReturn(Optional.of(address()));
+        when(cartItemRepository.findByUser_IdOrderByCreatedAtDesc(1L))
+                .thenReturn(List.of(cartItem(meat, 1), cartItem(fish, 1)));
+        when(productRepository.findAllByIdInForUpdate(anyIdCollection())).thenReturn(List.of(meat, fish));
+        when(shippingCarrierService.calculateShippingFee(any(), any(), any(), any(Double.class)))
+                .thenReturn(new BigDecimal("30000.00"));
+        when(couponRepository.findByCodeIgnoreCaseForUpdate("MEAT10K")).thenReturn(Optional.of(productCoupon));
+        when(couponRepository.findByCodeIgnoreCaseForUpdate("SILVER10")).thenReturn(Optional.of(tierCoupon));
+        when(couponRepository.findByCodeIgnoreCaseForUpdate("FREESHIP")).thenReturn(Optional.of(freeshipCoupon));
+        when(shippingCarrierService.createShippingLabel(any(OrderEntity.class))).thenReturn("GHN-STACK");
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> {
+            OrderEntity order = invocation.getArgument(0);
+            if (order.getId() == null) {
+                order.setId(100L);
+            }
+            return order;
+        });
+        when(orderItemRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentRepository.save(any(PaymentEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderStatusHistoryRepository.save(any(OrderStatusHistoryEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderMapper.toOrderResponse(any(OrderEntity.class), anyList(), any(PaymentEntity.class), anyList()))
+                .thenAnswer(invocation -> {
+                    OrderEntity order = invocation.getArgument(0);
+                    return OrderResponse.builder()
+                            .id(order.getId())
+                            .couponCode(order.getCouponCode())
+                            .discountAmount(order.getDiscountAmount())
+                            .shippingFee(order.getShippingFee())
+                            .pointsUsed(order.getPointsUsed())
+                            .totalPrice(order.getTotalPrice())
+                            .trackingNumber(order.getTrackingNumber())
+                            .build();
+                });
+
+        OrderResponse response = orderService.checkout(1L, request);
+
+        assertThat(response.getCouponCode()).isEqualTo("MEAT10K,SILVER10,FREESHIP");
+        assertThat(response.getDiscountAmount()).isEqualByComparingTo("55000.00");
+        assertThat(response.getShippingFee()).isEqualByComparingTo("0.00");
+        assertThat(response.getPointsUsed()).isEqualTo(30000);
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("95000.00");
+        assertThat(response.getTrackingNumber()).isEqualTo("GHN-STACK");
+        assertThat(productCoupon.getTimesUsed()).isEqualTo(1);
+        assertThat(tierCoupon.getTimesUsed()).isEqualTo(1);
+        assertThat(freeshipCoupon.getTimesUsed()).isEqualTo(1);
     }
 
     @SuppressWarnings("unchecked")
@@ -443,5 +563,141 @@ class OrderServiceImplTest {
                 .quantity(quantity)
                 .price(product.getPrice())
                 .build();
+    }
+
+    @Test
+    void checkout_withUsePoints_shouldDeductPointsAndReduceTotalPrice() {
+        CheckoutRequest request = checkoutRequest("cash");
+        request.setUsePoints(true);
+
+        UserEntity user = user();
+        user.setLoyaltyPoints(5000); // 5000 points available
+
+        ProductEntity product = product("in_stock", 20);
+        CartItemEntity item = cartItem(product, 1); // 1 * 50,000 = 50,000 subtotal (below 100k, shipping fee applies)
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(shippingAddressRepository.findByIdAndUser_Id(any(), eq(1L))).thenReturn(Optional.of(address()));
+        when(cartItemRepository.findByUser_IdOrderByCreatedAtDesc(1L)).thenReturn(List.of(item));
+        when(productRepository.findAllByIdInForUpdate(any())).thenReturn(List.of(product));
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentRepository.save(any(PaymentEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderStatusHistoryRepository.save(any(OrderStatusHistoryEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderMapper.toOrderResponse(any(OrderEntity.class), anyList(), any(PaymentEntity.class), anyList()))
+                .thenAnswer(invocation -> {
+                    OrderEntity order = invocation.getArgument(0);
+                    return OrderResponse.builder()
+                            .pointsUsed(order.getPointsUsed())
+                            .discountAmount(order.getDiscountAmount())
+                            .totalPrice(order.getTotalPrice())
+                            .build();
+                });
+
+        OrderResponse response = orderService.checkout(1L, request);
+
+        verify(loyaltyService).deductPointsForCheckout(eq(1L), eq(5000));
+        assertThat(response.getPointsUsed()).isEqualTo(5000);
+        assertThat(response.getDiscountAmount()).isEqualByComparingTo("5000.00");
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("70000.00");
+    }
+
+    @Test
+    void previewGuestCheckout_withValidRequest_shouldReturnCalculatedPreview() {
+        // Given
+        CheckoutRequest request = new CheckoutRequest();
+        request.setPaymentMethod("cash");
+        request.setGuestFullName("Guest User");
+        request.setGuestPhone("0987654321");
+        request.setGuestCity("Hanoi");
+        request.setGuestAddress("123 Street");
+        
+        CheckoutItemRequest item = new CheckoutItemRequest();
+        item.setProductId(10L);
+        item.setQuantity(1);
+        request.setItems(List.of(item));
+
+        ProductEntity product = product("in_stock", 5);
+        when(productRepository.findAllById(any())).thenReturn(List.of(product));
+        when(shippingCarrierService.calculateShippingFee(any(), any(), any(), anyDouble())).thenReturn(new BigDecimal("30000.00"));
+
+        // When
+        CheckoutPreviewResponse response = orderService.previewGuestCheckout(request);
+
+        // Then
+        assertThat(response.isCanCheckout()).isTrue();
+        assertThat(response.getSubtotal()).isEqualByComparingTo("50000.00"); // 50k * 1
+        assertThat(response.getShippingFee()).isEqualByComparingTo("30000.00");
+        assertThat(response.getTotalPrice()).isEqualByComparingTo("80000.00");
+        assertThat(response.getPointsUsed()).isEqualTo(0);
+        assertThat(response.getDiscountAmount()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void previewGuestCheckout_withCouponCode_shouldThrowBadRequestException() {
+        // Given
+        CheckoutRequest request = new CheckoutRequest();
+        request.setPaymentMethod("cash");
+        request.setGuestFullName("Guest User");
+        request.setGuestPhone("0987654321");
+        request.setGuestCity("Hanoi");
+        request.setGuestAddress("123 Street");
+        request.setCouponCode("DISCOUNT50");
+        
+        CheckoutItemRequest item = new CheckoutItemRequest();
+        item.setProductId(10L);
+        item.setQuantity(2);
+        request.setItems(List.of(item));
+
+        // When / Then
+        assertThatThrownBy(() -> orderService.previewGuestCheckout(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Khach vang lai khong the ap dung ma giam gia hoac xu tich luy");
+    }
+
+    @Test
+    void guestCheckout_withValidCodRequest_shouldCreateOrder() {
+        // Given
+        CheckoutRequest request = new CheckoutRequest();
+        request.setPaymentMethod("cash");
+        request.setGuestFullName("Guest User");
+        request.setGuestPhone("0987654321");
+        request.setGuestCity("Hanoi");
+        request.setGuestAddress("123 Street");
+        
+        CheckoutItemRequest itemRequest = new CheckoutItemRequest();
+        itemRequest.setProductId(10L);
+        itemRequest.setQuantity(2);
+        request.setItems(List.of(itemRequest));
+
+        ProductEntity product = product("in_stock", 5);
+        when(productRepository.findAllByIdInForUpdate(any())).thenReturn(List.of(product));
+        when(shippingCarrierService.calculateShippingFee(any(), any(), any(), anyDouble())).thenReturn(new BigDecimal("30000.00"));
+        when(shippingCarrierService.createShippingLabel(any(OrderEntity.class))).thenReturn("GHN-GUEST-123");
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderItemRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentRepository.save(any(PaymentEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderStatusHistoryRepository.save(any(OrderStatusHistoryEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        
+        when(orderMapper.toOrderResponse(any(OrderEntity.class), anyList(), any(PaymentEntity.class), anyList()))
+                .thenAnswer(invocation -> {
+                    OrderEntity order = invocation.getArgument(0);
+                    return OrderResponse.builder()
+                            .id(order.getId())
+                            .status(order.getStatus())
+                            .checkoutType(order.getCheckoutType())
+                            .guestEmail(order.getGuestEmail())
+                            .totalPrice(order.getTotalPrice())
+                            .trackingNumber(order.getTrackingNumber())
+                            .build();
+                });
+
+        // When
+        OrderResponse response = orderService.guestCheckout(request);
+
+        // Then
+        assertThat(product.getStock()).isEqualTo(3); // 5 - 2
+        assertThat(response.getCheckoutType()).isEqualTo("GUEST");
+        assertThat(response.getTrackingNumber()).isEqualTo("GHN-GUEST-123");
+        verify(emailService).sendOrderInvoice(any(OrderEntity.class));
     }
 }

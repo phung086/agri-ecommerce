@@ -303,8 +303,8 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
             GhnOrderRequest orderRequest = GhnOrderRequest.builder()
                     .paymentTypeId(1) // 1: Shop pays shipping fee (since we collect from customer directly)
                     .requiredNote("CHOXEMHANGKHONGTHU")
-                    .toName(order.getShippingName() != null ? order.getShippingName() : order.getUser().getName())
-                    .toPhone(order.getShippingPhone() != null ? order.getShippingPhone() : order.getUser().getPhoneNumber())
+                    .toName(resolveRecipientName(order))
+                    .toPhone(resolveRecipientPhone(order))
                     .toAddress(streetAddress.isEmpty() ? detailedAddress : streetAddress)
                     .toDistrictId(loc.getDistrictId())
                     .toWardCode(loc.getWardCode())
@@ -339,6 +339,38 @@ public class GhnShippingCarrierServiceImpl implements ShippingCarrierService {
         }
 
         return "GHN-MOCK-" + System.currentTimeMillis();
+    }
+
+    private String resolveRecipientName(OrderEntity order) {
+        if (order == null) {
+            return "Khach AgriMarket";
+        }
+
+        if (hasText(order.getShippingName())) {
+            return order.getShippingName().trim();
+        }
+
+        return order.getUser() == null || !hasText(order.getUser().getName())
+                ? "Khach AgriMarket"
+                : order.getUser().getName().trim();
+    }
+
+    private String resolveRecipientPhone(OrderEntity order) {
+        if (order == null) {
+            return "0987654321";
+        }
+
+        if (hasText(order.getShippingPhone())) {
+            return order.getShippingPhone().trim();
+        }
+
+        return order.getUser() == null || !hasText(order.getUser().getPhoneNumber())
+                ? "0987654321"
+                : order.getUser().getPhoneNumber().trim();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isBlank();
     }
 
     // --- Helper Location Resolver using matching and official GHN API ---

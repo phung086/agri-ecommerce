@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
@@ -31,6 +33,11 @@ public class ReviewEntity {
 
     @Column(length = 255)
     private String comment;
+
+    @Builder.Default
+    @OneToMany(mappedBy = "review", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC")
+    private List<ReviewImageEntity> images = new ArrayList<>();
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

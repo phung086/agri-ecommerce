@@ -278,7 +278,7 @@ DROP TABLE IF EXISTS `order_status_history`;
 CREATE TABLE `order_status_history` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `order_id` bigint unsigned NOT NULL,
-  `status` enum('pending','processing','ready_for_delivery','out_for_delivery','delivered','completed','failed_delivery_attempt','canceled') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('pending','processing','ready_for_delivery','out_for_delivery','delivered','completed','canceled') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `changed_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `note` text COLLATE utf8mb4_unicode_ci,
   `created_at` timestamp NULL DEFAULT NULL,

@@ -21,10 +21,19 @@ import {
   Tag,
   TicketPercent,
   X,
+  Coins,
+  Truck,
+  TriangleAlert,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +50,12 @@ import {
   isAuthSessionExpired,
 } from "@/lib/auth-storage";
 import {
+  clearGuestCart,
+  mapGuestCartItemsToCartResponse,
+  readGuestCart,
+  toGuestCheckoutItems,
+} from "@/lib/guest-cart-storage";
+import {
   PHONE_PATTERN_SOURCE,
   isValidPhoneNumber,
 } from "@/lib/phone-utils";
@@ -48,6 +63,7 @@ import { cartService } from "@/services/cart.service";
 import { orderService } from "@/services/order.service";
 import { promotionService } from "@/services/promotion.service";
 import { shippingAddressService } from "@/services/shipping-address.service";
+import { profileService } from "@/services/profile.service";
 import vietnamAddresses from "@/data/vietnam-addresses.json";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
@@ -150,6 +166,10 @@ function getErrorMessage(error, fallback) {
 /** Derive a display label from the coupon code */
 function deriveLabel(code = "") {
   const map = {
+    BRONZE5: "Đặc quyền thành viên Đồng",
+    SILVER10: "Đặc quyền thành viên Bạc",
+    GOLD25: "Đặc quyền thành viên Vàng",
+    PLATINUM50: "Đặc quyền thành viên Kim cương",
     SUMMER: "Ưu đãi mùa hè",
     WINTER: "Ưu đãi mùa đông",
     SPRING: "Ưu đãi mùa xuân",
@@ -161,6 +181,9 @@ function deriveLabel(code = "") {
     COMBO: "Combo tiết kiệm",
     FREE: "Giao hàng miễn phí",
     FLASH: "Flash Sale",
+    TUOI_NGON: "Ưu đãi tươi ngon",
+    BEP_NHA: "Ưu đãi bếp nhà",
+    MON_NGON: "Ưu đãi món ngon",
   };
   const upper = code.toUpperCase();
   for (const [key, label] of Object.entries(map)) {
@@ -186,6 +209,16 @@ function getCouponBadgeText(coupon) {
   }
 
   return `-${coupon?.discountPercentage || 0}%`;
+}
+
+function getCouponStackKey(coupon) {
+  const type = coupon?.couponType || "ORDER_DISCOUNT";
+
+  if (type === "PRODUCT_DISCOUNT") {
+    return `${type}:${coupon?.productId || coupon?.code || coupon?.id}`;
+  }
+
+  return type;
 }
 
 function getCouponSuccessMessage(coupon) {
@@ -214,16 +247,34 @@ function getEstimatedDiscountAmount(coupon, subtotal) {
   return Math.round((subtotal * Number(coupon.discountPercentage || 0)) / 100);
 }
 
+function checkCouponTierAllowed(couponCode = "", userTier = "BRONZE") {
+  const code = couponCode.trim().toUpperCase();
+  const tier = (userTier || "BRONZE").trim().toUpperCase();
+
+  if (code === "SILVER10") {
+    return ["SILVER", "GOLD", "PLATINUM"].includes(tier);
+  }
+  if (code === "GOLD25") {
+    return ["GOLD", "PLATINUM"].includes(tier);
+  }
+  if (code === "PLATINUM50" || code === "PLATINUM10") {
+    return ["PLATINUM"].includes(tier);
+  }
+  if (code === "GOLD5") {
+    return ["GOLD", "PLATINUM"].includes(tier);
+  }
+  return true;
+}
+
 /* ─── Coupon Autocomplete widget ──────────────────────────────────────────── */
-function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
-  const [inputValue, setInputValue] = useState(appliedCoupon?.code ?? "");
+function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, cartItems = [] }) {
+  const [isOpen, setIsOpen] = useState(false);
   const [allCoupons, setAllCoupons] = useState([]);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [selectedCoupons, setSelectedCoupons] = useState([]);
+  const [manualCode, setManualCode] = useState("");
+  const [manualError, setManualError] = useState("");
+  const [manualSuccess, setManualSuccess] = useState("");
   const [validating, setValidating] = useState(false);
-  const [couponError, setCouponError] = useState("");
-  const [couponSuccess, setCouponSuccess] = useState("");
-  const inputRef = useRef(null);
-  const containerRef = useRef(null);
 
   /* Load all available coupons once */
   useEffect(() => {
@@ -233,268 +284,422 @@ function CouponPicker({ onApply, appliedCoupon, onRemove, subtotal }) {
       .catch(() => {});
   }, []);
 
-  /* Close dropdown when clicking outside */
-  useEffect(() => {
-    function handler(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setDropdownOpen(false);
-      }
+  // Khi mở dialog, clone appliedCoupons sang selectedCoupons
+  function openCouponPicker() {
+    setSelectedCoupons([...appliedCoupons]);
+    setManualCode("");
+    setManualError("");
+    setManualSuccess("");
+    setIsOpen(true);
+  }
+
+  function handleCouponPickerOpenChange(nextOpen) {
+    if (nextOpen) {
+      openCouponPicker();
+      return;
     }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
-  /* Sync input when appliedCoupon is removed externally */
-  useEffect(() => {
-    if (appliedCoupon) return undefined;
+    setIsOpen(false);
+  }
 
-    let cancelled = false;
-    Promise.resolve().then(() => {
-      if (cancelled) return;
-      setInputValue("");
-      setCouponError("");
-      setCouponSuccess("");
+  // Phân loại các coupon có trong hệ thống
+  const { freeshipCoupons, orderCoupons, productCoupons } = useMemo(() => {
+    const freeship = [];
+    const order = [];
+    const product = [];
+
+    allCoupons.forEach((c) => {
+      const type = c.couponType || "ORDER_DISCOUNT";
+      if (type === "FREESHIP" || isFreeshipCoupon(c)) {
+        freeship.push(c);
+      } else if (type === "PRODUCT_DISCOUNT") {
+        product.push(c);
+      } else {
+        order.push(c);
+      }
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [appliedCoupon]);
+    return { freeshipCoupons: freeship, orderCoupons: order, productCoupons: product };
+  }, [allCoupons]);
 
-  /* Filter coupons by input */
-  const filtered = useMemo(() => {
-    const q = inputValue.trim().toLowerCase();
-    if (!q) return allCoupons;
-    return allCoupons.filter(
-      (c) =>
-        c.code.toLowerCase().includes(q) ||
-        deriveLabel(c.code).toLowerCase().includes(q)
-    );
-  }, [inputValue, allCoupons]);
+  // Kiểm tra trạng thái hợp lệ và lý do vô hiệu hóa của coupon
+  function getCouponStatusInfo(coupon) {
+    // 1. Kiểm tra hạng thành viên
+    if (!checkCouponTierAllowed(coupon.code, membershipTier)) {
+      const required = coupon.code.startsWith("SILVER") ? "Bạc" : coupon.code.startsWith("GOLD") ? "Vàng" : "Kim Cương";
+      return { disabled: true, reason: `Yêu cầu hạng: ${required} trở lên` };
+    }
+    // 2. Kiểm tra giá trị đơn tối thiểu
+    if (coupon.minOrderValue > 0 && subtotal < coupon.minOrderValue) {
+      return { disabled: true, reason: `Chưa đạt đơn tối thiểu ${formatNumber(coupon.minOrderValue)}đ` };
+    }
+    // 3. Kiểm tra sản phẩm trong giỏ hàng (với PRODUCT_DISCOUNT)
+    if (coupon.couponType === "PRODUCT_DISCOUNT" && coupon.productId != null) {
+      const hasProduct = cartItems.some(item => Number(item.product?.id) === Number(coupon.productId));
+      if (!hasProduct) {
+        return { disabled: true, reason: "Giỏ hàng không chứa sản phẩm áp dụng mã" };
+      }
+    }
+    return { disabled: false, reason: null };
+  }
 
-  async function validateAndApply(code) {
-    const trimmed = (code || inputValue).trim();
-    if (!trimmed) return;
+  // Toggle tick chọn coupon
+  function handleToggleCoupon(coupon) {
+    const info = getCouponStatusInfo(coupon);
+    if (info.disabled) return;
 
-    setDropdownOpen(false);
+    const isSelected = selectedCoupons.some(c => c.id === coupon.id);
+    if (isSelected) {
+      // Bỏ chọn
+      setSelectedCoupons(selectedCoupons.filter(c => c.id !== coupon.id));
+    } else {
+      // Chọn mã mới: Lọc bỏ các mã cùng loại/slot rồi push mã mới
+      const newKey = getCouponStackKey(coupon);
+      let next = selectedCoupons.filter(c => getCouponStackKey(c) !== newKey);
+      next.push(coupon);
+      setSelectedCoupons(next);
+    }
+  }
+
+  // Nhập mã thủ công và tự động tick chọn
+  async function handleApplyManual() {
+    const code = manualCode.trim();
+    if (!code) return;
+
     setValidating(true);
-    setCouponError("");
-    setCouponSuccess("");
+    setManualError("");
+    setManualSuccess("");
 
     try {
-      const apiResp = await promotionService.validateCouponCode(trimmed);
-
+      const apiResp = await promotionService.validateCouponCode(code);
       if (!apiResp.success || !apiResp.data) {
-        setCouponError(apiResp.message || "Mã giảm giá không hợp lệ.");
-        onApply(null);
+        setManualError(apiResp.message || "Mã giảm giá không hợp lệ.");
       } else {
         const coupon = apiResp.data;
-        setInputValue(coupon.code);
-        setCouponSuccess(getCouponSuccessMessage(coupon));
-        onApply(coupon);
+        const info = getCouponStatusInfo(coupon);
+        if (info.disabled) {
+          setManualError(`Không thể áp dụng: ${info.reason}`);
+          return;
+        }
+
+        // Tự động add vào danh sách allCoupons nếu chưa có để hiển thị
+        if (!allCoupons.some(c => c.id === coupon.id)) {
+          setAllCoupons(prev => [coupon, ...prev]);
+        }
+
+        // Tick chọn
+        const newKey = getCouponStackKey(coupon);
+        const next = selectedCoupons.filter(c => getCouponStackKey(c) !== newKey);
+        next.push(coupon);
+        setSelectedCoupons(next);
+
+        setManualCode("");
+        setManualSuccess(`Đã áp dụng mã ${coupon.code} thành công.`);
       }
     } catch (err) {
-      setCouponError(
-        err?.message || "Mã giảm giá không tồn tại hoặc đã hết hạn."
-      );
-      onApply(null);
+      setManualError(err?.message || "Mã giảm giá không hợp lệ hoặc đã hết hạn.");
     } finally {
       setValidating(false);
     }
   }
 
-  function handleSelect(coupon) {
-    setInputValue(coupon.code);
-    setDropdownOpen(false);
-    validateAndApply(coupon.code);
+  function handleConfirm() {
+    onApply(selectedCoupons);
+    setIsOpen(false);
   }
 
-  function handleRemove() {
-    setInputValue("");
-    setCouponError("");
-    setCouponSuccess("");
-    onRemove();
+  function handleRemoveCoupon(couponToRemove) {
+    const nextCoupons = appliedCoupons.filter(c => c.id !== couponToRemove.id);
+    onApply(nextCoupons);
   }
-
-  const hasApplied = !!appliedCoupon;
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor="coupon-code">Mã giảm giá</Label>
-
-      <div ref={containerRef} className="relative">
-        {/* Input row */}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <TicketPercent className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-emerald-500" />
-            <input
-              ref={inputRef}
-              id="coupon-code"
-              type="text"
-              value={inputValue}
-              disabled={hasApplied}
-              placeholder={hasApplied ? "" : "Nhập hoặc chọn mã giảm giá"}
-              className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white pl-9 pr-4 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-              onChange={(e) => {
-                setInputValue(e.target.value);
-                setCouponError("");
-                setCouponSuccess("");
-                setDropdownOpen(true);
-              }}
-              onFocus={() => !hasApplied && setDropdownOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  validateAndApply();
-                }
-                if (e.key === "Escape") setDropdownOpen(false);
-              }}
-            />
-          </div>
-
-          {hasApplied ? (
-            <button
-              type="button"
-              onClick={handleRemove}
-              title="Bỏ mã giảm giá"
-              className="flex h-10 items-center gap-1.5 rounded-[8px] border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-600 transition hover:bg-red-100"
-            >
-              <X className="size-3.5" />
-              Bỏ mã
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={validating || !inputValue.trim()}
-              onClick={() => validateAndApply()}
-              className="flex h-10 items-center gap-1.5 rounded-[8px] bg-slate-950 px-3 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {validating ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <BadgePercent className="size-3.5" />
-              )}
-              Áp dụng
-            </button>
-          )}
-        </div>
-
-        {/* Applied coupon badge */}
-        {hasApplied && (
-          <div className="mt-2 flex items-center gap-2 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2">
-            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-            <span className="flex-1 font-mono text-sm font-black tracking-wider text-emerald-800">
-              {appliedCoupon.code}
-            </span>
-            <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
-              {getCouponBadgeText(appliedCoupon)}
-            </span>
-          </div>
-        )}
-
-        {/* Dropdown */}
-        {dropdownOpen && !hasApplied && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-[8px] border border-emerald-100 bg-white shadow-[0_16px_42px_rgba(15,61,38,0.12)]">
-            {/* Search hint */}
-            <div className="flex items-center gap-2 border-b border-emerald-50 px-3 py-2 text-xs font-semibold text-slate-400">
-              <Search className="size-3" />
-              {filtered.length} voucher khả dụng
-            </div>
-
-            <ul className="max-h-64 overflow-y-auto py-1">
-              {filtered.length === 0 ? (
-                <li className="px-4 py-3 text-sm font-semibold text-slate-400">
-                  Không tìm thấy voucher phù hợp.
-                </li>
-              ) : (
-                filtered.map((coupon) => {
-                  const label = deriveLabel(coupon.code);
-                  const freeship = isFreeshipCoupon(coupon);
-                  const discountAmt =
-                    subtotal > 0 ? getEstimatedDiscountAmount(coupon, subtotal) : null;
-
-                  return (
-                    <li key={coupon.id}>
-                      <button
-                        type="button"
-                        onClick={() => handleSelect(coupon)}
-                        className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-emerald-50"
-                      >
-                        {/* Icon */}
-                        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-emerald-100 text-emerald-700">
-                          <Tag className="size-4" />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate font-black text-slate-900">
-                              {label}
-                            </p>
-                            <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
-                              {getCouponBadgeText(coupon)}
-                            </span>
-                          </div>
-
-                          <p className="mt-0.5 font-mono text-xs font-bold tracking-widest text-emerald-700">
-                            {coupon.code}
-                          </p>
-
-                          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-400">
-                            {freeship && (
-                              <span className="flex items-center gap-1 text-emerald-600">
-                                <BadgePercent className="size-3" />
-                                Miễn phí vận chuyển
-                              </span>
-                            )}
-                            {!freeship && discountAmt != null && discountAmt > 0 && (
-                              <span className="flex items-center gap-1 text-emerald-600">
-                                <BadgePercent className="size-3" />
-                                Giảm {formatCurrency(discountAmt)}
-                              </span>
-                            )}
-                            {coupon.minOrderValue && (
-                              <span className="flex items-center gap-1">
-                                Đơn tối thiểu {formatCurrency(coupon.minOrderValue)}
-                              </span>
-                            )}
-                            {coupon.expiresAt && (
-                              <span className="flex items-center gap-1">
-                                <CalendarClock className="size-3" />
-                                HSD: {formatDate(coupon.expiresAt)}
-                              </span>
-                            )}
-                            {coupon.usageLimit != null && (
-                              <span>
-                                Còn{" "}
-                                {coupon.usageLimit - (coupon.timesUsed ?? 0)}{" "}
-                                lượt
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })
-              )}
-            </ul>
-          </div>
-        )}
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-black text-slate-800">Mã giảm giá</Label>
+        <button
+          type="button"
+          onClick={openCouponPicker}
+          className="text-xs font-black text-emerald-600 hover:text-emerald-700 transition flex items-center gap-1.5"
+        >
+          <TicketPercent className="size-4" />
+          Chọn hoặc nhập mã
+        </button>
       </div>
 
-      {/* Status messages */}
-      {couponError && (
-        <p className="flex items-center gap-1.5 text-xs font-bold text-red-600">
-          <X className="size-3.5" />
-          {couponError}
-        </p>
+      {/* Applied coupons badges list */}
+      {appliedCoupons.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {appliedCoupons.map((coupon) => (
+            <div
+              key={coupon.id}
+              className="flex items-center gap-1.5 rounded-[8px] border border-emerald-200 bg-emerald-50 pl-2.5 pr-1.5 py-1.5 shadow-sm"
+            >
+              <div className="flex flex-col">
+                <span className="font-mono text-xs font-black text-emerald-800 tracking-wider">
+                  {coupon.code}
+                </span>
+                <span className="text-[9px] font-bold text-slate-400 mt-0.5">
+                  {coupon.couponType === "FREESHIP" ? "Miễn phí vận chuyển" :
+                    coupon.couponType === "PRODUCT_DISCOUNT" ? "Giảm giá sản phẩm" : "Giảm giá đơn hàng"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleRemoveCoupon(coupon)}
+                title={`Gỡ mã ${coupon.code}`}
+                className="flex size-7 items-center justify-center rounded-md text-slate-400 hover:bg-emerald-100 hover:text-emerald-800 transition"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div
+          onClick={openCouponPicker}
+          className="cursor-pointer border border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/20 rounded-[8px] p-3 text-center transition-all"
+        >
+          <p className="text-xs font-semibold text-slate-500 flex items-center justify-center gap-1.5">
+            <TicketPercent className="size-4 text-emerald-500" />
+            Nhấn vào đây để chọn mã giảm giá & freeship!
+          </p>
+        </div>
       )}
-      {couponSuccess && !couponError && (
-        <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-          <CheckCircle2 className="size-3.5" />
-          {couponSuccess}
-        </p>
-      )}
+
+      {/* Coupon Selection Dialog */}
+      <Dialog open={isOpen} onOpenChange={handleCouponPickerOpenChange}>
+        <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden bg-slate-50">
+          <div className="p-5 bg-white border-b border-slate-100">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <TicketPercent className="size-5 text-emerald-500" />
+                AgriMarket Voucher
+              </DialogTitle>
+            </DialogHeader>
+
+            {/* Manual input code */}
+            <div className="mt-4 flex gap-2">
+              <input
+                type="text"
+                value={manualCode}
+                placeholder="Nhập mã giảm giá..."
+                className="h-10 flex-1 rounded-[8px] border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                onChange={(e) => {
+                  setManualCode(e.target.value);
+                  setManualError("");
+                  setManualSuccess("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleApplyManual();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={validating || !manualCode.trim()}
+                onClick={handleApplyManual}
+                className="h-10 px-4 rounded-[8px] bg-slate-950 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {validating ? <Loader2 className="size-3.5 animate-spin" /> : "Áp dụng"}
+              </button>
+            </div>
+            {manualError && (
+              <p className="mt-1.5 text-xs font-bold text-rose-600 flex items-center gap-1">
+                <TriangleAlert className="size-3.5" />
+                {manualError}
+              </p>
+            )}
+            {manualSuccess && (
+              <p className="mt-1.5 text-xs font-bold text-emerald-600 flex items-center gap-1">
+                <CheckCircle2 className="size-3.5" />
+                {manualSuccess}
+              </p>
+            )}
+          </div>
+
+          {/* Voucher list wrapper */}
+          <div className="max-h-[350px] overflow-y-auto p-5 space-y-5">
+            {/* Freeship Section */}
+            {freeshipCoupons.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã vận chuyển (Chọn tối đa 1)</p>
+                <div className="grid gap-2.5">
+                  {freeshipCoupons.map((coupon) => {
+                    const status = getCouponStatusInfo(coupon);
+                    const isSelected = selectedCoupons.some(c => c.id === coupon.id);
+                    return (
+                      <CouponCard
+                        key={coupon.id}
+                        coupon={coupon}
+                        isSelected={isSelected}
+                        disabled={status.disabled}
+                        disabledReason={status.reason}
+                        onToggle={() => handleToggleCoupon(coupon)}
+                        icon={<Truck className="size-5" />}
+                        themeColor="bg-sky-500"
+                        subtotal={subtotal}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Order discount Section */}
+            {orderCoupons.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã đơn hàng & VIP (Chọn tối đa 1)</p>
+                <div className="grid gap-2.5">
+                  {orderCoupons.map((coupon) => {
+                    const status = getCouponStatusInfo(coupon);
+                    const isSelected = selectedCoupons.some(c => c.id === coupon.id);
+                    return (
+                      <CouponCard
+                        key={coupon.id}
+                        coupon={coupon}
+                        isSelected={isSelected}
+                        disabled={status.disabled}
+                        disabledReason={status.reason}
+                        onToggle={() => handleToggleCoupon(coupon)}
+                        icon={<TicketPercent className="size-5" />}
+                        themeColor="bg-amber-500"
+                        subtotal={subtotal}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Product discount Section */}
+            {productCoupons.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã sản phẩm (Chọn chồng nhiều mã khác sản phẩm)</p>
+                <div className="grid gap-2.5">
+                  {productCoupons.map((coupon) => {
+                    const status = getCouponStatusInfo(coupon);
+                    const isSelected = selectedCoupons.some(c => c.id === coupon.id);
+                    return (
+                      <CouponCard
+                        key={coupon.id}
+                        coupon={coupon}
+                        isSelected={isSelected}
+                        disabled={status.disabled}
+                        disabledReason={status.reason}
+                        onToggle={() => handleToggleCoupon(coupon)}
+                        icon={<Tag className="size-5" />}
+                        themeColor="bg-emerald-500"
+                        subtotal={subtotal}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {allCoupons.length === 0 && (
+              <div className="text-center py-6">
+                <TicketPercent className="size-8 text-slate-300 mx-auto" />
+                <p className="text-sm font-semibold text-slate-400 mt-2">Hiện tại không có voucher nào khả dụng.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer controls */}
+          <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">
+              Đã chọn <span className="text-emerald-600 font-black">{selectedCoupons.length}</span> mã
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="h-9 px-4 rounded-[8px] border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-600 transition"
+              >
+                Trở lại
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="h-9 px-5 rounded-[8px] bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white transition"
+              >
+                Đồng ý
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Thẻ card render voucher cực kỳ đẹp mắt
+function CouponCard({ coupon, isSelected, disabled, disabledReason, onToggle, icon, themeColor, subtotal }) {
+  const label = deriveLabel(coupon.code);
+  const discountAmt = subtotal > 0 ? getEstimatedDiscountAmount(coupon, subtotal) : 0;
+
+  return (
+    <div
+      onClick={() => !disabled && onToggle()}
+      className={`relative flex rounded-[12px] border bg-white overflow-hidden min-h-[90px] shadow-sm select-none transition-all duration-200 ${
+        disabled
+          ? "opacity-50 cursor-not-allowed border-slate-100 bg-slate-50"
+          : isSelected
+          ? "border-emerald-500 ring-2 ring-emerald-500/10 cursor-pointer"
+          : "border-slate-100 hover:border-slate-200 cursor-pointer"
+      }`}
+    >
+      {/* Left side ticket style */}
+      <div className={`w-20 shrink-0 flex flex-col items-center justify-center text-white ${disabled ? "bg-slate-400" : themeColor} px-2`}>
+        {icon}
+        <span className="text-[10px] font-black tracking-widest mt-1 uppercase">{coupon.couponType === "FREESHIP" ? "Ship" : "Save"}</span>
+      </div>
+
+      {/* Ticket circle hole effect */}
+      <div className="absolute left-[76px] top-1/2 -translate-y-1/2 flex flex-col justify-between h-5 w-2 z-10">
+        <div className="w-2 h-2.5 rounded-r-full bg-slate-50 border-r border-t border-b border-slate-100"></div>
+        <div className="w-2 h-2.5 rounded-r-full bg-slate-50 border-r border-t border-b border-slate-100"></div>
+      </div>
+
+      {/* Right Content */}
+      <div className="flex-1 p-3 pl-5 flex flex-col justify-between min-w-0">
+        <div>
+          <div className="flex items-start justify-between gap-2">
+            <h4 className="text-sm font-black text-slate-800 truncate">{label}</h4>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              disabled={disabled}
+              onChange={() => {}} // Div handle click
+              className="size-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+          </div>
+          <p className="font-mono text-xs font-black text-emerald-600 mt-0.5 tracking-wider uppercase">{coupon.code}</p>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px] font-bold text-slate-400">
+          {disabledReason ? (
+            <span className="text-rose-500 flex items-center gap-1 font-black">
+              <TriangleAlert className="size-3" />
+              {disabledReason}
+            </span>
+          ) : (
+            <>
+              {coupon.minOrderValue > 0 ? (
+                <span>Đơn tối thiểu {formatNumber(coupon.minOrderValue)}đ</span>
+              ) : (
+                <span>Mọi giá trị đơn hàng</span>
+              )}
+              {discountAmt > 0 && (
+                <span className="text-emerald-700 font-black">Giảm ~{formatNumber(discountAmt)}đ</span>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -510,7 +715,11 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [addressBookVersion, setAddressBookVersion] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("cash");
-  const [appliedCoupon, setAppliedCoupon] = useState(null); // CouponResponse | null
+  const [appliedCoupons, setAppliedCoupons] = useState([]); // CouponResponse[]
+  const [guestEmail, setGuestEmail] = useState("");
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [membershipTier, setMembershipTier] = useState("BRONZE");
+  const [usePoints, setUsePoints] = useState(false);
   const [addressForm, setAddressForm] = useState(() =>
     createBlankAddressForm()
   );
@@ -539,6 +748,7 @@ export default function CheckoutPage() {
   const cartTotal = Number(cart?.totalAmount || 0);
   const cartQuantity = Number(cart?.totalQuantity || 0);
   const previewShippingAddress = preview?.shippingAddress || null;
+  const isGuestCheckout = authStatus === "guest";
 
   const selectedProvinceForForm = useMemo(
     () => findAddressOption(VIETNAM_PROVINCES, addressForm.provinceCode),
@@ -579,39 +789,87 @@ export default function CheckoutPage() {
   const summary = useMemo(() => {
     const subtotal = Number(preview?.subtotal ?? cartTotal);
     const discountAmount = Number(preview?.discountAmount ?? 0);
+    const couponDiscountAmount = Number(
+      preview?.couponDiscountAmount ?? discountAmount
+    );
+    const pointsDiscount = Number(preview?.pointsDiscount ?? 0);
+    const pointsUsed = Number(preview?.pointsUsed ?? 0);
     const shippingFee = Number(preview?.shippingFee ?? 0);
     const totalPrice = Number(
       preview?.totalPrice ?? subtotal - discountAmount + shippingFee
     );
 
-    return { subtotal, discountAmount, shippingFee, totalPrice };
+    return {
+      subtotal,
+      discountAmount,
+      couponDiscountAmount,
+      pointsDiscount,
+      pointsUsed,
+      shippingFee,
+      totalPrice,
+    };
   }, [cartTotal, preview]);
 
-  const couponCode = appliedCoupon?.code ?? "";
+  const couponCode = appliedCoupons.map((c) => c.code).join(",");
 
-  const checkoutPayload = useMemo(
-    () => ({
+  const checkoutPayload = useMemo(() => {
+    if (isGuestCheckout) {
+      return {
+        paymentMethod: "cash",
+        items: cartItems.map((item) => ({
+          productId: Number(item.productId),
+          quantity: Number(item.quantity || 0),
+        })),
+        guestFullName: addressForm.fullName.trim(),
+        guestPhone: addressForm.phone.trim(),
+        guestEmail: guestEmail.trim() || undefined,
+        guestAddress: buildDetailedAddress(addressForm),
+        guestCity: addressForm.provinceName.trim(),
+      };
+    }
+
+    return {
       shippingAddressId: selectedAddressId ? Number(selectedAddressId) : null,
       paymentMethod,
       couponCode: couponCode.trim() || undefined,
-    }),
-    [couponCode, paymentMethod, selectedAddressId]
-  );
-  const checkoutQuoteReady =
-    Boolean(preview) &&
-    String(previewShippingAddress?.id || "") ===
-      String(checkoutPayload.shippingAddressId || "");
+      usePoints,
+    };
+  }, [
+    addressForm,
+    cartItems,
+    couponCode,
+    guestEmail,
+    isGuestCheckout,
+    paymentMethod,
+    selectedAddressId,
+    usePoints,
+  ]);
+  const isAddressSyncing = String(previewShippingAddress?.id || "") !== String(checkoutPayload.shippingAddressId || "");
+  const checkoutQuoteReady = Boolean(preview) && !isAddressSyncing;
   const hasServerDiscount = checkoutQuoteReady && summary.discountAmount > 0;
   const hasServerFreeShipping =
     checkoutQuoteReady && cartItems.length > 0 && summary.shippingFee === 0;
-  const pendingAmountLabel = previewing ? "Đang tính..." : "Đang tính toán...";
-  const totalAmountLabel = checkoutQuoteReady
-    ? formatCurrency(summary.totalPrice)
-    : pendingAmountLabel;
+  const totalAmountLabel = cartItems.length === 0 ? "0đ" : (preview ? formatCurrency(summary.totalPrice) : "Đang tính...");
 
   const requestCheckoutPreview = useCallback(
     async ({ showErrors = true, clearMessages = false } = {}) => {
-      if (!checkoutPayload.shippingAddressId) {
+      if (isGuestCheckout) {
+        const hasGuestAddress =
+          checkoutPayload.guestFullName &&
+          checkoutPayload.guestPhone &&
+          checkoutPayload.guestCity &&
+          checkoutPayload.guestAddress &&
+          addressForm.districtCode &&
+          addressForm.wardCode;
+
+        if (!hasGuestAddress || !validateAddress()) {
+          setPreview(null);
+          if (showErrors) {
+            setError("Vui long nhap day du ten, so dien thoai va dia chi nhan hang.");
+          }
+          return null;
+        }
+      } else if (!checkoutPayload.shippingAddressId) {
         setPreview(null);
         if (showErrors) {
           setError("Vui lòng chọn hoặc thêm địa chỉ giao hàng.");
@@ -637,7 +895,9 @@ export default function CheckoutPage() {
       }
 
       try {
-        const response = await orderService.previewCheckout(checkoutPayload);
+        const response = isGuestCheckout
+          ? await orderService.previewGuestCheckout(checkoutPayload)
+          : await orderService.previewCheckout(checkoutPayload);
 
         if (previewRequestSeqRef.current !== requestSeq) {
           return null;
@@ -665,7 +925,7 @@ export default function CheckoutPage() {
         }
       }
     },
-    [cartItems.length, checkoutPayload, couponCode]
+    [addressForm.districtCode, addressForm.wardCode, cartItems.length, checkoutPayload, couponCode, isGuestCheckout]
   );
 
   /* Load cart + addresses on mount */
@@ -678,7 +938,18 @@ export default function CheckoutPage() {
 
       if (!session) {
         if (!cancelled) {
-          setAuthStatus("unauthenticated");
+          setAuthStatus("guest");
+          setCart(mapGuestCartItemsToCartResponse(readGuestCart()));
+          setAddresses([]);
+          setSelectedAddressId("");
+          setPaymentMethod("cash");
+          setAppliedCoupons([]);
+          setUsePoints(false);
+          setLoyaltyPoints(0);
+          setMembershipTier("GUEST");
+          setShowAddressForm(true);
+          setAddressForm(createBlankAddressForm());
+          setPreview(null);
           setLoading(false);
         }
         return;
@@ -692,15 +963,17 @@ export default function CheckoutPage() {
       }
 
       try {
-        const [cartResponse, addressResponse] = await Promise.all([
+        const [cartResponse, addressResponse, profileResponse] = await Promise.all([
           cartService.getCart(),
           shippingAddressService.getAddresses(),
+          profileService.getProfile(),
         ]);
         const nextAddresses = Array.isArray(addressResponse)
           ? addressResponse
           : [];
         const defaultAddress =
           nextAddresses.find((a) => a.defaultAddress) || nextAddresses[0];
+        const profileData = profileResponse?.data ?? profileResponse;
 
         if (!cancelled) {
           setCart(cartResponse);
@@ -708,6 +981,8 @@ export default function CheckoutPage() {
           setSelectedAddressId(
             defaultAddress?.id ? String(defaultAddress.id) : ""
           );
+          setLoyaltyPoints(profileData?.loyaltyPoints || 0);
+          setMembershipTier(profileData?.membershipTier || "BRONZE");
           setShowAddressForm(nextAddresses.length === 0);
           setAddressForm(createBlankAddressForm());
           setPreview(null);
@@ -823,6 +1098,11 @@ export default function CheckoutPage() {
 
   async function handleSaveAddress(event) {
     event.preventDefault();
+    if (isGuestCheckout) {
+      await requestCheckoutPreview({ showErrors: true, clearMessages: true });
+      return;
+    }
+
     if (!validateAddress()) return;
 
     setSavingAddress(true);
@@ -1085,6 +1365,7 @@ export default function CheckoutPage() {
       }
 
       if (
+        !isGuestCheckout &&
         String(currentPreview.shippingAddress?.id || "") !==
         String(checkoutPayload.shippingAddressId || "")
       ) {
@@ -1099,20 +1380,27 @@ export default function CheckoutPage() {
         return;
       }
 
-      const order = await orderService.checkout(checkoutPayload);
+      const order = isGuestCheckout
+        ? await orderService.guestCheckout(checkoutPayload)
+        : await orderService.checkout(checkoutPayload);
 
       setCreatedOrder(order);
       setPreview(null);
 
-      if (paymentMethod === "vnpay") {
+      if (!isGuestCheckout && paymentMethod === "vnpay") {
         setNotice(`Đã tạo đơn hàng ${order.trackingNumber || '#' + order.id}. Đang chuyển sang VNPay...`);
         const payment = await orderService.createVnpayPaymentUrl(order.id);
         window.location.assign(payment.paymentUrl);
         return;
       }
 
-      const nextCart = await cartService.getCart();
-      setCart(nextCart);
+      if (isGuestCheckout) {
+        clearGuestCart();
+        setCart(mapGuestCartItemsToCartResponse([]));
+      } else {
+        const nextCart = await cartService.getCart();
+        setCart(nextCart);
+      }
       setNotice(`Đã tạo đơn hàng ${order.trackingNumber || '#' + order.id}.`);
     } catch (err) {
       setError(getErrorMessage(err, "Không thể tạo đơn hàng."));
@@ -1155,9 +1443,10 @@ export default function CheckoutPage() {
       <div className="mx-auto w-full max-w-[1480px] space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         <AdminPageHeader
           title="Thanh toán"
-          description="Kiểm tra giỏ hàng, chọn địa chỉ giao hàng, áp mã giảm giá và tạo đơn hàng thật qua backend."
+          description="Kiểm tra lại giỏ hàng, chọn thông tin giao nhận và áp dụng các chương trình ưu đãi giảm giá."
           image="/market-assets/fresh-market-hero.png"
-          badges={["Customer API", "Cart", "Checkout"]}
+          badges={["Thanh toán nhanh", "Bảo mật", "Giao hàng hỏa tốc"]}
+          slogan="Nông sản xanh, sạch, tươi mới mỗi ngày giao tận tay gia đình bạn."
         />
 
         {authStatus === "unauthenticated" ? (
@@ -1184,6 +1473,95 @@ export default function CheckoutPage() {
               Đang tải dữ liệu thanh toán...
             </p>
           </section>
+        ) : createdOrder ? (
+          <section className="rounded-[8px] border border-emerald-100 bg-white p-8 text-center shadow-[0_16px_42px_rgba(15,61,38,0.07)] max-w-2xl mx-auto space-y-6 animate-fade-in">
+            <div className="flex size-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mx-auto">
+              <CheckCircle2 className="size-10" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-emerald-950">
+                Đơn đặt hàng của bạn đã được gửi đi!
+              </h2>
+              <p className="mt-2 text-sm text-slate-500 font-semibold">
+                Cảm ơn bạn đã mua sắm tại AgriMarket. Đơn hàng của bạn đang được tiếp nhận và xử lý.
+              </p>
+            </div>
+
+            <div className="border-t border-b border-dashed border-slate-200 py-4 my-6 text-left space-y-3 font-semibold text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Mã đơn hàng:</span>
+                <span className="font-bold text-slate-900">#{createdOrder.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Mã vận đơn GHN:</span>
+                <span className="font-mono font-bold text-emerald-750">{createdOrder.trackingNumber || "Chờ xử lý"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Phương thức thanh toán:</span>
+                <span className="font-bold text-slate-900">
+                  {paymentMethod === "vnpay" ? "VNPay Sandbox" : 
+                   paymentMethod === "paypal" ? "PayPal" : "Thanh toán khi nhận hàng (COD)"}
+                </span>
+              </div>
+              {createdOrder.totalPrice != null && (
+                <div className="flex justify-between border-t border-slate-100 pt-3">
+                  <span className="text-slate-400">Tổng thanh toán:</span>
+                  <span className="font-black text-emerald-700 text-base">{formatCurrency(createdOrder.totalPrice)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Render Shipping Address Details */}
+            {createdOrder.shippingAddress && (
+              <div className="rounded-[8px] border border-sky-100 bg-sky-50/50 p-4 text-left text-sm text-sky-900 space-y-1">
+                <p className="font-black text-[11px] uppercase tracking-wider text-sky-850">Địa chỉ nhận hàng</p>
+                <p className="font-bold text-slate-900 mt-1">
+                  {createdOrder.shippingAddress.fullName} - {createdOrder.shippingAddress.phone}
+                </p>
+                <p className="text-slate-700 text-xs">
+                  {createdOrder.shippingAddress.address}, {createdOrder.shippingAddress.city}
+                </p>
+              </div>
+            )}
+
+            {/* Render Order Products Details */}
+            {createdOrder.items && createdOrder.items.length > 0 && (
+              <div className="rounded-[8px] border border-emerald-100/50 bg-emerald-50/10 p-4 text-left text-sm space-y-2">
+                <p className="font-black text-[11px] uppercase tracking-wider text-emerald-800 mb-1">Chi tiết đơn đặt hàng</p>
+                <div className="divide-y divide-slate-100">
+                  {createdOrder.items.map((item) => (
+                    <div key={item.id} className="flex justify-between py-2.5 items-center text-xs">
+                      <div className="space-y-0.5 max-w-[70%]">
+                        <p className="font-bold text-slate-800">{item.productName}</p>
+                        <p className="text-slate-400">Đơn giá: {formatCurrency(item.price)}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-semibold text-slate-500">x{item.quantity}</span>
+                        <p className="font-bold text-slate-800 mt-0.5">{formatCurrency(item.lineTotal || (item.price * item.quantity))}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => router.push("/")}
+                className="h-11 px-6 rounded-[8px] bg-emerald-600 hover:bg-emerald-700 text-sm font-bold text-white transition shadow-sm"
+              >
+                Tiếp tục mua sắm
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/profile?tab=orders")}
+                className="h-11 px-6 rounded-[8px] border border-slate-200 hover:bg-slate-50 text-sm font-bold text-slate-700 transition"
+              >
+                Xem đơn mua
+              </button>
+            </div>
+          </section>
         ) : (
           <form
             onSubmit={handleSubmitOrder}
@@ -1191,25 +1569,6 @@ export default function CheckoutPage() {
           >
             {/* ── LEFT column ─────────────────────────────────────────── */}
             <div className="space-y-5">
-              {createdOrder && (
-                <section className="rounded-[8px] border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
-                  <CheckCircle2 className="size-8" />
-                  <h2 className="mt-3 text-xl font-black">
-                    Đã tạo đơn hàng {createdOrder.trackingNumber || '#' + createdOrder.id}
-                  </h2>
-                  <p className="mt-2 text-sm font-semibold">
-                    Trạng thái hiện tại: {createdOrder.status}. Admin có thể xử
-                    lý đơn này ở batch tiếp theo.
-                  </p>
-                  <Button
-                    type="button"
-                    className="mt-4 bg-emerald-600 font-bold hover:bg-emerald-700"
-                    onClick={() => router.push("/")}
-                  >
-                    Tiếp tục mua hàng
-                  </Button>
-                </section>
-              )}
 
               {/* Cart items */}
               <section className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
@@ -1291,11 +1650,10 @@ export default function CheckoutPage() {
                       return (
                         <label
                           key={address.id}
-                          className={`cursor-pointer rounded-[8px] border p-4 transition ${
-                            active
+                          className={`cursor-pointer rounded-[8px] border p-4 transition ${active
                               ? "border-emerald-500 bg-emerald-50"
                               : "border-emerald-100 bg-white hover:border-emerald-200"
-                          }`}
+                            }`}
                         >
                           <input
                             type="radio"
@@ -1401,158 +1759,175 @@ export default function CheckoutPage() {
 
                 {/* Add address form */}
                 {showAddressForm && (
-                <div className="mt-5 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 font-black text-emerald-950">
-                      <Plus className="size-4" />
-                      Thêm địa chỉ mới
+                  <div className="mt-5 rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 font-black text-emerald-950">
+                        <Plus className="size-4" />
+                        Thêm địa chỉ mới
+                      </div>
+                      {addresses.length > 0 && (
+                        <button
+                          type="button"
+                          className="flex size-8 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 transition hover:bg-emerald-50"
+                          onClick={closeAddressForm}
+                          title="Đóng form thêm địa chỉ"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      )}
                     </div>
-                    {addresses.length > 0 && (
-                      <button
-                        type="button"
-                        className="flex size-8 items-center justify-center rounded-[8px] border border-emerald-100 bg-white text-emerald-800 transition hover:bg-emerald-50"
-                        onClick={closeAddressForm}
-                        title="Đóng form thêm địa chỉ"
-                      >
-                        <X className="size-4" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="address-full-name">Người nhận</Label>
-                      <Input
-                        id="address-full-name"
-                        value={addressForm.fullName}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="address-full-name">Người nhận</Label>
+                        <Input
+                          id="address-full-name"
+                          value={addressForm.fullName}
+                          onChange={(e) =>
+                            updateAddressForm("fullName", e.target.value)
+                          }
+                          required={showAddressForm}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="address-phone">Số điện thoại</Label>
+                        <Input
+                          id="address-phone"
+                          ref={phoneInputRef}
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={10}
+                          value={addressForm.phone}
+                          onChange={(e) => handlePhoneChange(e.target.value)}
+                          aria-invalid={Boolean(phoneError)}
+                          aria-describedby="address-phone-helper"
+                          className={
+                            phoneError
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                              : undefined
+                          }
+                          pattern={PHONE_PATTERN_SOURCE}
+                          title={PHONE_ERROR_MESSAGE}
+                          placeholder="0987654321"
+                          required={showAddressForm}
+                        />
+                        <p
+                          id="address-phone-helper"
+                          className={`text-xs font-semibold ${phoneError ? "text-red-600" : "text-slate-500"
+                            }`}
+                        >
+                          {phoneError ||
+                            "Nhập 10 chữ số, bắt đầu bằng số 0."}
+                        </p>
+                      </div>
+                      {isGuestCheckout && (
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="guest-email">Email nhan hoa don (khong bat buoc)</Label>
+                          <Input
+                            id="guest-email"
+                            type="email"
+                            value={guestEmail}
+                            onChange={(e) => {
+                              setGuestEmail(e.target.value);
+                              setPreview(null);
+                            }}
+                            placeholder="bo trong neu khong dung email"
+                          />
+                          <p className="text-xs font-semibold text-slate-500">
+                            Khach vang lai van dat duoc hang neu khong nhap email.
+                          </p>
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        <Label htmlFor="address-province">Tỉnh/thành phố</Label>
+                        <select
+                          id="address-province"
+                          value={addressForm.provinceCode}
+                          onChange={(e) => handleProvinceChange(e.target.value)}
+                          required={showAddressForm}
+                          className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                        >
+                          <option value="">Chọn tỉnh/thành phố</option>
+                          {VIETNAM_PROVINCES.map((province) => (
+                            <option key={province.code} value={province.code}>
+                              {getProvinceLabel(province)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="address-district">Quận/huyện</Label>
+                        <select
+                          id="address-district"
+                          value={addressForm.districtCode}
+                          onChange={(e) => handleDistrictChange(e.target.value)}
+                          disabled={!selectedProvinceForForm}
+                          required={showAddressForm}
+                          className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                        >
+                          <option value="">Chọn quận/huyện</option>
+                          {districtOptions.map((district) => (
+                            <option key={district.code} value={district.code}>
+                              {district.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="address-ward">Phường/xã</Label>
+                        <select
+                          id="address-ward"
+                          value={addressForm.wardCode}
+                          onChange={(e) => handleWardChange(e.target.value)}
+                          disabled={!selectedDistrictForForm}
+                          required={showAddressForm}
+                          className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                        >
+                          <option value="">Chọn phường/xã</option>
+                          {wardOptions.map((ward) => (
+                            <option key={ward.code} value={ward.code}>
+                              {ward.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="address-detail">Địa chỉ chi tiết</Label>
+                        <Textarea
+                          id="address-detail"
+                          value={addressForm.address}
+                          onChange={(e) =>
+                            updateAddressForm("address", e.target.value)
+                          }
+                          rows={3}
+                          required={showAddressForm}
+                        />
+                      </div>
+                    </div>
+                    <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={addressForm.defaultAddress}
                         onChange={(e) =>
-                          updateAddressForm("fullName", e.target.value)
+                          updateAddressForm("defaultAddress", e.target.checked)
                         }
-                        required={showAddressForm}
+                        className="size-4 rounded border-emerald-200 text-emerald-600"
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address-phone">Số điện thoại</Label>
-                      <Input
-                        id="address-phone"
-                        ref={phoneInputRef}
-                        type="tel"
-                        inputMode="numeric"
-                        maxLength={10}
-                        value={addressForm.phone}
-                        onChange={(e) => handlePhoneChange(e.target.value)}
-                        aria-invalid={Boolean(phoneError)}
-                        aria-describedby="address-phone-helper"
-                        className={
-                          phoneError
-                            ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                            : undefined
-                        }
-                        pattern={PHONE_PATTERN_SOURCE}
-                        title={PHONE_ERROR_MESSAGE}
-                        placeholder="0987654321"
-                        required={showAddressForm}
-                      />
-                      <p
-                        id="address-phone-helper"
-                        className={`text-xs font-semibold ${
-                          phoneError ? "text-red-600" : "text-slate-500"
-                        }`}
-                      >
-                        {phoneError ||
-                          "Nhập 10 chữ số, bắt đầu bằng số 0."}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address-province">Tỉnh/thành phố</Label>
-                      <select
-                        id="address-province"
-                        value={addressForm.provinceCode}
-                        onChange={(e) => handleProvinceChange(e.target.value)}
-                        required={showAddressForm}
-                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                      >
-                        <option value="">Chọn tỉnh/thành phố</option>
-                        {VIETNAM_PROVINCES.map((province) => (
-                          <option key={province.code} value={province.code}>
-                            {getProvinceLabel(province)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address-district">Quận/huyện</Label>
-                      <select
-                        id="address-district"
-                        value={addressForm.districtCode}
-                        onChange={(e) => handleDistrictChange(e.target.value)}
-                        disabled={!selectedProvinceForForm}
-                        required={showAddressForm}
-                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                      >
-                        <option value="">Chọn quận/huyện</option>
-                        {districtOptions.map((district) => (
-                          <option key={district.code} value={district.code}>
-                            {district.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="address-ward">Phường/xã</Label>
-                      <select
-                        id="address-ward"
-                        value={addressForm.wardCode}
-                        onChange={(e) => handleWardChange(e.target.value)}
-                        disabled={!selectedDistrictForForm}
-                        required={showAddressForm}
-                        className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                      >
-                        <option value="">Chọn phường/xã</option>
-                        {wardOptions.map((ward) => (
-                          <option key={ward.code} value={ward.code}>
-                            {ward.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="address-detail">Địa chỉ chi tiết</Label>
-                      <Textarea
-                        id="address-detail"
-                        value={addressForm.address}
-                        onChange={(e) =>
-                          updateAddressForm("address", e.target.value)
-                        }
-                        rows={3}
-                        required={showAddressForm}
-                      />
-                    </div>
+                      Đặt làm địa chỉ mặc định
+                    </label>
+                    <Button
+                      type="button"
+                      className="mt-4 bg-slate-950 font-bold hover:bg-emerald-700"
+                      disabled={savingAddress}
+                      onClick={handleSaveAddress}
+                    >
+                      {savingAddress ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Plus className="size-4" />
+                      )}
+                      Thêm địa chỉ
+                    </Button>
                   </div>
-                  <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={addressForm.defaultAddress}
-                      onChange={(e) =>
-                        updateAddressForm("defaultAddress", e.target.checked)
-                      }
-                      className="size-4 rounded border-emerald-200 text-emerald-600"
-                    />
-                    Đặt làm địa chỉ mặc định
-                  </label>
-                  <Button
-                    type="button"
-                    className="mt-4 bg-slate-950 font-bold hover:bg-emerald-700"
-                    disabled={savingAddress}
-                    onClick={handleSaveAddress}
-                  >
-                    {savingAddress ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Plus className="size-4" />
-                    )}
-                    Thêm địa chỉ
-                  </Button>
-                </div>
                 )}
               </section>
             </div>
@@ -1586,26 +1961,53 @@ export default function CheckoutPage() {
                         setPreview(null);
                       }}
                       className="h-10 w-full rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                      >
-                        <option value="cash">Thanh toán khi nhận hàng</option>
-                        <option value="vnpay">VNPay Sandbox</option>
-                        <option value="paypal">PayPal</option>
-                      </select>
+                    >
+                      <option value="cash">Thanh toán khi nhận hàng</option>
+                      <option value="vnpay">VNPay Sandbox</option>
+                      <option value="paypal">PayPal</option>
+                    </select>
                   </div>
 
                   {/* ── COUPON PICKER ───────────────────────────────────── */}
                   <CouponPicker
-                    appliedCoupon={appliedCoupon}
+                    appliedCoupons={appliedCoupons}
                     subtotal={summary.subtotal}
-                    onApply={(coupon) => {
-                      setAppliedCoupon(coupon);
+                    membershipTier={membershipTier}
+                    cartItems={cartItems}
+                    onApply={(nextCoupons) => {
+                      setAppliedCoupons(nextCoupons);
                       setPreview(null); // reset preview so totals recalculate
                     }}
-                    onRemove={() => {
-                      setAppliedCoupon(null);
-                      setPreview(null);
-                    }}
                   />
+
+                  {/* ── POINTS REDEMPTION ───────────────────────────────── */}
+                  {loyaltyPoints > 0 && (
+                    <div className="flex items-center justify-between rounded-[8px] border border-amber-200 bg-amber-50/50 p-3 shadow-sm transition-all duration-350 hover:border-amber-300">
+                      <div className="flex items-center gap-2">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                          <Coins className="size-4.5" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-black text-amber-900 uppercase tracking-wider">Dùng xu tích lũy</p>
+                          <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                            Sử dụng <span className="font-bold text-amber-700">{formatNumber(loyaltyPoints)} Xu</span> giảm trừ trực tiếp
+                          </p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={usePoints}
+                          onChange={(e) => {
+                            setUsePoints(e.target.checked);
+                            setPreview(null); // Reset preview to recalculate totals
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
+                    </div>
+                  )}
 
                   {/* ── ORDER TOTALS ────────────────────────────────────── */}
                   <div className="rounded-[8px] border border-emerald-100 bg-[#f6faef] p-4">
@@ -1615,58 +2017,70 @@ export default function CheckoutPage() {
                         <span>{formatCurrency(summary.subtotal)}</span>
                       </div>
 
-                      {/* Discount row — highlighted only when nonzero */}
-                      <div
-                        className={`flex justify-between transition-all duration-300 ${
-                          hasServerDiscount
-                            ? "font-black text-emerald-700"
-                            : ""
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5">
-                          {hasServerDiscount && (
-                            <BadgePercent className="size-3.5" />
-                          )}
-                          Giảm giá
-                          {appliedCoupon &&
-                            hasServerDiscount && (
-                            <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                              {getCouponBadgeText(appliedCoupon)}
-                            </span>
-                          )}
-                        </span>
-                        <span
-                          className={
-                            hasServerDiscount
-                              ? "text-emerald-700"
-                              : ""
-                          }
-                        >
-                          {checkoutQuoteReady
-                            ? `-${formatCurrency(summary.discountAmount)}`
-                            : pendingAmountLabel}
-                        </span>
-                      </div>
+                      {/* Coupon Discount row */}
+                      {(() => {
+                        const couponDiscountEst = checkoutQuoteReady
+                          ? summary.couponDiscountAmount
+                          : 0;
+                        const pointsDiscountEst = checkoutQuoteReady
+                          ? summary.pointsDiscount
+                          : 0;
+
+                        return (
+                          <>
+                            {couponDiscountEst > 0 && (
+                              <div className="flex justify-between font-black text-emerald-700">
+                                <span className="flex items-center gap-1.5">
+                                  <BadgePercent className="size-3.5" />
+                                  Mã giảm giá
+                                  {appliedCoupons.map((coupon) => (
+                                    <span key={coupon.id} className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                                      {coupon.code}
+                                    </span>
+                                  ))}
+                                </span>
+                                <span>-{formatCurrency(couponDiscountEst)}</span>
+                              </div>
+                            )}
+
+                            {/* Loyalty Points Discount row */}
+                            {usePoints && pointsDiscountEst > 0 && (
+                              <div className="flex justify-between text-amber-700 font-black">
+                                <span className="flex items-center gap-1.5">
+                                  <Coins className="size-3.5 text-amber-500" />
+                                  Dùng {formatNumber(summary.pointsUsed)} xu tích lũy
+                                </span>
+                                <span>-{formatCurrency(pointsDiscountEst)}</span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
 
                       <div className="flex justify-between">
                         <span>Phí giao hàng</span>
-                        <span>
-                          {!checkoutQuoteReady
-                            ? pendingAmountLabel
-                            : summary.shippingFee === 0 && cartItems.length > 0
-                            ? "Miễn phí"
-                            : formatCurrency(summary.shippingFee)}
+                        <span className={previewing || isAddressSyncing ? "opacity-60 flex items-center gap-1" : ""}>
+                          {(previewing || isAddressSyncing) && cartItems.length > 0 && <Loader2 className="size-3 animate-spin text-emerald-600 inline" />}
+                          {cartItems.length === 0
+                            ? "—"
+                            : !preview
+                              ? "Đang tính..."
+                              : summary.shippingFee === 0 && cartItems.length > 0
+                                ? "Miễn phí"
+                                : formatCurrency(summary.shippingFee)}
                         </span>
                       </div>
 
                       <div className="flex justify-between border-t border-emerald-100 pt-3 text-base font-black text-slate-950">
                         <span>Tổng thanh toán</span>
                         <span
-                          className={
+                          className={`transition-all ${
+                            previewing || isAddressSyncing ? "opacity-60" : ""
+                          } ${
                             hasServerDiscount || hasServerFreeShipping
                               ? "text-emerald-700"
                               : ""
-                          }
+                          }`}
                         >
                           {totalAmountLabel}
                         </span>
@@ -1687,9 +2101,11 @@ export default function CheckoutPage() {
                     </div>
                   ) : selectedAddressId ? (
                     <div className="rounded-[8px] border border-sky-100 bg-sky-50 p-3 text-sm font-semibold text-sky-900">
-                      {previewing
-                        ? "Đang đồng bộ địa chỉ nhận hàng từ API..."
-                        : "Chọn địa chỉ để hệ thống kiểm tra lại từ API."}
+                      {cartItems.length === 0
+                        ? "Giỏ hàng của bạn đang trống. Vui lòng thêm sản phẩm trước khi thanh toán."
+                        : previewing
+                          ? "Đang cập nhật địa chỉ giao hàng..."
+                          : "Hệ thống sẽ tự động tính phí giao hàng khi bạn chọn địa chỉ."}
                     </div>
                   ) : null}
 
@@ -1810,9 +2226,8 @@ export default function CheckoutPage() {
                   />
                   <p
                     id="edit-address-phone-helper"
-                    className={`text-xs font-semibold ${
-                      editPhoneError ? "text-red-600" : "text-slate-500"
-                    }`}
+                    className={`text-xs font-semibold ${editPhoneError ? "text-red-600" : "text-slate-500"
+                      }`}
                   >
                     {editPhoneError ||
                       "Nhập 10 chữ số, bắt đầu bằng số 0."}

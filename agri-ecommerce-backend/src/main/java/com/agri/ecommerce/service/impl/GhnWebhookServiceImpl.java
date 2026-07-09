@@ -10,6 +10,7 @@ import com.agri.ecommerce.service.EmailService;
 import com.agri.ecommerce.service.GhnWebhookService;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.PaymentService;
+import com.agri.ecommerce.service.LoyaltyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,9 +31,14 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
     private static final String STATUS_PENDING = "pending";
     private static final String STATUS_PROCESSING = "processing";
     private static final String STATUS_READY_FOR_DELIVERY = "ready_for_delivery";
+    private static final String STATUS_PICKING_UP = "picking_up";
     private static final String STATUS_OUT_FOR_DELIVERY = "out_for_delivery";
     private static final String STATUS_DELIVERED = "delivered";
     private static final String STATUS_COMPLETED = "completed";
+    private static final String STATUS_FAILED_DELIVERY_ATTEMPT = "failed_delivery_attempt";
+    private static final String STATUS_REDELIVERY_REQUESTED = "redelivery_requested";
+    private static final String STATUS_RETURNING = "returning";
+    private static final String STATUS_RETURNED = "returned";
     private static final String STATUS_CANCELED = "canceled";
     private static final String NOTIFICATION_TYPE_ORDER = "order";
 
@@ -49,6 +55,7 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
             Map.entry("money_collect_delivering", "GHN đang thu tiền khi giao"),
             Map.entry("delivered", "GHN giao hàng thành công"),
             Map.entry("delivery_fail", "GHN giao hàng thất bại"),
+            Map.entry("failed_delivery_attempt", "GHN giao hàng thất bại"),
             Map.entry("waiting_to_return", "GHN chờ xử lý giao lại hoặc hoàn hàng"),
             Map.entry("return", "GHN chờ hoàn hàng"),
             Map.entry("return_transporting", "GHN đang trung chuyển hoàn hàng"),
@@ -70,25 +77,33 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
             "money_collect_delivering"
     );
 
-    private static final Set<String> GHN_CANCELED_STATUSES = Set.of(
-            "cancel",
+    private static final Set<String> GHN_RETURNING_STATUSES = Set.of(
             "return",
+            "waiting_to_return",
             "return_transporting",
             "return_sorting",
-            "returning",
+            "returning"
+    );
+
+    private static final Set<String> GHN_CANCELED_STATUSES = Set.of(
+            "cancel",
             "return_fail",
-            "returned",
             "damage",
             "lost"
     );
 
-    private static final Map<String, Integer> INTERNAL_STATUS_RANK = Map.of(
-            STATUS_PENDING, 0,
-            STATUS_PROCESSING, 1,
-            STATUS_READY_FOR_DELIVERY, 2,
-            STATUS_OUT_FOR_DELIVERY, 3,
-            STATUS_DELIVERED, 4,
-            STATUS_COMPLETED, 5
+    private static final Map<String, Integer> INTERNAL_STATUS_RANK = Map.ofEntries(
+            Map.entry(STATUS_PENDING, 0),
+            Map.entry(STATUS_PROCESSING, 1),
+            Map.entry(STATUS_READY_FOR_DELIVERY, 2),
+            Map.entry(STATUS_PICKING_UP, 3),
+            Map.entry(STATUS_OUT_FOR_DELIVERY, 4),
+            Map.entry(STATUS_FAILED_DELIVERY_ATTEMPT, 5),
+            Map.entry(STATUS_REDELIVERY_REQUESTED, 6),
+            Map.entry(STATUS_RETURNING, 7),
+            Map.entry(STATUS_RETURNED, 8),
+            Map.entry(STATUS_DELIVERED, 9),
+            Map.entry(STATUS_COMPLETED, 10)
     );
 
     private final OrderRepository orderRepository;
@@ -96,6 +111,7 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
     private final NotificationService notificationService;
     private final PaymentService paymentService;
     private final EmailService emailService;
+    private final LoyaltyService loyaltyService;
 
     @Override
     @Transactional
@@ -152,12 +168,32 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
     }
 
     private String resolveTargetInternalStatus(String ghnStatus) {
+        if ("ready_to_pick".equals(ghnStatus)) {
+            return STATUS_READY_FOR_DELIVERY;
+        }
+
+        if ("picking".equals(ghnStatus)) {
+            return STATUS_PICKING_UP;
+        }
+
         if (GHN_IN_TRANSIT_STATUSES.contains(ghnStatus)) {
             return STATUS_OUT_FOR_DELIVERY;
         }
 
         if ("delivered".equals(ghnStatus)) {
             return STATUS_DELIVERED;
+        }
+
+        if ("delivery_fail".equals(ghnStatus) || "failed_delivery_attempt".equals(ghnStatus)) {
+            return STATUS_FAILED_DELIVERY_ATTEMPT;
+        }
+
+        if (GHN_RETURNING_STATUSES.contains(ghnStatus)) {
+            return STATUS_RETURNING;
+        }
+
+        if ("returned".equals(ghnStatus)) {
+            return STATUS_RETURNED;
         }
 
         if (GHN_CANCELED_STATUSES.contains(ghnStatus)) {
@@ -176,7 +212,7 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
             return currentStatus;
         }
 
-        if (STATUS_CANCELED.equals(currentStatus)) {
+        if (STATUS_CANCELED.equals(currentStatus) || STATUS_RETURNED.equals(currentStatus)) {
             return currentStatus;
         }
 
@@ -199,6 +235,34 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
                 order.setDeliveredAt(LocalDateTime.now());
             }
             paymentService.completeCashPaymentIfPending(order.getId());
+            if (order.getUser() != null) {
+                loyaltyService.awardPointsForPurchase(order.getUser().getId(), order.getId(), order.getTotalPrice());
+            }
+        }
+
+        if (STATUS_FAILED_DELIVERY_ATTEMPT.equals(nextInternalStatus)) {
+            order.setDeliveryFailureReason("GHN báo giao hàng thất bại");
+        }
+
+        if (STATUS_RETURNING.equals(nextInternalStatus)) {
+            order.setDeliveryFailureReason("GHN đang hoàn hàng");
+            order.setReturnReason("GHN đang hoàn hàng");
+            order.setReturnNote("Cập nhật từ webhook GHN");
+        }
+
+        if (STATUS_RETURNED.equals(nextInternalStatus)) {
+            order.setReturnedAt(LocalDateTime.now());
+            if (order.getReturnReason() == null || order.getReturnReason().trim().isEmpty()) {
+                order.setReturnReason("GHN đã hoàn hàng");
+            }
+            order.setReturnNote("Cập nhật từ webhook GHN");
+        }
+
+        if (STATUS_CANCELED.equals(nextInternalStatus)
+                && order.getUser() != null
+                && order.getPointsUsed() != null
+                && order.getPointsUsed() > 0) {
+            loyaltyService.refundPointsForCancellation(order.getUser().getId(), order.getPointsUsed());
         }
     }
 
@@ -213,10 +277,15 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
 
     private void notifyCustomer(OrderEntity order, String internalStatus, String ghnStatus) {
         String message = buildNotificationMessage(order.getId(), internalStatus, ghnStatus);
-        notificationService.createNotification(order.getUser().getId(), NOTIFICATION_TYPE_ORDER, message, "/orders/" + order.getId());
+        if (order.getUser() != null) {
+            notificationService.createNotification(order.getUser().getId(), NOTIFICATION_TYPE_ORDER, message, "/orders/" + order.getId());
+        }
 
         if (STATUS_OUT_FOR_DELIVERY.equals(internalStatus)
                 || STATUS_DELIVERED.equals(internalStatus)
+                || STATUS_FAILED_DELIVERY_ATTEMPT.equals(internalStatus)
+                || STATUS_RETURNING.equals(internalStatus)
+                || STATUS_RETURNED.equals(internalStatus)
                 || STATUS_CANCELED.equals(internalStatus)) {
             emailService.sendOrderStatusUpdate(order, buildEmailTitle(internalStatus), message);
         }
@@ -233,6 +302,18 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
             return "Đơn hàng #" + orderId + " đã được GHN giao thành công.";
         }
 
+        if (STATUS_FAILED_DELIVERY_ATTEMPT.equals(internalStatus)) {
+            return "Đơn hàng #" + orderId + " được GHN báo giao thất bại. Trạng thái GHN: " + label + ".";
+        }
+
+        if (STATUS_RETURNING.equals(internalStatus)) {
+            return "Đơn hàng #" + orderId + " đang được GHN hoàn hàng. Trạng thái GHN: " + label + ".";
+        }
+
+        if (STATUS_RETURNED.equals(internalStatus)) {
+            return "Đơn hàng #" + orderId + " đã được GHN hoàn hàng về shop.";
+        }
+
         if (STATUS_CANCELED.equals(internalStatus)) {
             return "Đơn hàng #" + orderId + " được GHN cập nhật không thể tiếp tục giao. Trạng thái GHN: " + label + ".";
         }
@@ -247,6 +328,18 @@ public class GhnWebhookServiceImpl implements GhnWebhookService {
 
         if (STATUS_DELIVERED.equals(internalStatus)) {
             return "GHN giao hàng thành công";
+        }
+
+        if (STATUS_FAILED_DELIVERY_ATTEMPT.equals(internalStatus)) {
+            return "GHN báo giao hàng thất bại";
+        }
+
+        if (STATUS_RETURNING.equals(internalStatus)) {
+            return "GHN đang hoàn hàng";
+        }
+
+        if (STATUS_RETURNED.equals(internalStatus)) {
+            return "GHN đã hoàn hàng";
         }
 
         if (STATUS_CANCELED.equals(internalStatus)) {

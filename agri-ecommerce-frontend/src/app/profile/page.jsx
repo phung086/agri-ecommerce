@@ -16,6 +16,7 @@ import {
   Eye,
   EyeOff,
   Home,
+  ImagePlus,
   Leaf,
   LockKeyhole,
   LogOut,
@@ -32,6 +33,11 @@ import {
   Star,
   Truck,
   UserRound,
+  X,
+  Coins,
+  Award,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -111,7 +117,17 @@ const blankPasswordForm = {
 const defaultReviewDraft = {
   rating: 5,
   comment: "",
+  images: [],
 };
+
+const MAX_REVIEW_IMAGES = 3;
+const MAX_REVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
+const REVIEW_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
 function unwrapApiData(response) {
   return response?.data ?? response;
@@ -147,6 +163,18 @@ function getReviewByProduct(reviews, productId) {
       (review) => Number(review.productId) === normalizedProductId
     ) || null
   );
+}
+
+function getReviewDraft(draft) {
+  return {
+    ...defaultReviewDraft,
+    ...(draft || {}),
+    images: Array.isArray(draft?.images) ? draft.images : [],
+  };
+}
+
+function getReviewImageSource(image) {
+  return typeof image === "string" ? image : image?.previewUrl || "";
 }
 
 function getOrderQuantity(order) {
@@ -560,11 +588,13 @@ function PurchaseHistorySection({
   onRefresh,
   onToggleOrder,
   onUpdateReviewDraft,
+  onSelectReviewImages,
+  onRemoveReviewImage,
   onSubmitReview,
 }) {
   const { t } = useLanguage();
   const completedOrders = orders.filter(isCompletedOrder).length;
-  const totalSpent = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
+  const totalSpent = orders.filter(isCompletedOrder).reduce((sum, order) => sum + getOrderTotal(order), 0);
 
   return (
     <section className="rounded-[8px] border border-emerald-100 bg-white p-5 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
@@ -614,7 +644,7 @@ function PurchaseHistorySection({
         <div className="rounded-[8px] border border-amber-100 bg-amber-50 p-3">
           <div className="flex items-center gap-2 text-amber-700">
             <CreditCard className="size-4" />
-            <span className="text-xs font-black uppercase">{t("Giá trị hiển thị")}</span>
+            <span className="text-xs font-black uppercase">{t("Tổng chi tiêu")}</span>
           </div>
           <p className="mt-2 text-2xl font-black text-amber-950">
             {formatCurrency(totalSpent)}
@@ -739,9 +769,10 @@ function PurchaseHistorySection({
                               item.productId
                             );
                             const reviewable = isCompletedOrder(order);
-                            const draft =
-                              reviewDrafts[String(item.productId)] ||
-                              defaultReviewDraft;
+                            const draft = getReviewDraft(
+                              reviewDrafts[String(item.productId)]
+                            );
+                            const draftImages = draft.images;
                             const submitting =
                               reviewSubmittingId === String(item.productId);
 
@@ -793,6 +824,23 @@ function PurchaseHistorySection({
                                         {existingReview.comment}
                                       </p>
                                     )}
+                                    {Array.isArray(existingReview.images) &&
+                                      existingReview.images.length > 0 && (
+                                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                          {existingReview.images.map((imageUrl, index) => (
+                                            <div
+                                              key={`${existingReview.id}-image-${index}`}
+                                              className="aspect-square overflow-hidden rounded-[8px] border border-amber-100 bg-white"
+                                            >
+                                              <img
+                                                src={getAssetUrl(imageUrl)}
+                                                alt={`Anh danh gia ${index + 1}`}
+                                                className="h-full w-full object-cover"
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
                                   </div>
                                 )}
 
@@ -855,6 +903,68 @@ function PurchaseHistorySection({
                                       className="mt-3 bg-white"
                                       placeholder="Chia sẻ cảm nhận sau khi nhận hàng..."
                                     />
+                                    <div className="mt-3 space-y-2">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p className="text-xs font-black uppercase text-emerald-700">
+                                          Anh thuc te
+                                        </p>
+                                        <span className="text-xs font-semibold text-muted-foreground">
+                                          {draftImages.length}/{MAX_REVIEW_IMAGES} anh
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                        {draftImages.map((image, index) => (
+                                          <div
+                                            key={image.id || `${item.productId}-image-${index}`}
+                                            className="relative aspect-square overflow-hidden rounded-[8px] border border-emerald-100 bg-white"
+                                          >
+                                            <img
+                                              src={getAssetUrl(getReviewImageSource(image))}
+                                              alt={`Anh danh gia ${index + 1}`}
+                                              className="h-full w-full object-cover"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                onRemoveReviewImage(item.productId, index)
+                                              }
+                                              className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow-sm transition hover:bg-red-50 hover:text-red-600"
+                                              aria-label="Xoa anh danh gia"
+                                            >
+                                              <X className="size-3.5" />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        {draftImages.length < MAX_REVIEW_IMAGES && (
+                                          <label
+                                            htmlFor={`review-images-${order.id}-${item.productId}`}
+                                            className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-[8px] border border-dashed border-emerald-200 bg-white text-center text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
+                                          >
+                                            <ImagePlus className="size-5" />
+                                            <span className="px-1 text-[11px] font-bold">
+                                              Them anh
+                                            </span>
+                                            <input
+                                              id={`review-images-${order.id}-${item.productId}`}
+                                              type="file"
+                                              accept="image/jpeg,image/png,image/webp,image/gif"
+                                              multiple
+                                              className="hidden"
+                                              onChange={(event) => {
+                                                onSelectReviewImages(
+                                                  item.productId,
+                                                  event.target.files
+                                                );
+                                                event.target.value = "";
+                                              }}
+                                            />
+                                          </label>
+                                        )}
+                                      </div>
+                                      <p className="text-xs font-semibold text-muted-foreground">
+                                        Toi da 3 anh, moi anh khong qua 5MB.
+                                      </p>
+                                    </div>
                                     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                       <span className="text-xs font-semibold text-muted-foreground">
                                         {(draft.comment || "").length}/255 ký tự
@@ -1104,6 +1214,9 @@ export default function CustomerProfilePage() {
   const [phoneError, setPhoneError] = useState("");
   const [coupons, setCoupons] = useState([]);
   const [couponsLoading, setCouponsLoading] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [deletingAddressId, setDeletingAddressId] = useState(null);
+  const [isDeletingAddress, setIsDeletingAddress] = useState(false);
 
   const loadPublicCoupons = useCallback(async () => {
     setCouponsLoading(true);
@@ -1122,31 +1235,41 @@ export default function CustomerProfilePage() {
   const profileInitial = getInitial(profile);
   const profileAvatarUrl = getAssetUrl(form.avatar || profile?.avatar);
 
+  const getTierLabel = (tier) => {
+    const labels = {
+      BRONZE: t("Đồng"),
+      SILVER: t("Bạc"),
+      GOLD: t("Vàng"),
+      PLATINUM: t("Kim Cương"),
+    };
+    return labels[String(tier).toUpperCase()] || tier || t("Đồng");
+  };
+
   const profileStats = useMemo(
     () => [
       {
-        title: "Trạng thái",
-        value: profile?.status || "Chưa có",
-        description: "Trạng thái tài khoản",
-        icon: ShieldCheck,
-        tone: "green",
-      },
-      {
-        title: "Vai trò",
-        value: profile?.roleName || "Customer",
-        description: "Quyền sử dụng hệ thống",
-        icon: UserRound,
-        tone: "blue",
-      },
-      {
-        title: "Liên hệ",
-        value: profile?.phoneNumber || "Chưa thêm",
-        description: "Số điện thoại giao hàng",
-        icon: Phone,
+        title: t("Xu tích lũy"),
+        value: profile?.loyaltyPoints !== undefined ? `${formatNumber(profile.loyaltyPoints)} Xu` : "0 Xu",
+        description: t("Dùng để giảm trừ trực tiếp khi thanh toán"),
+        icon: Coins,
         tone: "amber",
       },
+      {
+        title: t("Hạng thành viên"),
+        value: profile?.membershipTier ? getTierLabel(profile.membershipTier) : t("Đồng"),
+        description: t("Hạng Vàng & Kim Cương được mã VIP"),
+        icon: Award,
+        tone: "rose",
+      },
+      {
+        title: t("Số điện thoại"),
+        value: profile?.phoneNumber || t("Chưa thêm"),
+        description: t("Số điện thoại giao hàng mặc định"),
+        icon: Phone,
+        tone: "green",
+      },
     ],
-    [profile]
+    [profile, t]
   );
 
   const applyProfile = useCallback((nextProfile) => {
@@ -1259,6 +1382,14 @@ export default function CustomerProfilePage() {
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       const session = getAuthSession(AUTH_SCOPES.customer);
+
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get("tab");
+        if (tab && ["profile", "addresses", "password", "orders", "coupons"].includes(tab)) {
+          setActiveTab(tab);
+        }
+      }
 
       if (!session?.accessToken || isAuthSessionExpired(session)) {
         clearAuthSession(AUTH_SCOPES.customer);
@@ -1539,16 +1670,26 @@ export default function CustomerProfilePage() {
     }
   }
 
-  async function handleDeleteAddress(addressId) {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa địa chỉ này?")) {
-      return;
-    }
+  function openDeleteConfirm(addressId) {
+    setDeletingAddressId(addressId);
+    setIsDeleteConfirmOpen(true);
+    setError("");
+    setNotice("");
+  }
+
+  function closeDeleteConfirm() {
+    setIsDeleteConfirmOpen(false);
+    setDeletingAddressId(null);
+  }
+
+  async function handleDeleteAddress() {
+    setIsDeletingAddress(true);
     setError("");
     setNotice("");
 
     try {
-      const addressToDelete = addresses.find((a) => a.id === addressId);
-      await shippingAddressService.deleteAddress(addressId);
+      const addressToDelete = addresses.find((a) => a.id === deletingAddressId);
+      await shippingAddressService.deleteAddress(deletingAddressId);
 
       const nextAddresses = await shippingAddressService.getAddresses();
       const normalizedAddresses = Array.isArray(nextAddresses) ? nextAddresses : [];
@@ -1600,8 +1741,11 @@ export default function CustomerProfilePage() {
       }
 
       setNotice("Đã xóa địa chỉ thành công.");
+      closeDeleteConfirm();
     } catch (err) {
-      setError(err?.message || "Không thể xóa địa chỉ giao hàng.");
+      setError(err.response?.data?.message || err?.message || "Không thể xóa địa chỉ giao hàng.");
+    } finally {
+      setIsDeletingAddress(false);
     }
   }
 
@@ -1626,6 +1770,107 @@ export default function CustomerProfilePage() {
     }));
   }
 
+  function selectReviewImages(productId, fileList) {
+    const key = String(productId);
+    const files = Array.from(fileList || []);
+
+    if (files.length === 0) {
+      return;
+    }
+
+    setReviewDrafts((current) => {
+      const draft = getReviewDraft(current[key]);
+      const remainingSlots = MAX_REVIEW_IMAGES - draft.images.length;
+
+      if (remainingSlots <= 0) {
+        toast.error("Chi duoc them toi da 3 anh danh gia.");
+        return current;
+      }
+
+      const validImages = [];
+      for (const file of files.slice(0, remainingSlots)) {
+        if (!REVIEW_IMAGE_TYPES.has(file.type)) {
+          toast.error("Chi ho tro anh jpg, png, webp hoac gif.");
+          continue;
+        }
+
+        if (file.size > MAX_REVIEW_IMAGE_SIZE) {
+          toast.error(`Anh "${file.name}" vuot qua 5MB.`);
+          continue;
+        }
+
+        validImages.push({
+          id:
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `${Date.now()}-${file.name}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+        });
+      }
+
+      if (files.length > remainingSlots) {
+        toast.warning("Chi giu lai toi da 3 anh dau tien.");
+      }
+
+      if (validImages.length === 0) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [key]: {
+          ...draft,
+          images: [...draft.images, ...validImages],
+        },
+      };
+    });
+  }
+
+  function removeReviewImage(productId, imageIndex) {
+    const key = String(productId);
+
+    setReviewDrafts((current) => {
+      const draft = getReviewDraft(current[key]);
+      const removedImage = draft.images[imageIndex];
+      if (removedImage?.previewUrl) {
+        URL.revokeObjectURL(removedImage.previewUrl);
+      }
+
+      return {
+        ...current,
+        [key]: {
+          ...draft,
+          images: draft.images.filter((_, index) => index !== imageIndex),
+        },
+      };
+    });
+  }
+
+  async function uploadDraftReviewImages(images) {
+    const uploadedUrls = [];
+
+    for (const image of images) {
+      if (typeof image === "string") {
+        uploadedUrls.push(image);
+        continue;
+      }
+
+      if (!image?.file) {
+        continue;
+      }
+
+      const uploadedImage = await reviewService.uploadReviewImage(image.file);
+      const imageUrl = uploadedImage?.path || uploadedImage?.url;
+
+      if (imageUrl) {
+        uploadedUrls.push(imageUrl);
+      }
+    }
+
+    return uploadedUrls.slice(0, MAX_REVIEW_IMAGES);
+  }
+
   async function submitReview(event, item) {
     event.preventDefault();
 
@@ -1637,7 +1882,7 @@ export default function CustomerProfilePage() {
     }
 
     const key = String(productId);
-    const draft = reviewDrafts[key] || defaultReviewDraft;
+    const draft = getReviewDraft(reviewDrafts[key]);
     const rating = Number(draft.rating || 0);
 
     if (rating < 1 || rating > 5) {
@@ -1649,14 +1894,21 @@ export default function CustomerProfilePage() {
     setOrdersError("");
 
     try {
+      const uploadedImageUrls = await uploadDraftReviewImages(draft.images);
       const createdReview = await reviewService.createReview({
         productId,
         rating,
         comment: String(draft.comment || "").trim(),
+        images: uploadedImageUrls,
       });
 
       setReviews((current) => [createdReview, ...current]);
       setReviewDrafts((current) => {
+        draft.images.forEach((image) => {
+          if (image?.previewUrl) {
+            URL.revokeObjectURL(image.previewUrl);
+          }
+        });
         const nextDrafts = { ...current };
         delete nextDrafts[key];
         return nextDrafts;
@@ -1979,6 +2231,20 @@ export default function CustomerProfilePage() {
                     <h2 className="text-xl font-black text-slate-900">{t("Hồ sơ cá nhân")}</h2>
                     <p className="mt-1 text-sm text-slate-500">{t("Thông tin hồ sơ để bảo mật tài khoản tốt nhất")}</p>
                   </div>
+
+                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                    {profileStats.map((stat, idx) => (
+                      <StatCard
+                        key={idx}
+                        title={stat.title}
+                        value={stat.value}
+                        description={stat.description}
+                        icon={stat.icon}
+                        tone={stat.tone}
+                      />
+                    ))}
+                  </div>
+
                   <div className="grid gap-5 md:grid-cols-[1fr_220px]">
                     <div className="space-y-4">
                       <div className="space-y-2">
@@ -2090,6 +2356,17 @@ export default function CustomerProfilePage() {
                       </Button>
                     )}
                   </div>
+
+                  {notice && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 animate-fade-in">
+                      {notice}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 animate-shake">
+                      {error}
+                    </div>
+                  )}
 
                   {showAddressForm ? (
                     <form onSubmit={handleSaveAddress} className="space-y-4 rounded-xl border border-emerald-100 bg-emerald-50/20 p-4">
@@ -2215,7 +2492,7 @@ export default function CustomerProfilePage() {
                                     type="button"
                                     variant="ghost"
                                     className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs px-2"
-                                    onClick={() => handleDeleteAddress(addr.id)}
+                                    onClick={() => openDeleteConfirm(addr.id)}
                                   >
                                     {t("Xóa")}
                                   </Button>
@@ -2374,11 +2651,57 @@ export default function CustomerProfilePage() {
                     }}
                     onToggleOrder={handleToggleOrder}
                     onUpdateReviewDraft={updateReviewDraft}
+                    onSelectReviewImages={selectReviewImages}
+                    onRemoveReviewImage={removeReviewImage}
                     onSubmitReview={submitReview}
                   />
                 </div>
               )}
             </main>
+          </div>
+        )}
+        {/* ── DELETE CONFIRMATION DIALOG ───────────────────────────── */}
+        {isDeleteConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
+            <div className="w-full max-w-sm rounded-xl border border-red-100 bg-white p-6 shadow-xl animate-scale-up">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                  <Trash2 className="size-5" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base font-black text-slate-950">
+                    {t("Xác nhận xóa địa chỉ")}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                    {t("Bạn có chắc chắn muốn xóa địa chỉ này? Hành động này không thể hoàn tác.")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 px-4 border-slate-100 bg-white text-slate-800 hover:bg-slate-50 font-bold"
+                  onClick={closeDeleteConfirm}
+                  disabled={isDeletingAddress}
+                >
+                  {t("Hủy")}
+                </Button>
+                <Button
+                  type="button"
+                  className="h-9 px-4 bg-red-600 font-bold hover:bg-red-700 text-white"
+                  disabled={isDeletingAddress}
+                  onClick={handleDeleteAddress}
+                >
+                  {isDeletingAddress ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    t("Xóa")
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>

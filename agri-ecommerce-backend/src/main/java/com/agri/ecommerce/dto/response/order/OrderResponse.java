@@ -33,6 +33,10 @@ public class OrderResponse {
 
     private String status;
 
+    private String checkoutType;
+
+    private String guestEmail;
+
     private BigDecimal subtotal;
 
     private BigDecimal discountAmount;
@@ -61,6 +65,12 @@ public class OrderResponse {
 
     private String deliveryFailureReason;
 
+    private String returnReason;
+
+    private String returnNote;
+
+    private LocalDateTime returnedAt;
+
     private String trackingNumber;
 
     private String shippingProvider;
@@ -72,4 +82,8 @@ public class OrderResponse {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    private Integer pointsUsed;
+
+    private Integer pointsEarned;
 }

@@ -8,12 +8,14 @@ import com.agri.ecommerce.entity.UserEntity;
 import com.agri.ecommerce.repository.OrderRepository;
 import com.agri.ecommerce.repository.OrderStatusHistoryRepository;
 import com.agri.ecommerce.service.impl.GhnWebhookServiceImpl;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
@@ -41,8 +43,16 @@ class GhnWebhookServiceImplTest {
     @Mock
     private EmailService emailService;
 
+    @Mock
+    private LoyaltyService loyaltyService;
+
     @InjectMocks
     private GhnWebhookServiceImpl ghnWebhookService;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(ghnWebhookService, "loyaltyService", loyaltyService);
+    }
 
     @Test
     void handleOrderStatus_whenDelivered_shouldUpdateInternalStatusAndNotifyCustomer() {
@@ -65,6 +75,7 @@ class GhnWebhookServiceImplTest {
         assertThat(order.getDeliveredAt()).isNotNull();
 
         verify(paymentService).completeCashPaymentIfPending(99L);
+        verify(loyaltyService).awardPointsForPurchase(7L, 99L, order.getTotalPrice());
         verify(notificationService).createNotification(
                 7L,
                 "order",

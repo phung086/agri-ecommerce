@@ -98,9 +98,7 @@ public class ShippingAddressServiceImpl implements ShippingAddressService {
     public void deleteShippingAddress(Long userId, Long addressId) {
         ShippingAddressEntity shippingAddress = findAddressByIdAndUserId(addressId, userId);
 
-        if (orderRepository.existsByShippingAddress_Id(addressId)) {
-            throw new BadRequestException("Địa chỉ đã được dùng trong đơn hàng, không thể xóa để tránh mất lịch sử đơn");
-        }
+        orderRepository.setShippingAddressNull(addressId);
 
         boolean wasDefault = Boolean.TRUE.equals(shippingAddress.getDefaultAddress());
         shippingAddressRepository.delete(shippingAddress);
