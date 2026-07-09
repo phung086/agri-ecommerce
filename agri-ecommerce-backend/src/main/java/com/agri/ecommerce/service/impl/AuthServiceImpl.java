@@ -203,7 +203,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (isVietnamPhoneCredential(credential)) {
-            Optional<UserEntity> userByPhone = userRepository.findByPhoneNumber(credential);
+            Optional<UserEntity> userByPhone = userRepository.findFirstByPhoneNumberOrderByIdAsc(credential);
             return userByPhone.filter(this::isDefaultGuestAccount);
         }
 
