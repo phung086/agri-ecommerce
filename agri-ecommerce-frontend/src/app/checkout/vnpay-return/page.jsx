@@ -5,15 +5,280 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
-  Clock3,
   CreditCard,
   Loader2,
+  Printer,
+  ReceiptText,
+  RefreshCw,
   ShoppingBasket,
 } from "lucide-react";
 
-import { formatCurrency } from "@/lib/admin-utils";
+import { formatCurrency, formatDate } from "@/lib/admin-utils";
 import { orderService } from "@/services/order.service";
 import { useSearchParams } from "next/navigation";
+
+const MAX_PENDING_RECHECKS = 5;
+
+function getInvoiceNumber(orderId) {
+  return `INV-${String(orderId || "0").padStart(6, "0")}`;
+}
+
+function getShippingAddressText(order) {
+  const shippingAddress = order?.shippingAddress;
+
+  if (!shippingAddress) {
+    return "Chưa có địa chỉ giao hàng";
+  }
+
+  return [shippingAddress.address, shippingAddress.city]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function getCustomerName(order) {
+  return (
+    order?.shippingAddress?.fullName ||
+    order?.customerName ||
+    "Khách hàng AgriMarket"
+  );
+}
+
+function getCustomerPhone(order) {
+  return order?.shippingAddress?.phone || order?.customerPhoneNumber || "-";
+}
+
+function formatVnpayPayDate(value) {
+  if (!value || String(value).length !== 14) {
+    return "";
+  }
+
+  const text = String(value);
+  const date = new Date(
+    Number(text.slice(0, 4)),
+    Number(text.slice(4, 6)) - 1,
+    Number(text.slice(6, 8)),
+    Number(text.slice(8, 10)),
+    Number(text.slice(10, 12)),
+    Number(text.slice(12, 14))
+  );
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function getPaymentPaidAt(order, params) {
+  return (
+    order?.payment?.paidAt ||
+    formatVnpayPayDate(params?.vnp_PayDate) ||
+    order?.updatedAt ||
+    order?.createdAt
+  );
+}
+
+function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const invoiceNumber = getInvoiceNumber(result?.orderId);
+  const totalAmount = Number(order?.totalPrice ?? result?.amount ?? 0);
+
+  return (
+    <section
+      id="payment-invoice"
+      className="mt-6 rounded-[8px] border border-emerald-100 bg-white p-4 shadow-sm print:shadow-none"
+    >
+      <div className="flex flex-col gap-3 border-b border-emerald-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+            <ReceiptText className="size-5" />
+          </div>
+          <div>
+            <p className="text-xs font-black uppercase text-emerald-700">
+              Hóa đơn thanh toán
+            </p>
+            <h2 className="text-xl font-black text-emerald-950">
+              {invoiceNumber}
+            </h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              Hiển thị ngay khi VNPay xác nhận payment completed.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="print:hidden inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-bold text-emerald-800 transition hover:bg-emerald-50"
+        >
+          <Printer className="size-4" />
+          In hóa đơn
+        </button>
+      </div>
+
+      {orderLoading && (
+        <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+          <Loader2 className="size-4 animate-spin" />
+          Đang tải chi tiết đơn hàng để lập hóa đơn...
+        </div>
+      )}
+
+      {orderError && (
+        <div className="mt-4 rounded-[8px] border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+          {orderError}
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-[8px] border border-emerald-100 p-3">
+          <p className="text-xs font-black uppercase text-slate-500">
+            Mã đơn hàng
+          </p>
+          <p className="mt-1 font-black text-slate-950">
+            #{result?.orderId || "-"}
+          </p>
+        </div>
+        <div className="rounded-[8px] border border-emerald-100 p-3">
+          <p className="text-xs font-black uppercase text-slate-500">
+            Mã giao dịch
+          </p>
+          <p className="mt-1 font-black text-slate-950">
+            {result?.transactionNo || params?.vnp_TransactionNo || "-"}
+          </p>
+        </div>
+        <div className="rounded-[8px] border border-emerald-100 p-3">
+          <p className="text-xs font-black uppercase text-slate-500">
+            Số tiền
+          </p>
+          <p className="mt-1 font-black text-emerald-700">
+            {formatCurrency(totalAmount)}
+          </p>
+        </div>
+        <div className="rounded-[8px] border border-emerald-100 p-3">
+          <p className="text-xs font-black uppercase text-slate-500">
+            Phương thức
+          </p>
+          <p className="mt-1 font-black text-slate-950">VNPay</p>
+        </div>
+        <div className="rounded-[8px] border border-emerald-100 p-3">
+          <p className="text-xs font-black uppercase text-slate-500">
+            Thời gian thanh toán
+          </p>
+          <p className="mt-1 font-black text-slate-950">
+            {formatDate(getPaymentPaidAt(order, params))}
+          </p>
+        </div>
+        <div className="rounded-[8px] border border-emerald-100 p-3">
+          <p className="text-xs font-black uppercase text-slate-500">
+            Trạng thái
+          </p>
+          <p className="mt-1 font-black text-emerald-700">
+            Đã thanh toán qua VNPay
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+        <div className="rounded-[8px] bg-[#f6faef] p-3">
+          <p className="text-xs font-black uppercase text-slate-500">
+            Khách hàng
+          </p>
+          <p className="mt-1 font-black text-slate-950">
+            {getCustomerName(order)}
+          </p>
+          <p className="mt-1 font-semibold text-slate-600">
+            {getCustomerPhone(order)}
+          </p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+            {getShippingAddressText(order)}
+          </p>
+        </div>
+
+        <div className="rounded-[8px] bg-[#f6faef] p-3">
+          <p className="text-xs font-black uppercase text-slate-500">
+            Thanh toán
+          </p>
+          <p className="mt-1 font-black text-slate-950">VNPay</p>
+          <p className="mt-1 font-semibold text-slate-600">
+            Mã giao dịch: {result?.transactionNo || params?.vnp_TransactionNo || "-"}
+          </p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">
+            Ngày thanh toán: {formatDate(getPaymentPaidAt(order, params))}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-[8px] border border-emerald-100">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-emerald-50 text-xs font-black uppercase text-emerald-800">
+            <tr>
+              <th className="px-3 py-2">Sản phẩm</th>
+              <th className="px-3 py-2 text-right">SL</th>
+              <th className="px-3 py-2 text-right">Đơn giá</th>
+              <th className="px-3 py-2 text-right">Thành tiền</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-emerald-100">
+            {items.length > 0 ? (
+              items.map((item) => (
+                <tr key={item.id || item.productId}>
+                  <td className="px-3 py-2 font-semibold text-slate-800">
+                    {item.productName || "Sản phẩm"}
+                    {item.unit && (
+                      <span className="ml-1 text-xs text-slate-500">
+                        /{item.unit}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right font-bold">
+                    {item.quantity || 0}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {formatCurrency(item.price)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-bold text-emerald-700">
+                    {formatCurrency(
+                      item.lineTotal ??
+                        Number(item.price || 0) * Number(item.quantity || 0)
+                    )}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="px-3 py-4 font-semibold text-slate-600" colSpan={4}>
+                  Thanh toán cho đơn hàng #{result?.orderId || "-"}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 ml-auto w-full max-w-sm space-y-2 text-sm">
+        <div className="flex justify-between text-slate-600">
+          <span>Tạm tính</span>
+          <span>{formatCurrency(order?.subtotal ?? totalAmount)}</span>
+        </div>
+        <div className="flex justify-between text-slate-600">
+          <span>Giảm giá</span>
+          <span>-{formatCurrency(order?.discountAmount ?? 0)}</span>
+        </div>
+        <div className="flex justify-between text-slate-600">
+          <span>Phí giao hàng</span>
+          <span>{formatCurrency(order?.shippingFee ?? 0)}</span>
+        </div>
+        <div className="flex justify-between border-t border-emerald-100 pt-2 text-base font-black text-emerald-800">
+          <span>Tổng thanh toán</span>
+          <span>{formatCurrency(totalAmount)}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function VnpayReturnContent() {
   const searchParams = useSearchParams();
@@ -25,6 +290,11 @@ function VnpayReturnContent() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [pendingRechecks, setPendingRechecks] = useState(0);
+  const [orderDetail, setOrderDetail] = useState(null);
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderError, setOrderError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +311,9 @@ function VnpayReturnContent() {
 
       try {
         const response = await orderService.verifyVnpayReturn(params);
-        if (!cancelled) setResult(response);
+        if (!cancelled) {
+          setResult(response);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err?.message || "Không thể xác thực kết quả VNPay.");
@@ -56,24 +328,73 @@ function VnpayReturnContent() {
     return () => {
       cancelled = true;
     };
-  }, [params]);
+  }, [params, refreshNonce]);
 
   const gatewaySuccess =
     result?.validSignature &&
     result?.responseCode === "00" &&
     result?.transactionStatus === "00";
   const paymentCompleted = result?.paymentStatus === "completed";
-  const success = gatewaySuccess && paymentCompleted;
   const pendingIpn = gatewaySuccess && !paymentCompleted;
-  const failed = result && !gatewaySuccess;
 
-  const statusTone = success
+  const statusTone = gatewaySuccess
     ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-    : pendingIpn
-      ? "border-amber-200 bg-amber-50 text-amber-900"
-      : "border-red-200 bg-red-50 text-red-900";
+    : "border-red-200 bg-red-50 text-red-900";
 
-  const StatusIcon = success ? CheckCircle2 : pendingIpn ? Clock3 : AlertTriangle;
+  const StatusIcon = gatewaySuccess ? CheckCircle2 : AlertTriangle;
+
+  useEffect(() => {
+    if (!pendingIpn || pendingRechecks >= MAX_PENDING_RECHECKS) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setPendingRechecks((count) => count + 1);
+      setRefreshNonce((nonce) => nonce + 1);
+    }, 3000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [pendingIpn, pendingRechecks]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOrderDetail() {
+      if (!gatewaySuccess || !result?.orderId) {
+        setOrderDetail(null);
+        setOrderError("");
+        return;
+      }
+
+      setOrderLoading(true);
+      setOrderError("");
+
+      try {
+        const response = await orderService.getOrder(result.orderId);
+        if (!cancelled) {
+          setOrderDetail(response);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setOrderDetail(null);
+          setOrderError(
+            err?.message ||
+              "Thanh toán đã thành công nhưng chưa tải được chi tiết đơn hàng. Hóa đơn tạm sẽ dùng dữ liệu giao dịch VNPay."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setOrderLoading(false);
+        }
+      }
+    }
+
+    loadOrderDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gatewaySuccess, result?.orderId]);
 
   return (
     <main className="min-h-screen bg-[#f6faef] px-4 py-10 text-slate-950">
@@ -108,18 +429,38 @@ function VnpayReturnContent() {
                 <StatusIcon className="mt-0.5 size-6 shrink-0" />
                 <div>
                   <p className="font-black">
-                    {success
-                      ? "Thanh toán thành công"
-                      : pendingIpn
-                        ? "Đang chờ hệ thống xác nhận"
-                        : "Thanh toán chưa thành công"}
+                    {gatewaySuccess
+                      ? "Thanh toán VNPay thành công"
+                      : "Thanh toán chưa thành công"}
                   </p>
                   <p className="mt-1 text-sm font-semibold">
-                    {result?.message}
+                    {gatewaySuccess
+                      ? "VNPay đã ghi nhận giao dịch thành công. Hóa đơn thanh toán được hiển thị bên dưới."
+                      : result?.message}
                   </p>
                 </div>
               </div>
             </div>
+
+            {pendingIpn && (
+              <div className="mt-4 flex flex-col gap-3 rounded-[8px] border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900 sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                  Hóa đơn đã được lập từ kết quả VNPay. Hệ thống vẫn đang đồng
+                  bộ trạng thái payment nội bộ trong nền.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingRechecks(0);
+                    setRefreshNonce((nonce) => nonce + 1);
+                  }}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border border-emerald-200 bg-white px-3 font-bold text-emerald-900 transition hover:bg-emerald-100"
+                >
+                  <RefreshCw className="size-4" />
+                  Kiểm tra lại
+                </button>
+              </div>
+            )}
 
             <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
               <div className="rounded-[8px] border border-emerald-100 p-3">
@@ -139,10 +480,22 @@ function VnpayReturnContent() {
                 </dd>
               </div>
               <div className="rounded-[8px] border border-emerald-100 p-3">
-                <dt className="font-bold text-slate-500">Trạng thái payment</dt>
-                <dd className="mt-1 font-black">{result?.paymentStatus || "-"}</dd>
+                <dt className="font-bold text-slate-500">Trạng thái VNPay</dt>
+                <dd className="mt-1 font-black">
+                  {gatewaySuccess ? "Thành công" : "Không thành công"}
+                </dd>
               </div>
             </dl>
+
+            {gatewaySuccess && (
+              <PaymentInvoicePanel
+                order={orderDetail}
+                result={result}
+                params={params}
+                orderLoading={orderLoading}
+                orderError={orderError}
+              />
+            )}
           </>
         )}
 
