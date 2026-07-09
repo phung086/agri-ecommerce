@@ -145,7 +145,8 @@ public class AiChatTools {
     @Tool("Lấy danh sách các mã giảm giá (coupons) đang hoạt động và điều kiện áp dụng")
     public List<Map<String, Object>> listActiveCoupons() {
         log.info("[AI Tool] Gọi listActiveCoupons");
-        List<CouponEntity> coupons = couponRepository.findAll();
+        // Giới hạn 20 coupon để tránh context quá lớn
+        List<CouponEntity> coupons = couponRepository.findAll(PageRequest.of(0, 20)).getContent();
         return coupons.stream()
                 .filter(c -> Boolean.TRUE.equals(c.getActive()))
                 .map(c -> {
@@ -159,6 +160,8 @@ public class AiChatTools {
                     map.put("couponType", c.getCouponType());
                     map.put("startsAt", c.getStartsAt());
                     map.put("expiresAt", c.getExpiresAt());
+                    map.put("guestAllowed", c.getGuestAllowed() != null ? c.getGuestAllowed() : true);
+                    map.put("requiredMembershipTier", c.getRequiredMembershipTier());
                     return map;
                 }).collect(Collectors.toList());
     }

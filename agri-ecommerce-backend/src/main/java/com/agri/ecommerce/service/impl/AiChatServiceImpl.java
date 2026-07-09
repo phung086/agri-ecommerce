@@ -41,12 +41,12 @@ public class AiChatServiceImpl implements AiChatService {
             + "or contact our support team for assistance.";
 
     private static final String FALLBACK_ERROR =
-            "Xin lỗi, hiện tại AI đang bận. Bạn có thể thử lại sau hoặc xem danh sách "
-            + "sản phẩm đang có tại trang chủ của chúng tôi.";
+            "Xin lỗi, mạng đang hơi yếu nên tôi chưa trả lời được. " +
+            "Bạn thử nhắn lại sau vài giây nhé, hoặc vào trang chủ xem danh sách sản phẩm nha.";
 
     private static final String FALLBACK_ERROR_EN =
-            "Sorry, the AI is busy right now. Please try again later or check the products "
-            + "available on our homepage.";
+            "Apologies, I'm having a brief network hiccup. " +
+            "Please retry in a few seconds or browse products on our homepage.";
 
     // System prompt định hướng chatbot
     private static final String SYSTEM_PROMPT = """
@@ -234,10 +234,31 @@ public class AiChatServiceImpl implements AiChatService {
             messages.addAll(chatHistory);
             messages.add(UserMessage.from(buildLanguageScopedUserMessage(userMessage, locale)));
 
-            String reply = assistant.chat(messages);
+            // Retry logic: thử tối đa 2 lần nếu gặp lỗi tạm thời
+            String reply = null;
+            int maxRetries = 2;
+            for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    reply = assistant.chat(messages);
+                    if (reply != null && !reply.isBlank()) {
+                        break;
+                    }
+                    if (attempt < maxRetries) {
+                        log.warn("[AI Chat] LLM trả về null/rỗng ở lần thử {}, thử lại...", attempt);
+                        Thread.sleep(1500L * attempt);
+                    }
+                } catch (Exception retryEx) {
+                    log.warn("[AI Chat] Lỗi lần thử {}: {}", attempt, retryEx.getMessage());
+                    if (attempt < maxRetries) {
+                        Thread.sleep(2000L * attempt);
+                    } else {
+                        throw retryEx;
+                    }
+                }
+            }
 
             if (reply == null || reply.isBlank()) {
-                log.warn("[AI Chat] LLM Assistant trả về response null/rỗng");
+                log.warn("[AI Chat] LLM Assistant trả về response null/rỗng sau {} lần thử", maxRetries);
                 return "en".equalsIgnoreCase(locale) ? FALLBACK_ERROR_EN : FALLBACK_ERROR;
             }
 
@@ -251,8 +272,9 @@ public class AiChatServiceImpl implements AiChatService {
 
     private List<ChatMessage> getRecentChatHistory(Long userId, String guestToken) {
         try {
+            // Chỉ lấy 6 tin nhắn gần nhất để tránh context quá dài gây chậm/lỗi
             org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
-                0, 10, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id")
+                0, 6, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id")
             );
             List<ChatMessageEntity> entities;
             if (userId != null) {
