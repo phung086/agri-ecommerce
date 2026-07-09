@@ -1,7 +1,6 @@
 -- V202607103: Inventory lot / expiry management foundation
--- Safe branch-only migration. It creates batch and transaction tables if missing,
--- extends product freshness snapshot fields, and backfills current products.stock
--- into LEGACY batches so the admin inventory page matches existing products.
+-- MySQL-safe idempotent migration. Do not use ALTER TABLE ... ADD COLUMN IF NOT EXISTS
+-- because Railway MySQL rejects that syntax in the current runtime.
 
 CREATE TABLE IF NOT EXISTS `inventory_batches` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -27,14 +26,6 @@ CREATE TABLE IF NOT EXISTS `inventory_batches` (
   CONSTRAINT `fk_inventory_batch_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE `inventory_batches`
-  ADD COLUMN IF NOT EXISTS `received_at` DATETIME NULL AFTER `remaining_quantity`,
-  ADD COLUMN IF NOT EXISTS `supplier_name` VARCHAR(255) NULL AFTER `expiry_date`,
-  ADD COLUMN IF NOT EXISTS `storage_location` VARCHAR(255) NULL AFTER `supplier_name`,
-  ADD COLUMN IF NOT EXISTS `status` VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' AFTER `storage_location`,
-  ADD COLUMN IF NOT EXISTS `note` VARCHAR(500) NULL AFTER `status`,
-  MODIFY COLUMN `expiry_date` DATETIME NULL;
-
 CREATE TABLE IF NOT EXISTS `inventory_transactions` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `product_id` BIGINT NOT NULL,
@@ -55,18 +46,60 @@ CREATE TABLE IF NOT EXISTS `inventory_transactions` (
   CONSTRAINT `fk_inventory_tx_batch` FOREIGN KEY (`batch_id`) REFERENCES `inventory_batches` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE `inventory_transactions`
-  ADD COLUMN IF NOT EXISTS `previous_stock` INT NULL AFTER `type`,
-  ADD COLUMN IF NOT EXISTS `new_stock` INT NULL AFTER `previous_stock`,
-  ADD COLUMN IF NOT EXISTS `reference_type` VARCHAR(50) NULL AFTER `new_stock`,
-  ADD COLUMN IF NOT EXISTS `reference_id` BIGINT NULL AFTER `reference_type`,
-  MODIFY COLUMN `note` VARCHAR(500) NULL;
+DROP PROCEDURE IF EXISTS add_column_if_missing;
 
-ALTER TABLE `products`
-  ADD COLUMN IF NOT EXISTS `latest_import_date` DATETIME NULL AFTER `unit_en`,
-  ADD COLUMN IF NOT EXISTS `latest_manufacture_date` DATETIME NULL AFTER `latest_import_date`,
-  ADD COLUMN IF NOT EXISTS `earliest_expiry_date` DATETIME NULL AFTER `latest_manufacture_date`,
-  ADD COLUMN IF NOT EXISTS `freshness_status` VARCHAR(50) NULL AFTER `earliest_expiry_date`;
+DELIMITER $$
+CREATE PROCEDURE add_column_if_missing(
+    IN table_name_value VARCHAR(64),
+    IN column_name_value VARCHAR(64),
+    IN column_definition_value TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = table_name_value
+          AND column_name = column_name_value
+    ) THEN
+        SET @ddl = CONCAT('ALTER TABLE `', table_name_value, '` ADD COLUMN ', column_definition_value);
+        PREPARE stmt FROM @ddl;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+DELIMITER ;
+
+CALL add_column_if_missing('inventory_batches', 'received_at', '`received_at` DATETIME NULL AFTER `remaining_quantity`');
+CALL add_column_if_missing('inventory_batches', 'supplier_name', '`supplier_name` VARCHAR(255) NULL AFTER `expiry_date`');
+CALL add_column_if_missing('inventory_batches', 'storage_location', '`storage_location` VARCHAR(255) NULL AFTER `supplier_name`');
+CALL add_column_if_missing('inventory_batches', 'status', '`status` VARCHAR(50) NOT NULL DEFAULT ''ACTIVE'' AFTER `storage_location`');
+CALL add_column_if_missing('inventory_batches', 'note', '`note` VARCHAR(500) NULL AFTER `status`');
+
+CALL add_column_if_missing('inventory_transactions', 'previous_stock', '`previous_stock` INT NULL AFTER `type`');
+CALL add_column_if_missing('inventory_transactions', 'new_stock', '`new_stock` INT NULL AFTER `previous_stock`');
+CALL add_column_if_missing('inventory_transactions', 'reference_type', '`reference_type` VARCHAR(50) NULL AFTER `new_stock`');
+CALL add_column_if_missing('inventory_transactions', 'reference_id', '`reference_id` BIGINT NULL AFTER `reference_type`');
+
+CALL add_column_if_missing('products', 'latest_import_date', '`latest_import_date` DATETIME NULL AFTER `unit_en`');
+CALL add_column_if_missing('products', 'latest_manufacture_date', '`latest_manufacture_date` DATETIME NULL AFTER `latest_import_date`');
+CALL add_column_if_missing('products', 'earliest_expiry_date', '`earliest_expiry_date` DATETIME NULL AFTER `latest_manufacture_date`');
+CALL add_column_if_missing('products', 'freshness_status', '`freshness_status` VARCHAR(50) NULL AFTER `earliest_expiry_date`');
+
+DROP PROCEDURE IF EXISTS add_column_if_missing;
+
+ALTER TABLE `inventory_batches` MODIFY COLUMN `expiry_date` DATETIME NULL;
+ALTER TABLE `inventory_transactions` MODIFY COLUMN `note` VARCHAR(500) NULL;
+
+UPDATE `inventory_batches`
+SET `status` = CASE
+  WHEN COALESCE(`remaining_quantity`, 0) <= 0 THEN 'DEPLETED'
+  WHEN `expiry_date` IS NULL THEN 'NEED_DATE_UPDATE'
+  WHEN `expiry_date` <= NOW() THEN 'EXPIRED'
+  WHEN `expiry_date` <= DATE_ADD(NOW(), INTERVAL 3 DAY) THEN 'NEAR_EXPIRY'
+  ELSE 'ACTIVE'
+END
+WHERE `status` IS NULL OR `status` = '' OR `status` = 'ACTIVE';
 
 INSERT INTO `inventory_batches` (
   `product_id`,
@@ -141,7 +174,8 @@ LEFT JOIN (
     MAX(`manufacture_date`) AS latest_manufacture_date,
     MIN(CASE WHEN `expiry_date` IS NOT NULL AND COALESCE(`remaining_quantity`, 0) > 0 THEN `expiry_date` END) AS earliest_expiry_date,
     SUM(CASE WHEN `status` = 'NEED_DATE_UPDATE' AND COALESCE(`remaining_quantity`, 0) > 0 THEN 1 ELSE 0 END) AS need_date_count,
-    SUM(CASE WHEN `status` = 'NEAR_EXPIRY' AND COALESCE(`remaining_quantity`, 0) > 0 THEN 1 ELSE 0 END) AS near_expiry_count
+    SUM(CASE WHEN `status` = 'NEAR_EXPIRY' AND COALESCE(`remaining_quantity`, 0) > 0 THEN 1 ELSE 0 END) AS near_expiry_count,
+    SUM(CASE WHEN `status` = 'EXPIRED' AND COALESCE(`remaining_quantity`, 0) > 0 THEN 1 ELSE 0 END) AS expired_count
   FROM `inventory_batches`
   GROUP BY `product_id`
 ) s ON s.`product_id` = p.`id`
@@ -152,6 +186,7 @@ SET
   p.`freshness_status` = CASE
     WHEN s.`product_id` IS NULL THEN 'untracked'
     WHEN s.`need_date_count` > 0 THEN 'need_date_update'
+    WHEN s.`expired_count` > 0 THEN 'expired_stock'
     WHEN s.`near_expiry_count` > 0 THEN 'near_expiry'
     ELSE 'fresh'
   END
