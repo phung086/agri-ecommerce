@@ -12,7 +12,17 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "inventory_batches")
+@Table(
+        name = "inventory_batches",
+        indexes = {
+                @Index(name = "idx_inventory_batch_product", columnList = "product_id"),
+                @Index(name = "idx_inventory_batch_expiry", columnList = "expiry_date"),
+                @Index(name = "idx_inventory_batch_status", columnList = "status")
+        },
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_inventory_batch_number", columnNames = "batch_number")
+        }
+)
 public class InventoryBatchEntity {
 
     @Id
@@ -35,11 +45,26 @@ public class InventoryBatchEntity {
     @Column(name = "remaining_quantity", nullable = false)
     private Integer remainingQuantity;
 
+    @Column(name = "received_at")
+    private LocalDateTime receivedAt;
+
     @Column(name = "manufacture_date")
     private LocalDateTime manufactureDate;
 
-    @Column(name = "expiry_date", nullable = false)
+    @Column(name = "expiry_date")
     private LocalDateTime expiryDate;
+
+    @Column(name = "supplier_name", length = 255)
+    private String supplierName;
+
+    @Column(name = "storage_location", length = 255)
+    private String storageLocation;
+
+    @Column(name = "status", nullable = false, length = 50)
+    private String status;
+
+    @Column(name = "note", length = 500)
+    private String note;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -52,8 +77,14 @@ public class InventoryBatchEntity {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        if (this.receivedAt == null) {
+            this.receivedAt = now;
+        }
         if (this.remainingQuantity == null) {
             this.remainingQuantity = this.originalQuantity;
+        }
+        if (this.status == null || this.status.isBlank()) {
+            this.status = this.expiryDate == null ? "NEED_DATE_UPDATE" : "ACTIVE";
         }
     }
 
