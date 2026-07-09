@@ -236,10 +236,15 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public VnpayReturnResponse verifyVnpayReturn(Map<String, String> params) {
         boolean validSignature = hasValidVnpaySignature(params);
         Long orderId = parseLong(cleanBlank(params.get("vnp_TxnRef")));
+
+        if (validSignature && orderId != null && isSuccessfulVnpayReturn(params)) {
+            handleVnpayIpn(params);
+        }
+
         PaymentEntity payment = orderId == null
                 ? null
                 : paymentRepository.findFirstByOrder_IdOrderByCreatedAtDesc(orderId).orElse(null);
@@ -523,6 +528,12 @@ public class PaymentServiceImpl implements PaymentService {
                 requestHash.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8),
                 expectedHash.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8)
         );
+    }
+
+    private boolean isSuccessfulVnpayReturn(Map<String, String> params) {
+        return VNPAY_SUCCESS_CODE.equals(params.get("vnp_ResponseCode"))
+                && VNPAY_SUCCESS_CODE.equals(params.get("vnp_TransactionStatus"))
+                && cleanBlank(params.get("vnp_Amount")) != null;
     }
 
     private String buildHashData(Map<String, String> params) {
