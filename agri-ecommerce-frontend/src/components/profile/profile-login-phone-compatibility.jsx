@@ -4,6 +4,21 @@ import { useEffect } from "react";
 import { profileService } from "@/services/profile.service";
 
 const PATCH_FLAG = "__agriProfileEmailCompatibilityInstalled";
+const PROFILE_TIMEOUT_FLAG = "__agriProfileGetProfileTimeoutInstalled";
+const PROFILE_REQUEST_TIMEOUT_MS = 10000;
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  });
+}
 
 /**
  * Compatibility bridge for the existing profile page.
@@ -12,6 +27,9 @@ const PATCH_FLAG = "__agriProfileEmailCompatibilityInstalled";
  *   accounts can log in using phone + password 123456.
  * - Profile email field is made editable and injected into updateProfile payload
  *   without rewriting the large profile page component.
+ * - Profile auth check is guarded with a timeout so the page never stays forever
+ *   at "Đang kiểm tra phiên đăng nhập" when an old token or deploy hiccup blocks
+ *   the profile API response.
  */
 export function ProfileLoginPhoneCompatibility() {
   useEffect(() => {
@@ -29,6 +47,22 @@ export function ProfileLoginPhoneCompatibility() {
         return originalUpdateProfile(nextPayload);
       };
       profileService[PATCH_FLAG] = true;
+    }
+
+    if (!profileService[PROFILE_TIMEOUT_FLAG]) {
+      const originalGetProfile = profileService.getProfile.bind(profileService);
+      profileService.getProfile = async (...args) => {
+        if (typeof window === "undefined" || window.location.pathname !== "/profile") {
+          return originalGetProfile(...args);
+        }
+
+        return withTimeout(
+          originalGetProfile(...args),
+          PROFILE_REQUEST_TIMEOUT_MS,
+          "Phiên đăng nhập không phản hồi. Vui lòng đăng nhập lại."
+        );
+      };
+      profileService[PROFILE_TIMEOUT_FLAG] = true;
     }
 
     function applyPhoneLoginCompatibility() {
@@ -74,25 +108,17 @@ export function ProfileLoginPhoneCompatibility() {
 
     applyPhoneLoginCompatibility();
 
-    const observer = new MutationObserver(applyPhoneLoginCompatibility);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["type", "disabled", "class", "placeholder"],
-    });
+    const intervalId = window.setInterval(applyPhoneLoginCompatibility, 700);
 
     document.addEventListener("submit", handleSubmitCapture, true);
     document.addEventListener("focusin", handleFocusCapture, true);
-    document.addEventListener("input", applyPhoneLoginCompatibility, true);
     window.addEventListener("popstate", applyPhoneLoginCompatibility);
     window.addEventListener("customer-auth-session-updated", applyPhoneLoginCompatibility);
 
     return () => {
-      observer.disconnect();
+      window.clearInterval(intervalId);
       document.removeEventListener("submit", handleSubmitCapture, true);
       document.removeEventListener("focusin", handleFocusCapture, true);
-      document.removeEventListener("input", applyPhoneLoginCompatibility, true);
       window.removeEventListener("popstate", applyPhoneLoginCompatibility);
       window.removeEventListener("customer-auth-session-updated", applyPhoneLoginCompatibility);
     };
