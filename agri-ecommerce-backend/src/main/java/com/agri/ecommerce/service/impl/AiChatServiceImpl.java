@@ -56,6 +56,7 @@ public class AiChatServiceImpl implements AiChatService {
             Never mention that you are "requested" or "instructed" to use a language. Just answer naturally in that language.
 
             Hard rules:
+            - You must call at most ONE tool per user message. Do not chain multiple tool calls (e.g., do not call listCategories first and then searchProducts). Guess keywords/category slugs directly from user prompt to search.
             - You are read-only. Never claim that you created, updated, canceled, assigned, refunded, paid, deleted, or changed any data.
             - If the user asks for a data-changing action, guide them to the correct screen and tell them they must confirm manually.
             - Use only the tools provided to query products, prices, stock, categories, coupons, and permitted personal data. Never make up details.
@@ -266,6 +267,12 @@ public class AiChatServiceImpl implements AiChatService {
 
         } catch (Exception ex) {
             log.error("[AI Chat] Lỗi khi gọi LLM Assistant: {}", ex.getClass().getSimpleName() + " — " + ex.getMessage());
+            String errorMsg = ex.getMessage() != null ? ex.getMessage() : "";
+            if (errorMsg.contains("RESOURCE_EXHAUSTED") || errorMsg.contains("quota") || errorMsg.contains("429")) {
+                return "en".equalsIgnoreCase(locale) ? 
+                        "The AI chatbot is currently receiving too many requests (quota limit). Please try again in 1 minute!" :
+                        "Hệ thống tư vấn AI đang tạm thời nhận quá nhiều yêu cầu (vượt quá lượt dùng thử của tài khoản miễn phí). Bạn vui lòng đợi khoảng 1 phút rồi thử lại nhé! Trong lúc đó, bạn có thể xem các sản phẩm trực tiếp ở trang chủ nha.";
+            }
             return "en".equalsIgnoreCase(locale) ? FALLBACK_ERROR_EN : FALLBACK_ERROR;
         }
     }
