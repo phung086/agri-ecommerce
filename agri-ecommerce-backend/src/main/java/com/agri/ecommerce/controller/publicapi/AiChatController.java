@@ -3,6 +3,7 @@ package com.agri.ecommerce.controller.publicapi;
 import com.agri.ecommerce.dto.request.chat.AiChatRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.chat.AiChatResponse;
+import com.agri.ecommerce.security.UserPrincipal;
 import com.agri.ecommerce.service.AiChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,7 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import com.agri.ecommerce.security.UserPrincipal;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -59,9 +60,11 @@ public class AiChatController {
                     - Giá cả, đơn vị tính, tồn kho
                     - Chính sách thanh toán, giao hàng, đổi trả
                     - Mã giảm giá và khuyến mãi
+                    - Hướng dẫn customer/admin/delivery theo vai trò đăng nhập
                     
                     **Lưu ý:**
                     - Chatbot chỉ dùng dữ liệu thật từ database, không bịa sản phẩm
+                    - Dữ liệu riêng tư chỉ được truy vấn khi có JWT hợp lệ
                     - Trả lời bằng tiếng Việt, thân thiện
                     - guestToken sẽ được tạo tự động nếu không gửi
                     """
@@ -104,8 +107,9 @@ public class AiChatController {
             Authentication authentication
     ) {
         Long userId = extractUserId(authentication);
+        String role = extractRole(authentication);
 
-        AiChatResponse response = aiChatService.chat(request, userId);
+        AiChatResponse response = aiChatService.chat(request, userId, role);
 
         return ResponseEntity.ok(
                 ApiResponse.success("Chatbot replied successfully", response, HttpStatus.OK.value())
@@ -129,5 +133,52 @@ public class AiChatController {
         }
 
         return null;
+    }
+
+    private String extractRole(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return "GUEST";
+        }
+
+        for (GrantedAuthority grantedAuthority : authentication.getAuthorities()) {
+            String authority = normalizeAuthority(grantedAuthority.getAuthority());
+            if ("ADMIN".equals(authority)) {
+                return "ADMIN";
+            }
+        }
+
+        for (GrantedAuthority grantedAuthority : authentication.getAuthorities()) {
+            String authority = normalizeAuthority(grantedAuthority.getAuthority());
+            if ("STAFF".equals(authority) || "EMPLOYEE".equals(authority)) {
+                return "STAFF";
+            }
+        }
+
+        for (GrantedAuthority grantedAuthority : authentication.getAuthorities()) {
+            String authority = normalizeAuthority(grantedAuthority.getAuthority());
+            if ("DELIVERY".equals(authority) || "DELIVERY_STAFF".equals(authority)) {
+                return "DELIVERY";
+            }
+        }
+
+        for (GrantedAuthority grantedAuthority : authentication.getAuthorities()) {
+            String authority = normalizeAuthority(grantedAuthority.getAuthority());
+            if ("CUSTOMER".equals(authority)) {
+                return "CUSTOMER";
+            }
+        }
+
+        return extractUserId(authentication) != null ? "CUSTOMER" : "GUEST";
+    }
+
+    private String normalizeAuthority(String authority) {
+        if (authority == null) {
+            return "";
+        }
+        String normalized = authority.trim().toUpperCase();
+        if (normalized.startsWith("ROLE_")) {
+            return normalized.substring("ROLE_".length());
+        }
+        return normalized;
     }
 }
