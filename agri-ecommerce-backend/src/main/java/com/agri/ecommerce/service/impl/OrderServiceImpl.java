@@ -391,7 +391,7 @@ public class OrderServiceImpl implements OrderService {
         }
         BigDecimal totalPrice = subtotal.add(shippingFee).setScale(2, RoundingMode.HALF_UP);
         List<String> warnings = new ArrayList<>();
-        warnings.add("Mua nhanh không cần tài khoản: Khách vãng lai sẽ không áp dụng mã giảm giá, tích lũy xu hoặc thăng hạng thành viên.");
+        warnings.add("Bạn cần đăng nhập để được áp dụng mã giảm giá, tích lũy xu thưởng và thăng hạng thành viên nhé!");
         if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
             warnings.add("Đơn hàng từ 100.000đ được miễn phí vận chuyển.");
         }

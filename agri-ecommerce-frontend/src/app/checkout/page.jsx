@@ -286,7 +286,7 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
     promotionService
       .getPublicCoupons({ size: 50 })
       .then((page) => setAllCoupons(page?.content ?? []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Khi mở dialog, clone appliedCoupons sang selectedCoupons
@@ -649,19 +649,33 @@ function CouponCard({ coupon, isSelected, disabled, disabledReason, onToggle, ic
   return (
     <div
       onClick={() => !disabled && onToggle()}
-      className={`relative flex rounded-[12px] border bg-white overflow-hidden min-h-[90px] shadow-sm select-none transition-all duration-200 ${
-        disabled
+      className={`relative flex rounded-[12px] border bg-white overflow-hidden min-h-[90px] shadow-sm select-none transition-all duration-200 ${disabled
           ? "opacity-50 cursor-not-allowed border-slate-100 bg-slate-50"
           : isSelected
-          ? "border-emerald-500 ring-2 ring-emerald-500/10 cursor-pointer"
-          : "border-slate-100 hover:border-slate-200 cursor-pointer"
-      }`}
+            ? "border-emerald-500 ring-2 ring-emerald-500/10 cursor-pointer"
+            : "border-slate-100 hover:border-slate-200 cursor-pointer"
+        }`}
     >
       {/* Left side ticket style */}
-      <div className={`w-20 shrink-0 flex flex-col items-center justify-center text-white ${disabled ? "bg-slate-400" : themeColor} px-2`}>
-        {icon}
-        <span className="text-[10px] font-black tracking-widest mt-1 uppercase">{coupon.couponType === "FREESHIP" ? "Ship" : "Save"}</span>
-      </div>
+      {(() => {
+        const isFreeship = isFreeshipCoupon(coupon);
+        const isFixed = coupon?.discountType === "FIXED_AMOUNT";
+        let leftBadge = "";
+        if (isFreeship) {
+          leftBadge = "Miễn phí";
+        } else if (isFixed) {
+          const amt = Number(coupon.discountAmount || 0);
+          leftBadge = amt >= 1000 ? `-${amt / 1000}k` : `-${amt}đ`;
+        } else {
+          leftBadge = `-${coupon.discountPercentage || 0}%`;
+        }
+        return (
+          <div className={`w-20 shrink-0 flex flex-col items-center justify-center text-white ${disabled ? "bg-slate-400" : themeColor} px-1`}>
+            {icon}
+            <span className="text-[11px] font-black tracking-normal mt-1 uppercase text-center">{leftBadge}</span>
+          </div>
+        );
+      })()}
 
       {/* Ticket circle hole effect */}
       <div className="absolute left-[76px] top-1/2 -translate-y-1/2 flex flex-col justify-between h-5 w-2 z-10">
@@ -678,7 +692,7 @@ function CouponCard({ coupon, isSelected, disabled, disabledReason, onToggle, ic
               type="checkbox"
               checked={isSelected}
               disabled={disabled}
-              onChange={() => {}} // Div handle click
+              onChange={() => { }} // Div handle click
               className="size-4 shrink-0 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
           </div>
@@ -1059,26 +1073,41 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    if (
-      authStatus !== "authenticated" ||
-      loading ||
-      !checkoutPayload.shippingAddressId ||
-      cartItems.length === 0
-    ) {
+    if (loading || cartItems.length === 0) {
+      return undefined;
+    }
+
+    let canPreview = false;
+    if (isGuestCheckout) {
+      canPreview = Boolean(
+        checkoutPayload.guestFullName &&
+        checkoutPayload.guestPhone &&
+        checkoutPayload.guestCity &&
+        checkoutPayload.guestAddress &&
+        addressForm.districtCode &&
+        addressForm.wardCode
+      );
+    } else {
+      canPreview = Boolean(checkoutPayload.shippingAddressId);
+    }
+
+    if (!canPreview) {
+      setPreview(null);
       return undefined;
     }
 
     const timeoutId = window.setTimeout(() => {
-      requestCheckoutPreview({ showErrors: true });
+      requestCheckoutPreview({ showErrors: false });
     }, 120);
 
     return () => window.clearTimeout(timeoutId);
   }, [
-    addressBookVersion,
-    authStatus,
-    cartItems.length,
     checkoutPayload,
+    isGuestCheckout,
     loading,
+    cartItems.length,
+    addressForm.districtCode,
+    addressForm.wardCode,
     requestCheckoutPreview,
   ]);
 
@@ -1257,10 +1286,10 @@ export default function CheckoutPage() {
         setAddresses([guestAddr]);
         setSelectedAddressId("guest-addr");
         setShowAddressForm(false);
-        setNotice("Đã lưu thông tin giao hàng khách vãng lai.");
+        setNotice("Đã lưu thông tin nhận hàng.");
         setPreview(null);
       } catch (err) {
-        setError("Không thể lưu địa chỉ giao hàng khách vãng lai.");
+        setError("Không thể lưu thông tin nhận hàng.");
       }
       return;
     }
@@ -1661,8 +1690,8 @@ export default function CheckoutPage() {
               <div className="flex justify-between">
                 <span className="text-slate-400">Phương thức thanh toán:</span>
                 <span className="font-bold text-slate-900">
-                  {paymentMethod === "vnpay" ? "VNPay Sandbox" : 
-                   paymentMethod === "paypal" ? "PayPal" : "Thanh toán khi nhận hàng (COD)"}
+                  {paymentMethod === "vnpay" ? "VNPay Sandbox" :
+                    paymentMethod === "paypal" ? "PayPal" : "Thanh toán khi nhận hàng (COD)"}
                 </span>
               </div>
               {createdOrder.totalPrice != null && (
@@ -1835,8 +1864,8 @@ export default function CheckoutPage() {
                         <label
                           key={address.id}
                           className={`cursor-pointer rounded-[8px] border p-4 transition ${active
-                              ? "border-emerald-500 bg-emerald-50"
-                              : "border-emerald-100 bg-white hover:border-emerald-200"
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-emerald-100 bg-white hover:border-emerald-200"
                             }`}
                         >
                           <input
@@ -2011,7 +2040,7 @@ export default function CheckoutPage() {
                       </div>
                       {isGuestCheckout && (
                         <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="guest-email">Email nhan hoa don (khong bat buoc)</Label>
+                          <Label htmlFor="guest-email">Email nhận hóa đơn(Không bắt buộc)</Label>
                           <Input
                             id="guest-email"
                             type="email"
@@ -2020,10 +2049,10 @@ export default function CheckoutPage() {
                               setGuestEmail(e.target.value);
                               setPreview(null);
                             }}
-                            placeholder="bo trong neu khong dung email"
+                            placeholder="Bỏ trống nếu không dùng email"
                           />
                           <p className="text-xs font-semibold text-slate-500">
-                            Khach vang lai van dat duoc hang neu khong nhap email.
+                            Hệ thống sẽ gửi hóa đơn điện tử về email này (không bắt buộc).
                           </p>
                         </div>
                       )}
@@ -2264,13 +2293,11 @@ export default function CheckoutPage() {
                       <div className="flex justify-between border-t border-emerald-100 pt-3 text-base font-black text-slate-950">
                         <span>Tổng thanh toán</span>
                         <span
-                          className={`transition-all ${
-                            previewing || isAddressSyncing ? "opacity-60" : ""
-                          } ${
-                            hasServerDiscount || hasServerFreeShipping
+                          className={`transition-all ${previewing || isAddressSyncing ? "opacity-60" : ""
+                            } ${hasServerDiscount || hasServerFreeShipping
                               ? "text-emerald-700"
                               : ""
-                          }`}
+                            }`}
                         >
                           {totalAmountLabel}
                         </span>

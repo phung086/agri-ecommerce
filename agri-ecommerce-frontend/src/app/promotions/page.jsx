@@ -20,13 +20,22 @@ import {
   Zap,
 } from "lucide-react";
 
-import { formatDate } from "@/lib/admin-utils";
+import { formatDate, formatCurrency } from "@/lib/admin-utils";
 import { promotionService } from "@/services/promotion.service";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* Colour palette keyed by discount tier                                       */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function resolveTheme(discountPercentage) {
+function resolveTheme(coupon) {
+  let discountPercentage = coupon?.discountPercentage ?? 0;
+  if (coupon?.discountType === "FIXED_AMOUNT") {
+    const amt = Number(coupon.discountAmount || 0);
+    if (amt >= 50000) discountPercentage = 50;
+    else if (amt >= 30000) discountPercentage = 30;
+    else if (amt >= 15000) discountPercentage = 20;
+    else discountPercentage = 10;
+  }
+
   if (discountPercentage >= 50)
     return {
       tag: "VIP",
@@ -134,8 +143,29 @@ function UsageBar({ used, limit, theme }) {
 /* Single voucher card                                                         */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function VoucherCard({ coupon, onCopy, copied }) {
-  const theme = resolveTheme(coupon.discountPercentage ?? 0);
+  const theme = resolveTheme(coupon);
   const label = deriveLabel(coupon.code);
+
+  const isFreeship = coupon.couponType === "FREESHIP" || String(coupon.code || "").trim().toUpperCase() === "FREESHIP";
+  const isFixed = coupon.discountType === "FIXED_AMOUNT";
+
+  let badgeText = "";
+  let descriptionText = "";
+  let valueText = "";
+  if (isFreeship) {
+    badgeText = "Free";
+    descriptionText = "Miễn phí vận chuyển cho đơn hàng tiếp theo của bạn tại AgriMarket.";
+    valueText = "Freeship";
+  } else if (isFixed) {
+    const amt = Number(coupon.discountAmount || 0);
+    badgeText = amt >= 1000 ? `-${amt / 1000}k` : `-${amt}đ`;
+    descriptionText = `Giảm ngay ${formatCurrency(amt)} cho đơn hàng tiếp theo của bạn tại AgriMarket.`;
+    valueText = formatCurrency(amt);
+  } else {
+    badgeText = `-${coupon.discountPercentage}%`;
+    descriptionText = `Giảm ngay ${coupon.discountPercentage}% cho đơn hàng tiếp theo của bạn tại AgriMarket.`;
+    valueText = `${coupon.discountPercentage}%`;
+  }
 
   return (
     <article
@@ -149,7 +179,7 @@ function VoucherCard({ coupon, onCopy, copied }) {
         className={`absolute right-4 top-4 flex h-16 w-16 flex-col items-center justify-center rounded-full ${theme.badge} text-white shadow-lg`}
       >
         <span className="text-lg font-black leading-none">
-          -{coupon.discountPercentage}%
+          {badgeText}
         </span>
       </div>
 
@@ -166,11 +196,7 @@ function VoucherCard({ coupon, onCopy, copied }) {
         <div className="pr-16">
           <h3 className="text-lg font-black text-slate-900">{label}</h3>
           <p className="mt-1.5 text-sm leading-5 text-slate-500">
-            Giảm ngay{" "}
-            <span className={`font-bold ${theme.accent}`}>
-              {coupon.discountPercentage}%
-            </span>{" "}
-            cho đơn hàng tiếp theo của bạn tại AgriMarket.
+            {descriptionText}
           </p>
         </div>
 
@@ -181,7 +207,7 @@ function VoucherCard({ coupon, onCopy, copied }) {
               Giảm giá
             </p>
             <p className={`mt-1 text-sm font-black ${theme.accent}`}>
-              {coupon.discountPercentage}%
+              {valueText}
             </p>
           </div>
           <div className="rounded-xl bg-slate-50 p-3">
