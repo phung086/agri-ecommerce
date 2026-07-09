@@ -216,8 +216,23 @@ export const adminService = {
     return unwrapApiData(response);
   },
 
-  getBatches: async () => {
-    const response = await axiosClient.get("/admin/inventory/batches");
+  getInventorySummary: async (params = {}) => {
+    const response = await axiosClient.get("/admin/inventory/summary", { params });
+    return unwrapApiData(response);
+  },
+
+  getInventoryProducts: async (params = {}) => {
+    const response = await axiosClient.get("/admin/inventory/alerts", { params });
+    return unwrapApiData(response);
+  },
+
+  getBatches: async (params = {}) => {
+    const response = await axiosClient.get("/admin/inventory/batches", { params });
+    return unwrapApiData(response);
+  },
+
+  getProductBatches: async (productId) => {
+    const response = await axiosClient.get(`/admin/inventory/products/${productId}/batches`);
     return unwrapApiData(response);
   },
 
@@ -226,8 +241,23 @@ export const adminService = {
     return unwrapApiData(response);
   },
 
-  getTransactions: async () => {
-    const response = await axiosClient.get("/admin/inventory/transactions");
+  getExpiryAlerts: async (params = {}) => {
+    const response = await axiosClient.get("/admin/inventory/expiry-alerts", { params });
+    return unwrapApiData(response);
+  },
+
+  getTransactions: async (params = {}) => {
+    const response = await axiosClient.get("/admin/inventory/transactions", { params });
+    return unwrapApiData(response);
+  },
+
+  backfillLegacyBatches: async () => {
+    const response = await axiosClient.post("/admin/inventory/backfill-legacy-batches");
+    return unwrapApiData(response);
+  },
+
+  recalculateInventory: async () => {
+    const response = await axiosClient.post("/admin/inventory/recalculate");
     return unwrapApiData(response);
   },
 
