@@ -256,6 +256,16 @@ export const adminService = {
     return unwrapApiData(response);
   },
 
+  seedInventoryDemoData: async () => {
+    const response = await axiosClient.post("/admin/inventory/demo/seed");
+    return unwrapApiData(response);
+  },
+
+  generateNearExpiryCoupons: async (params = {}) => {
+    const response = await axiosClient.post("/admin/inventory/near-expiry-coupons", null, { params });
+    return unwrapApiData(response);
+  },
+
   recalculateInventory: async () => {
     const response = await axiosClient.post("/admin/inventory/recalculate");
     return unwrapApiData(response);
