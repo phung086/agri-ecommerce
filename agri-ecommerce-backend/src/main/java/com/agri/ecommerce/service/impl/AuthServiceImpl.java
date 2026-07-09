@@ -40,9 +40,10 @@ import java.util.Optional;
 public class AuthServiceImpl implements AuthService {
 
     private static final String CUSTOMER_ROLE = "customer";
-    private static final String INVALID_LOGIN_MESSAGE = "Email or password is incorrect";
+    private static final String INVALID_LOGIN_MESSAGE = "Email/phone or password is incorrect";
     private static final String GENERIC_RESET_MESSAGE = "If the email exists, password reset instructions are ready.";
     private static final String RESET_TOKEN_DIGEST_ALGORITHM = "SHA-256";
+    private static final String DEFAULT_GUEST_EMAIL_SUFFIX = "@agrimarket.default";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
@@ -96,27 +97,28 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        String email = normalizeEmail(request.getEmail());
-        loginAttemptService.assertNotBlocked(email);
+        String credential = normalizeEmail(request.getEmail());
+        loginAttemptService.assertNotBlocked(credential);
 
-        Optional<UserEntity> userOptional = userRepository.findByEmail(email);
+        Optional<UserEntity> userOptional = findLoginUser(credential);
         if (userOptional.isEmpty()) {
-            loginAttemptService.recordFailure(email);
+            loginAttemptService.recordFailure(credential);
             throw new BadRequestException(INVALID_LOGIN_MESSAGE);
         }
 
         UserEntity user = userOptional.get();
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            loginAttemptService.recordFailure(email);
+            loginAttemptService.recordFailure(credential);
             throw new BadRequestException(INVALID_LOGIN_MESSAGE);
         }
 
         if (user.getStatus() != UserStatus.active) {
-            loginAttemptService.recordFailure(email);
+            loginAttemptService.recordFailure(credential);
             throw new BadRequestException("Account is not active or has been locked");
         }
 
-        loginAttemptService.clear(email);
+        loginAttemptService.clear(credential);
+        loginAttemptService.clear(user.getEmail());
         return buildAuthResponse(user);
     }
 
@@ -193,6 +195,29 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("User was not found"));
 
         return userMapper.toUserResponse(user);
+    }
+
+    private Optional<UserEntity> findLoginUser(String credential) {
+        if (credential == null || credential.isBlank()) {
+            return Optional.empty();
+        }
+
+        if (isVietnamPhoneCredential(credential)) {
+            Optional<UserEntity> userByPhone = userRepository.findByPhoneNumber(credential);
+            return userByPhone.filter(this::isDefaultGuestAccount);
+        }
+
+        return userRepository.findByEmail(credential);
+    }
+
+    private boolean isVietnamPhoneCredential(String credential) {
+        return credential != null && credential.matches("^0\\d{9}$");
+    }
+
+    private boolean isDefaultGuestAccount(UserEntity user) {
+        return user != null
+                && user.getEmail() != null
+                && user.getEmail().toLowerCase().endsWith(DEFAULT_GUEST_EMAIL_SUFFIX);
     }
 
     private AuthResponse buildAuthResponse(UserEntity user) {
