@@ -44,7 +44,12 @@ public class CouponResponse {
 
     private Boolean available;
 
+    private String requiredMembershipTier;
+
+    private Boolean guestAllowed;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
 }
+

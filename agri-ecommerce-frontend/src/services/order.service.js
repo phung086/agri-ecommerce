@@ -66,4 +66,11 @@ export const orderService = {
     });
     return unwrapApiData(response);
   },
+
+  trackByGhnCode: async (trackingCode, phone) => {
+    const response = await axiosClient.get("/public/orders/track-by-ghn", {
+      params: { trackingCode, phone },
+    });
+    return unwrapApiData(response);
+  },
 };

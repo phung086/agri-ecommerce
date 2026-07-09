@@ -25,4 +25,6 @@ public interface OrderService {
     OrderResponse completeOrder(Long userId, Long orderId, OrderStatusNoteRequest request);
 
     OrderResponse trackOrder(Long orderId, String phone);
+
+    OrderResponse trackOrderByGhnCode(String trackingCode, String phone);
 }

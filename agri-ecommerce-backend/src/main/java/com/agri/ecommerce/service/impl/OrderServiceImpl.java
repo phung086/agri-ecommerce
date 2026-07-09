@@ -185,9 +185,7 @@ public class OrderServiceImpl implements OrderService {
                 })
                 .toList();
         BigDecimal baseShippingFee = calculateBaseShippingFee(shippingAddress, totalQuantity);
-        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
-            baseShippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
+        baseShippingFee = calculateDiscountedShippingFee(subtotal, baseShippingFee);
         CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal, baseShippingFee, checkoutItems, user);
 
         int pointsToRedeem = calculateRedeemablePoints(request, user, subtotal);
@@ -203,9 +201,11 @@ public class OrderServiceImpl implements OrderService {
         }
 
         List<String> warnings = buildCheckoutPreviewWarnings(previewItems, couponCalculation);
-        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
-            warnings = new ArrayList<>(warnings);
-            warnings.add("Đơn hàng từ 100.000đ được miễn phí vận chuyển!");
+        warnings = new ArrayList<>(warnings);
+        if (subtotal.compareTo(new BigDecimal("300000.00")) >= 0) {
+            warnings.add("Đơn hàng từ 300.000đ được miễn phí vận chuyển.");
+        } else if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            warnings.add("Đơn hàng từ 100.000đ được giảm 20.000đ phí vận chuyển.");
         }
         if (pointsDiscount.compareTo(BigDecimal.ZERO) > 0) {
             warnings = new ArrayList<>(warnings);
@@ -255,9 +255,7 @@ public class OrderServiceImpl implements OrderService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         int totalQuantity = checkoutItems.stream().mapToInt(CheckoutItem::quantity).sum();
         BigDecimal baseShippingFee = calculateBaseShippingFee(shippingAddress, totalQuantity);
-        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
-            baseShippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
+        baseShippingFee = calculateDiscountedShippingFee(subtotal, baseShippingFee);
         CouponCalculation couponCalculation = calculateCoupon(request.getCouponCode(), subtotal, baseShippingFee, checkoutItems, user);
         int pointsToRedeem = calculateRedeemablePoints(request, user, subtotal);
         int pointsUsed = pointsToRedeem > 0
@@ -386,30 +384,50 @@ public class OrderServiceImpl implements OrderService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
         BigDecimal shippingFee = calculateBaseShippingFee(request.getGuestCity(), request.getGuestAddress(), totalQuantity);
-        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
-            shippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        shippingFee = calculateDiscountedShippingFee(subtotal, shippingFee);
+
+        List<CheckoutItem> checkoutItems = quantityByProductId.entrySet().stream()
+                .map(entry -> {
+                    ProductEntity product = productsById.get(entry.getKey());
+                    BigDecimal price = product == null || product.getPrice() == null ? BigDecimal.ZERO : product.getPrice();
+                    BigDecimal lineTotal = price.multiply(BigDecimal.valueOf(entry.getValue()));
+                    return new CheckoutItem(product, entry.getValue(), price, lineTotal);
+                })
+                .toList();
+
+        CouponPreviewCalculation couponCalculation = calculateCouponPreview(request.getCouponCode(), subtotal, shippingFee, checkoutItems, null);
+
+        BigDecimal totalPrice = subtotal
+                .subtract(couponCalculation.discountAmount())
+                .add(couponCalculation.shippingFee())
+                .setScale(2, RoundingMode.HALF_UP);
+        if (totalPrice.compareTo(BigDecimal.ZERO) < 0) {
+            totalPrice = BigDecimal.ZERO;
         }
-        BigDecimal totalPrice = subtotal.add(shippingFee).setScale(2, RoundingMode.HALF_UP);
-        List<String> warnings = new ArrayList<>();
-        warnings.add("Bạn cần đăng nhập để được áp dụng mã giảm giá, tích lũy xu thưởng và thăng hạng thành viên nhé!");
-        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
-            warnings.add("Đơn hàng từ 100.000đ được miễn phí vận chuyển.");
+
+        List<String> warnings = buildCheckoutPreviewWarnings(previewItems, couponCalculation);
+        warnings = new java.util.ArrayList<>(warnings);
+        warnings.add("Đăng nhập để được tích lũy xu thưởng và thăng hạng thành viên nhé!");
+        if (subtotal.compareTo(new BigDecimal("300000.00")) >= 0) {
+            warnings.add("Đơn hàng từ 300.000đ được miễn phí vận chuyển.");
+        } else if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            warnings.add("Đơn hàng từ 100.000đ được giảm 20.000đ phí vận chuyển.");
         }
 
         return CheckoutPreviewResponse.builder()
-                .canCheckout(allItemsAvailable)
+                .canCheckout(allItemsAvailable && couponCalculation.checkoutAllowed())
                 .paymentMethod(paymentMethod)
-                .couponCode(null)
-                .couponValid(false)
-                .couponMessage("Bạn cần có tài khoản để sử dụng mã giảm giá và tích lũy điểm thưởng nhé!")
+                .couponCode(couponCalculation.couponCode())
+                .couponValid(couponCalculation.valid())
+                .couponMessage(couponCalculation.message())
                 .shippingAddress(toGuestShippingAddressResponse(request))
                 .totalQuantity(totalQuantity)
                 .subtotal(subtotal)
-                .discountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
-                .couponDiscountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                .discountAmount(couponCalculation.discountAmount())
+                .couponDiscountAmount(couponCalculation.discountAmount())
                 .pointsDiscount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                 .pointsUsed(0)
-                .shippingFee(shippingFee)
+                .shippingFee(couponCalculation.shippingFee())
                 .totalPrice(totalPrice)
                 .items(previewItems)
                 .warnings(warnings)
@@ -434,10 +452,17 @@ public class OrderServiceImpl implements OrderService {
                 .setScale(2, RoundingMode.HALF_UP);
         int totalQuantity = checkoutItems.stream().mapToInt(CheckoutItem::quantity).sum();
         BigDecimal shippingFee = calculateBaseShippingFee(request.getGuestCity(), request.getGuestAddress(), totalQuantity);
-        if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
-            shippingFee = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        shippingFee = calculateDiscountedShippingFee(subtotal, shippingFee);
+
+        CouponCalculation couponCalculation = calculateCoupon(request.getCouponCode(), subtotal, shippingFee, checkoutItems, null);
+
+        BigDecimal totalPrice = subtotal
+                .subtract(couponCalculation.discountAmount())
+                .add(couponCalculation.shippingFee())
+                .setScale(2, RoundingMode.HALF_UP);
+        if (totalPrice.compareTo(BigDecimal.ZERO) < 0) {
+            totalPrice = BigDecimal.ZERO;
         }
-        BigDecimal totalPrice = subtotal.add(shippingFee).setScale(2, RoundingMode.HALF_UP);
 
         OrderEntity order = orderRepository.save(OrderEntity.builder()
                 .user(null)
@@ -450,10 +475,10 @@ public class OrderServiceImpl implements OrderService {
                 .shippingAddressDetail(cleanBlank(request.getGuestAddress()))
                 .shippingCity(cleanBlank(request.getGuestCity()))
                 .subtotal(subtotal)
-                .discountAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
-                .shippingFee(shippingFee)
-                .coupon(null)
-                .couponCode(null)
+                .discountAmount(couponCalculation.discountAmount())
+                .shippingFee(couponCalculation.shippingFee())
+                .coupon(couponCalculation.coupon())
+                .couponCode(couponCalculation.couponCode())
                 .totalPrice(totalPrice)
                 .status(ORDER_PENDING)
                 .pointsUsed(0)
@@ -1172,6 +1197,20 @@ public class OrderServiceImpl implements OrderService {
         return normalizeMoney(shippingFee);
     }
 
+    private BigDecimal calculateDiscountedShippingFee(BigDecimal subtotal, BigDecimal baseShippingFee) {
+        BigDecimal fee = baseShippingFee != null ? baseShippingFee : BigDecimal.ZERO;
+        if (subtotal.compareTo(new BigDecimal("300000.00")) >= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        } else if (subtotal.compareTo(new BigDecimal("100000.00")) >= 0) {
+            BigDecimal reduced = fee.subtract(new BigDecimal("20000.00"));
+            if (reduced.compareTo(BigDecimal.ZERO) < 0) {
+                return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            }
+            return reduced.setScale(2, RoundingMode.HALF_UP);
+        }
+        return fee.setScale(2, RoundingMode.HALF_UP);
+    }
+
     private BigDecimal normalizeMoney(BigDecimal amount) {
         if (amount == null) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
@@ -1229,14 +1268,49 @@ public class OrderServiceImpl implements OrderService {
         return discountType == null ? "PERCENTAGE" : discountType.toUpperCase(Locale.ROOT);
     }
 
+    private boolean hasSufficientTier(String userTier, String requiredTier) {
+        if (requiredTier == null) {
+            return true;
+        }
+        if (userTier == null) {
+            return false;
+        }
+        int userLevel = getTierLevel(userTier);
+        int requiredLevel = getTierLevel(requiredTier);
+        return userLevel >= requiredLevel;
+    }
+
+    private int getTierLevel(String tier) {
+        if (tier == null) return 1;
+        switch (tier.trim().toUpperCase(Locale.ROOT)) {
+            case "SILVER": return 2;
+            case "GOLD": return 3;
+            case "PLATINUM": return 4;
+            default: return 1; // BRONZE
+        }
+    }
+
     private void validateCoupon(CouponEntity coupon, BigDecimal subtotal, List<CheckoutItem> checkoutItems, UserEntity user) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             throw new BadRequestException("Mã giảm giá đã bị vô hiệu hóa");
         }
 
-        if (!loyaltyService.validateTierCoupon(user, coupon.getCode())) {
-            throw new BadRequestException("Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này");
+        if (user == null) {
+            if (Boolean.FALSE.equals(coupon.getGuestAllowed()) || coupon.getRequiredMembershipTier() != null) {
+                throw new BadRequestException("Bạn cần đăng nhập để sử dụng mã này");
+            }
+        } else {
+            if (coupon.getRequiredMembershipTier() != null) {
+                String requiredTier = coupon.getRequiredMembershipTier().trim().toUpperCase(Locale.ROOT);
+                String userTier = user.getMembershipTier() != null ? user.getMembershipTier().trim().toUpperCase(Locale.ROOT) : "BRONZE";
+                if (!hasSufficientTier(userTier, requiredTier)) {
+                    throw new BadRequestException("Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này");
+                }
+            } else if (!loyaltyService.validateTierCoupon(user, coupon.getCode())) {
+                throw new BadRequestException("Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này");
+            }
         }
+
 
         // Đồng bộ múi giờ UTC+7 cho thời gian hiện tại
         LocalDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDateTime();
@@ -1291,9 +1365,22 @@ public class OrderServiceImpl implements OrderService {
             return "Coupon is inactive";
         }
 
-        if (!loyaltyService.validateTierCoupon(user, coupon.getCode())) {
-            return "Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này";
+        if (user == null) {
+            if (Boolean.FALSE.equals(coupon.getGuestAllowed()) || coupon.getRequiredMembershipTier() != null) {
+                return "Bạn cần đăng nhập để sử dụng mã này";
+            }
+        } else {
+            if (coupon.getRequiredMembershipTier() != null) {
+                String requiredTier = coupon.getRequiredMembershipTier().trim().toUpperCase(Locale.ROOT);
+                String userTier = user.getMembershipTier() != null ? user.getMembershipTier().trim().toUpperCase(Locale.ROOT) : "BRONZE";
+                if (!hasSufficientTier(userTier, requiredTier)) {
+                    return "Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này";
+                }
+            } else if (!loyaltyService.validateTierCoupon(user, coupon.getCode())) {
+                return "Hạng thành viên của bạn không đủ điều kiện sử dụng mã giảm giá này";
+            }
         }
+
 
         // Đồng bộ múi giờ UTC+7 cho thời gian hiện tại
         LocalDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDateTime();
@@ -1509,6 +1596,24 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse trackOrder(Long orderId, String phone) {
         OrderEntity order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Đơn hàng không tồn tại."));
+
+        String orderPhone = order.getShippingPhone();
+
+        if (orderPhone == null || !orderPhone.replaceAll("\\D", "").equals(phone.replaceAll("\\D", ""))) {
+            throw new BadRequestException("Số điện thoại không khớp với thông tin đơn hàng.");
+        }
+
+        return toOrderResponse(order, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderResponse trackOrderByGhnCode(String trackingCode, String phone) {
+        if (trackingCode == null || trackingCode.trim().isEmpty()) {
+            throw new BadRequestException("Mã vận đơn không được để trống.");
+        }
+        OrderEntity order = orderRepository.findByTrackingNumber(trackingCode.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng khớp với mã vận đơn đã cung cấp."));
 
         String orderPhone = order.getShippingPhone();
 

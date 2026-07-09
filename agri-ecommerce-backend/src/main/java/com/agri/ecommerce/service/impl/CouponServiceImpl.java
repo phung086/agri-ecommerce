@@ -110,6 +110,8 @@ public class CouponServiceImpl implements CouponService {
                 .discountAmount(resolveDiscountAmount(couponType, discountType, request.getDiscountAmount()))
                 .minOrderValue(resolveMinOrderValue(request.getMinOrderValue()))
                 .productId(request.getProductId())
+                .requiredMembershipTier(resolveRequiredTier(request.getRequiredMembershipTier()))
+                .guestAllowed(request.getGuestAllowed() == null ? true : request.getGuestAllowed())
                 .startsAt(request.getStartsAt())
                 .expiresAt(request.getExpiresAt())
                 .usageLimit(request.getUsageLimit())
@@ -139,6 +141,10 @@ public class CouponServiceImpl implements CouponService {
         coupon.setDiscountAmount(resolveDiscountAmount(couponType, discountType, request.getDiscountAmount()));
         coupon.setProductId(request.getProductId());
         coupon.setMinOrderValue(resolveMinOrderValue(request.getMinOrderValue()));
+        coupon.setRequiredMembershipTier(resolveRequiredTier(request.getRequiredMembershipTier()));
+        if (request.getGuestAllowed() != null) {
+            coupon.setGuestAllowed(request.getGuestAllowed());
+        }
         coupon.setStartsAt(request.getStartsAt());
         coupon.setExpiresAt(request.getExpiresAt());
         coupon.setUsageLimit(request.getUsageLimit());
@@ -374,4 +380,15 @@ public class CouponServiceImpl implements CouponService {
 
         return value.trim();
     }
+
+    private static final java.util.Set<String> ALLOWED_TIERS = java.util.Set.of("BRONZE", "SILVER", "GOLD", "PLATINUM");
+
+    private String resolveRequiredTier(String tier) {
+        if (tier == null || tier.isBlank()) {
+            return null;
+        }
+        String upper = tier.trim().toUpperCase(Locale.ROOT);
+        return ALLOWED_TIERS.contains(upper) ? upper : null;
+    }
 }
+

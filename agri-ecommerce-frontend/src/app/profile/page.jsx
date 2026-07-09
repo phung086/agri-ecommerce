@@ -225,6 +225,7 @@ function AuthPanel({ onAuthenticated }) {
   const [trackOrderId, setTrackOrderId] = useState("");
   const [trackPhone, setTrackPhone] = useState("");
   const [trackedOrder, setTrackedOrder] = useState(null);
+  const [trackMethod, setTrackMethod] = useState("id");
 
   const isLogin = mode === "login";
   const isTrack = mode === "track";
@@ -265,22 +266,31 @@ function AuthPanel({ onAuthenticated }) {
     setTrackedOrder(null);
     setLoading(true);
 
-    const parsedId = Number(trackOrderId.trim());
-    if (!parsedId || !trackPhone.trim()) {
-      setError("Vui lòng nhập đầy đủ mã đơn hàng và số điện thoại mua hàng.");
+    const codeOrId = trackOrderId.trim();
+    if (!codeOrId || !trackPhone.trim()) {
+      setError("Vui lòng nhập đầy đủ thông tin tra cứu.");
       setLoading(false);
       return;
     }
 
     try {
-      const response = await orderService.trackGuestOrder(parsedId, trackPhone.trim());
+      let response;
+      if (trackMethod === "ghn") {
+        response = await orderService.trackByGhnCode(codeOrId, trackPhone.trim());
+      } else {
+        const parsedId = Number(codeOrId);
+        if (isNaN(parsedId)) {
+          throw new Error("Mã đơn hàng phải là một số hợp lệ.");
+        }
+        response = await orderService.trackGuestOrder(parsedId, trackPhone.trim());
+      }
       setTrackedOrder(response?.data ?? response);
       setNotice("Tìm thấy thông tin đơn hàng!");
     } catch (err) {
       setError(
         err?.response?.data?.message ||
           err?.message ||
-          "Không tìm thấy đơn hàng khớp với mã và số điện thoại đã cung cấp."
+          "Không tìm thấy đơn hàng khớp với thông tin đã cung cấp."
       );
     } finally {
       setLoading(false);
@@ -469,13 +479,53 @@ function AuthPanel({ onAuthenticated }) {
           {!trackedOrder ? (
             <form onSubmit={handleTrackOrder} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="track-order-id">Mã đơn hàng</Label>
+                <Label>Phương thức tra cứu</Label>
+                <div className="grid grid-cols-2 gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50/50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrackMethod("id");
+                      setError("");
+                    }}
+                    className={`h-8 rounded-[6px] text-xs font-bold transition ${
+                      trackMethod === "id"
+                        ? "bg-white text-emerald-800 shadow-sm"
+                        : "text-slate-500 hover:text-emerald-700"
+                    }`}
+                  >
+                    Mã đơn hàng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrackMethod("ghn");
+                      setError("");
+                    }}
+                    className={`h-8 rounded-[6px] text-xs font-bold transition ${
+                      trackMethod === "ghn"
+                        ? "bg-white text-emerald-800 shadow-sm"
+                        : "text-slate-500 hover:text-emerald-700"
+                    }`}
+                  >
+                    Mã vận đơn GHN
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="track-order-id">
+                  {trackMethod === "ghn" ? "Mã vận đơn GHN" : "Mã đơn hàng"}
+                </Label>
                 <Input
                   id="track-order-id"
                   type="text"
                   value={trackOrderId}
                   onChange={(e) => setTrackOrderId(e.target.value)}
-                  placeholder="Nhập mã số đơn hàng (ví dụ: 12)"
+                  placeholder={
+                    trackMethod === "ghn"
+                      ? "Nhập mã vận đơn GHN (ví dụ: GHN12345678)"
+                      : "Nhập mã số đơn hàng (ví dụ: 12)"
+                  }
                   required
                 />
               </div>

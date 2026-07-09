@@ -272,7 +272,7 @@ function checkCouponTierAllowed(couponCode = "", userTier = "BRONZE") {
 }
 
 /* ─── Coupon Autocomplete widget ──────────────────────────────────────────── */
-function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, cartItems = [] }) {
+function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, cartItems = [], isGuest }) {
   const [isOpen, setIsOpen] = useState(false);
   const [allCoupons, setAllCoupons] = useState([]);
   const [selectedCoupons, setSelectedCoupons] = useState([]);
@@ -329,8 +329,14 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
 
   // Kiểm tra trạng thái hợp lệ và lý do vô hiệu hóa của coupon
   function getCouponStatusInfo(coupon) {
+    // 0. Kiểm tra quyền của khách vãng lai
+    if (isGuest) {
+      if (coupon.guestAllowed === false || coupon.requiredMembershipTier || ["SILVER10", "GOLD25", "PLATINUM50", "PLATINUM10", "GOLD5", "BRONZE5"].includes(coupon.code)) {
+        return { disabled: true, reason: "Đăng nhập tài khoản để sử dụng mã này" };
+      }
+    }
     // 1. Kiểm tra hạng thành viên
-    if (!checkCouponTierAllowed(coupon.code, membershipTier)) {
+    if (!isGuest && !checkCouponTierAllowed(coupon.code, membershipTier)) {
       const required = coupon.code.startsWith("SILVER") ? "Bạc" : coupon.code.startsWith("GOLD") ? "Vàng" : "Kim Cương";
       return { disabled: true, reason: `Yêu cầu hạng: ${required} trở lên` };
     }
@@ -340,13 +346,43 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
     }
     // 3. Kiểm tra sản phẩm trong giỏ hàng (với PRODUCT_DISCOUNT)
     if (coupon.couponType === "PRODUCT_DISCOUNT" && coupon.productId != null) {
-      const hasProduct = cartItems.some(item => Number(item.product?.id) === Number(coupon.productId));
+      const hasProduct = cartItems.some(item => Number(item.product?.id) === Number(coupon.productId) || Number(item.productId) === Number(coupon.productId));
       if (!hasProduct) {
         return { disabled: true, reason: "Giỏ hàng không chứa sản phẩm áp dụng mã" };
       }
     }
     return { disabled: false, reason: null };
   }
+
+  // Sắp xếp các coupon theo độ ưu tiên: đủ điều kiện lên trước, không đủ điều kiện xuống sau.
+  // Trong các mã đủ điều kiện, sắp xếp theo số tiền giảm được ước tính từ cao xuống thấp.
+  function getSortWeight(coupon) {
+    const status = getCouponStatusInfo(coupon);
+    if (status.disabled) {
+      return -1000000;
+    }
+    if (coupon.couponType === "FREESHIP" || isFreeshipCoupon(coupon)) {
+      if (coupon.code === "SHIPFREE") {
+        return 30000;
+      }
+      return Number(coupon.discountAmount || 20000);
+    }
+    return getEstimatedDiscountAmount(coupon, subtotal);
+  }
+
+  const sortedFreeshipCoupons = useMemo(() => {
+    return [...freeshipCoupons].sort((a, b) => getSortWeight(b) - getSortWeight(a));
+  }, [freeshipCoupons, subtotal, membershipTier, isGuest, cartItems]);
+
+  const sortedOrderCoupons = useMemo(() => {
+    return [...orderCoupons].sort((a, b) => getSortWeight(b) - getSortWeight(a));
+  }, [orderCoupons, subtotal, membershipTier, isGuest, cartItems]);
+
+  const sortedProductCoupons = useMemo(() => {
+    return [...productCoupons].sort((a, b) => getSortWeight(b) - getSortWeight(a));
+  }, [productCoupons, subtotal, membershipTier, isGuest, cartItems]);
+
+
 
   // Toggle tick chọn coupon
   function handleToggleCoupon(coupon) {
@@ -528,11 +564,11 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
           {/* Voucher list wrapper */}
           <div className="max-h-[350px] overflow-y-auto p-5 space-y-5">
             {/* Freeship Section */}
-            {freeshipCoupons.length > 0 && (
+            {sortedFreeshipCoupons.length > 0 && (
               <div className="space-y-2">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã vận chuyển (Chọn tối đa 1)</p>
                 <div className="grid gap-2.5">
-                  {freeshipCoupons.map((coupon) => {
+                  {sortedFreeshipCoupons.map((coupon) => {
                     const status = getCouponStatusInfo(coupon);
                     const isSelected = selectedCoupons.some(c => c.id === coupon.id);
                     return (
@@ -554,11 +590,11 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
             )}
 
             {/* Order discount Section */}
-            {orderCoupons.length > 0 && (
+            {sortedOrderCoupons.length > 0 && (
               <div className="space-y-2">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã đơn hàng & VIP (Chọn tối đa 1)</p>
                 <div className="grid gap-2.5">
-                  {orderCoupons.map((coupon) => {
+                  {sortedOrderCoupons.map((coupon) => {
                     const status = getCouponStatusInfo(coupon);
                     const isSelected = selectedCoupons.some(c => c.id === coupon.id);
                     return (
@@ -580,11 +616,11 @@ function CouponPicker({ onApply, appliedCoupons = [], subtotal, membershipTier, 
             )}
 
             {/* Product discount Section */}
-            {productCoupons.length > 0 && (
+            {sortedProductCoupons.length > 0 && (
               <div className="space-y-2">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Mã sản phẩm (Chọn chồng nhiều mã khác sản phẩm)</p>
                 <div className="grid gap-2.5">
-                  {productCoupons.map((coupon) => {
+                  {sortedProductCoupons.map((coupon) => {
                     const status = getCouponStatusInfo(coupon);
                     const isSelected = selectedCoupons.some(c => c.id === coupon.id);
                     return (
@@ -2193,6 +2229,7 @@ export default function CheckoutPage() {
                     subtotal={summary.subtotal}
                     membershipTier={membershipTier}
                     cartItems={cartItems}
+                    isGuest={isGuestCheckout}
                     onApply={(nextCoupons) => {
                       setAppliedCoupons(nextCoupons);
                       setPreview(null); // reset preview so totals recalculate
