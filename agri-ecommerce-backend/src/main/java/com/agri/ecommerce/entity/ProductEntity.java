@@ -53,6 +53,22 @@ public class ProductEntity {
     @Column(name = "unit_en", length = 255)
     private String unitEn;
 
+    /**
+     * Snapshot dữ liệu kho dùng cho product detail/search mà không cần join nặng.
+     * Nguồn dữ liệu chuẩn vẫn là inventory_batches.
+     */
+    @Column(name = "latest_import_date")
+    private LocalDateTime latestImportDate;
+
+    @Column(name = "latest_manufacture_date")
+    private LocalDateTime latestManufactureDate;
+
+    @Column(name = "earliest_expiry_date")
+    private LocalDateTime earliestExpiryDate;
+
+    @Column(name = "freshness_status", length = 50)
+    private String freshnessStatus;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
