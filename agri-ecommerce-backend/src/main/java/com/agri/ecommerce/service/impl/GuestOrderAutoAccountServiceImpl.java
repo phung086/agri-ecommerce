@@ -86,7 +86,7 @@ public class GuestOrderAutoAccountServiceImpl implements GuestOrderAutoAccountSe
     }
 
     private UserEntity resolveDefaultGuestCustomer(OrderEntity order, String phone) {
-        Optional<UserEntity> byPhone = userRepository.findByPhoneNumber(phone);
+        Optional<UserEntity> byPhone = userRepository.findFirstByPhoneNumberOrderByIdAsc(phone);
         if (byPhone.isPresent()) {
             UserEntity existing = byPhone.get();
             if (!isDefaultGuestAccount(existing)) {
