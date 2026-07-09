@@ -30,7 +30,6 @@ import {
   formatNumber,
   getApiErrorMessage,
 } from "@/lib/admin-utils";
-import { mockOrders } from "@/lib/admin-mock-data";
 
 const moduleCards = [
   {
@@ -106,13 +105,48 @@ const operationSteps = [
   },
 ];
 
+function readPageContent(response) {
+  if (Array.isArray(response?.content)) {
+    return response.content;
+  }
+
+  return Array.isArray(response) ? response : [];
+}
+
+function numberOrZero(value) {
+  return Number(value || 0);
+}
+
+function getOpenOrders(dashboardSummary) {
+  return (
+    numberOrZero(dashboardSummary?.pendingOrders) +
+    numberOrZero(dashboardSummary?.processingOrders) +
+    numberOrZero(dashboardSummary?.readyForDeliveryOrders)
+  );
+}
+
+function getDeliveryOrders(dashboardSummary) {
+  return (
+    numberOrZero(dashboardSummary?.readyForDeliveryOrders) +
+    numberOrZero(dashboardSummary?.outForDeliveryOrders)
+  );
+}
+
+function getPaymentMethod(order) {
+  return order?.payment?.paymentMethod || order?.paymentMethod || "N/A";
+}
+
 export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState({
     users: 0,
     categories: 0,
     products: 0,
+    dashboard: null,
+    recentOrders: [],
     lowStockProducts: [],
+    dashboardError: "",
+    orderError: "",
     userError: "",
     productError: "",
     categoryError: "",
@@ -124,11 +158,21 @@ export default function AdminDashboardPage() {
     async function loadDashboard() {
       setLoading(true);
 
-      const [usersResult, categoriesResult, productsResult] =
+      const [
+        dashboardResult,
+        usersResult,
+        categoriesResult,
+        productsResult,
+        ordersResult,
+        lowStockResult,
+      ] =
         await Promise.allSettled([
+          adminService.getDashboardSummary(),
           adminService.getUsers(),
           adminService.getCategories(),
           adminService.getProducts({ page: 0, size: 100, sort: "stock,asc" }),
+          adminService.getOrders({ page: 0, size: 5, sort: "createdAt,desc" }),
+          adminService.getLowStockProducts({ threshold: 20, limit: 6 }),
         ]);
 
       if (!mounted) {
@@ -146,15 +190,35 @@ export default function AdminDashboardPage() {
           : [];
       const productPage =
         productsResult.status === "fulfilled" ? productsResult.value : null;
-      const products = productPage?.content || [];
+      const products = readPageContent(productPage);
+      const orders =
+        ordersResult.status === "fulfilled"
+          ? readPageContent(ordersResult.value)
+          : [];
+      const lowStockProducts =
+        lowStockResult.status === "fulfilled" &&
+        Array.isArray(lowStockResult.value)
+          ? lowStockResult.value
+          : products
+              .filter((product) => Number(product.stock || 0) <= 20)
+              .slice(0, 6);
 
       setSummary({
         users: users.length,
         categories: categories.length,
         products: productPage?.totalElements ?? products.length,
-        lowStockProducts: products
-          .filter((product) => Number(product.stock || 0) <= 20)
-          .slice(0, 6),
+        dashboard:
+          dashboardResult.status === "fulfilled" ? dashboardResult.value : null,
+        recentOrders: orders,
+        lowStockProducts,
+        dashboardError:
+          dashboardResult.status === "rejected"
+            ? getApiErrorMessage(dashboardResult.reason)
+            : "",
+        orderError:
+          ordersResult.status === "rejected"
+            ? getApiErrorMessage(ordersResult.reason)
+            : "",
         userError:
           usersResult.status === "rejected"
             ? getApiErrorMessage(usersResult.reason)
@@ -179,18 +243,14 @@ export default function AdminDashboardPage() {
   }, []);
 
   const orderStats = useMemo(() => {
-    const revenue = mockOrders
-      .filter((order) => ["delivered", "completed"].includes(order.status))
-      .reduce((total, order) => total + Number(order.totalPrice || 0), 0);
-    const openOrders = mockOrders.filter((order) =>
-      ["pending", "processing"].includes(order.status)
-    ).length;
-    const deliveryOrders = mockOrders.filter((order) =>
-      ["shipping", "processing"].includes(order.status)
-    ).length;
+    const dashboardSummary = summary.dashboard;
+    const revenue = numberOrZero(dashboardSummary?.totalRevenue);
+    const totalOrders = numberOrZero(dashboardSummary?.totalOrders);
+    const openOrders = getOpenOrders(dashboardSummary);
+    const deliveryOrders = getDeliveryOrders(dashboardSummary);
 
-    return { revenue, openOrders, deliveryOrders };
-  }, []);
+    return { revenue, totalOrders, openOrders, deliveryOrders };
+  }, [summary.dashboard]);
 
   return (
     <div className="space-y-5">
@@ -198,7 +258,7 @@ export default function AdminDashboardPage() {
         title="Bảng điều khiển AgriMarket"
         description="Theo dõi doanh thu, đơn hàng, tồn kho và các khu vực quản trị cốt lõi của sàn thương mại điện tử nông sản trong một màn hình."
         image="/admin-assets/dashboard.svg"
-        badges={["Marketplace admin", "Nông sản tươi", "API + dữ liệu demo"]}
+        badges={["Marketplace admin", "Nông sản tươi", "Dữ liệu API"]}
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -211,7 +271,11 @@ export default function AdminDashboardPage() {
         />
         <StatCard
           title="Đơn hàng"
-          value={formatNumber(mockOrders.length)}
+          value={
+            loading && !summary.dashboardError
+              ? "..."
+              : formatNumber(orderStats.totalOrders)
+          }
           description={`${orderStats.openOrders} đơn đang mở`}
           icon={ShoppingCart}
           tone="blue"
@@ -249,9 +313,17 @@ export default function AdminDashboardPage() {
         />
       </section>
 
-      {(summary.userError || summary.productError || summary.categoryError) && (
+      {(summary.dashboardError ||
+        summary.orderError ||
+        summary.userError ||
+        summary.productError ||
+        summary.categoryError) && (
         <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-          {summary.userError || summary.productError || summary.categoryError}
+          {summary.dashboardError ||
+            summary.orderError ||
+            summary.userError ||
+            summary.productError ||
+            summary.categoryError}
         </div>
       )}
 
@@ -348,16 +420,21 @@ export default function AdminDashboardPage() {
               "Thanh toán",
               "Tổng tiền",
             ]}
-            data={mockOrders.slice(0, 5)}
+            data={summary.recentOrders}
+            loading={loading && !summary.orderError}
+            error={summary.orderError}
+            emptyText="Không có đơn hàng gần đây"
             renderRow={(order) => (
               <TableRow key={order.id}>
-                <TableCell className="px-4 font-bold">{order.trackingNumber || '#' + order.id}</TableCell>
+                <TableCell className="px-4 font-bold">
+                  {order.trackingNumber || `#${order.id}`}
+                </TableCell>
                 <TableCell className="px-4">{order.customerName}</TableCell>
                 <TableCell className="px-4">
                   <StatusBadge status={order.status} />
                 </TableCell>
                 <TableCell className="px-4 capitalize">
-                  {order.paymentMethod}
+                  {getPaymentMethod(order)}
                 </TableCell>
                 <TableCell className="px-4 font-bold text-emerald-700">
                   {formatCurrency(order.totalPrice)}
@@ -384,8 +461,10 @@ export default function AdminDashboardPage() {
             error={summary.productError}
             emptyText="Không có sản phẩm sắp hết hàng"
             renderRow={(product) => (
-              <TableRow key={product.id}>
-                <TableCell className="px-4 font-bold">{product.name}</TableCell>
+              <TableRow key={product.productId || product.id}>
+                <TableCell className="px-4 font-bold">
+                  {product.productName || product.name}
+                </TableCell>
                 <TableCell className="px-4">
                   <span className="rounded-[8px] bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700 ring-1 ring-amber-200">
                     {formatNumber(product.stock)}
