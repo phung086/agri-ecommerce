@@ -11,7 +11,14 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "inventory_transactions")
+@Table(
+        name = "inventory_transactions",
+        indexes = {
+                @Index(name = "idx_inventory_tx_product", columnList = "product_id"),
+                @Index(name = "idx_inventory_tx_batch", columnList = "batch_id"),
+                @Index(name = "idx_inventory_tx_type", columnList = "type")
+        }
+)
 public class InventoryTransactionEntity {
 
     @Id
@@ -30,9 +37,21 @@ public class InventoryTransactionEntity {
     private Integer quantity;
 
     @Column(nullable = false, length = 50)
-    private String type; // 'IMPORT', 'EXPORT_SALE', 'EXPORT_EXPIRED', 'EXPORT_DAMAGE'
+    private String type; // IMPORT, EXPORT_SALE, EXPORT_EXPIRED, EXPORT_DAMAGE, ADJUSTMENT_IN, ADJUSTMENT_OUT, BACKFILL
 
-    @Column(length = 255)
+    @Column(name = "previous_stock")
+    private Integer previousStock;
+
+    @Column(name = "new_stock")
+    private Integer newStock;
+
+    @Column(name = "reference_type", length = 50)
+    private String referenceType;
+
+    @Column(name = "reference_id")
+    private Long referenceId;
+
+    @Column(length = 500)
     private String note;
 
     @Column(name = "created_at")
