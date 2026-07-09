@@ -58,6 +58,9 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long>, JpaSp
     @Query("select orderEntity.status, count(orderEntity.id) from OrderEntity orderEntity group by orderEntity.status")
     List<Object[]> countOrdersByStatus();
 
+    @Query("select coalesce(sum(orderEntity.totalPrice), 0) from OrderEntity orderEntity where orderEntity.status = :status")
+    java.math.BigDecimal sumTotalPriceByStatus(@Param("status") String status);
+
     @Query("select coalesce(sum(o.totalPrice), 0) from OrderEntity o where o.user.id = :userId and o.status in ('delivered', 'completed') and o.createdAt >= :startDate")
     java.math.BigDecimal calculateTotalSpendingSince(@Param("userId") Long userId, @Param("startDate") LocalDateTime startDate);
 }

@@ -88,7 +88,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .completedOrders(orderRepository.countByStatus(ORDER_STATUS_COMPLETED))
                 .canceledOrders(orderRepository.countByStatus(ORDER_STATUS_CANCELED))
                 .completedPayments(paymentRepository.countByStatus(PAYMENT_STATUS_COMPLETED))
-                .totalRevenue(safeMoney(paymentRepository.sumAmountByStatus(PAYMENT_STATUS_COMPLETED)))
+                .totalRevenue(safeMoney(orderRepository.sumTotalPriceByStatus(ORDER_STATUS_COMPLETED)))
                 .todayRevenue(safeMoney(paymentRepository.sumAmountByStatusAndPaidAtRange(PAYMENT_STATUS_COMPLETED, todayStart, tomorrowStart)))
                 .totalCustomers(userRepository.countByRole_Name(ROLE_CUSTOMER))
                 .activeCustomers(userRepository.countByRole_NameAndStatus(ROLE_CUSTOMER, UserStatus.active))
