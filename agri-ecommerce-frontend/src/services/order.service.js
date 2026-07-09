@@ -3,7 +3,7 @@ import { AUTH_SCOPES, saveAuthSession } from "@/lib/auth-storage";
 
 const unwrapApiData = (response) => response?.data ?? response;
 
-function persistGuestAutoLogin(order, fallbackPayload = {}) {
+export function persistGuestAutoLogin(order, fallbackPayload = {}) {
   if (typeof window === "undefined" || !order?.guestAutoLoginToken) {
     return;
   }
@@ -71,6 +71,11 @@ export const orderService = {
     );
     const order = unwrapApiData(response);
 
+    if (order?.guestAutoLoginToken) {
+      persistGuestAutoLogin(order, payload);
+      return order;
+    }
+
     if (order?.id && payload?.guestPhone) {
       try {
         const claimResponse = await axiosClient.post(
@@ -95,6 +100,15 @@ export const orderService = {
     const response = await axiosClient.post(
       `/customer/orders/${orderId}/payment/vnpay`,
       payload
+    );
+    return unwrapApiData(response);
+  },
+
+  createGuestVnpayPaymentUrl: async (orderId, phone, payload = {}) => {
+    const response = await axiosClient.post(
+      `/public/orders/${orderId}/payment/vnpay`,
+      payload,
+      { params: { phone } }
     );
     return unwrapApiData(response);
   },
