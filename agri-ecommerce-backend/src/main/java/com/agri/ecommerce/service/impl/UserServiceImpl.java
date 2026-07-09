@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.agri.ecommerce.service.LoyaltyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +50,14 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse updateCurrentProfile(Long userId, UpdateProfileRequest request) {
         UserEntity user = findUserById(userId);
+
+        String nextEmail = normalizeEmail(request.getEmail());
+        if (nextEmail != null && !nextEmail.equalsIgnoreCase(user.getEmail())) {
+            if (userRepository.existsByEmailAndIdNot(nextEmail, userId)) {
+                throw new BadRequestException("Email đã được sử dụng bởi tài khoản khác");
+            }
+            user.setEmail(nextEmail);
+        }
 
         user.setName(request.getName().trim());
         user.setPhoneNumber(cleanBlank(request.getPhoneNumber()));
@@ -132,6 +141,11 @@ public class UserServiceImpl implements UserService {
         } catch (Exception exception) {
             throw new BadRequestException("Trạng thái người dùng không hợp lệ. Giá trị hợp lệ: pending, active, banned, deleted");
         }
+    }
+
+    private String normalizeEmail(String value) {
+        String email = cleanBlank(value);
+        return email == null ? null : email.toLowerCase(Locale.ROOT);
     }
 
     private String cleanBlank(String value) {
