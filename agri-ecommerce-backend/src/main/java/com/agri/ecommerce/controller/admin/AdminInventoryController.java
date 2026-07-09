@@ -11,6 +11,7 @@ import com.agri.ecommerce.dto.response.inventory.InventoryStockMutationResponse;
 import com.agri.ecommerce.dto.response.inventory.InventorySummaryResponse;
 import com.agri.ecommerce.dto.response.inventory.InventoryTransactionResponse;
 import com.agri.ecommerce.service.AdminInventoryService;
+import com.agri.ecommerce.service.impl.AdminInventoryDemoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,6 +23,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "Admin - Inventory", description = "Inventory, stock alert, batch/lot, expiry and transaction management APIs")
 @RestController
@@ -31,6 +33,7 @@ import java.util.List;
 public class AdminInventoryController {
 
     private final AdminInventoryService adminInventoryService;
+    private final AdminInventoryDemoService adminInventoryDemoService;
     private final com.agri.ecommerce.scheduler.InventoryScheduler inventoryScheduler;
 
     @Operation(summary = "Get inventory summary")
@@ -144,6 +147,29 @@ public class AdminInventoryController {
         return ResponseEntity.ok(ApiResponse.success(
                 "Legacy product stock synchronized into inventory batches",
                 adminInventoryService.backfillLegacyBatches(),
+                HttpStatus.OK.value()
+        ));
+    }
+
+    @Operation(summary = "Seed demo date/location/supplier data for legacy batches")
+    @PostMapping("/demo/seed")
+    public ResponseEntity<ApiResponse<InventorySummaryResponse>> seedDemoInventoryData() {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Demo inventory dates, suppliers and storage locations seeded successfully",
+                adminInventoryDemoService.seedDemoInventoryData(),
+                HttpStatus.OK.value()
+        ));
+    }
+
+    @Operation(summary = "Generate product clearance coupons for near-expiry batches")
+    @PostMapping("/near-expiry-coupons")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> generateNearExpiryCoupons(
+            @RequestParam(defaultValue = "3") Integer days,
+            @RequestParam(defaultValue = "20") Integer discountPercentage
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Near-expiry clearance coupons generated successfully",
+                adminInventoryDemoService.generateNearExpiryCoupons(days, discountPercentage),
                 HttpStatus.OK.value()
         ));
     }
