@@ -51,7 +51,8 @@
 :root {
   --font-geist-sans: "Segoe UI", Roboto, Arial, sans-serif;
   --font-geist-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
-  --background: oklch(0.985 0.018 110);
+
+  --background: oklch(98.294% 0.00836 146.135);
   --foreground: oklch(0.18 0.035 145);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.18 0.035 145);
@@ -59,6 +60,7 @@
   --popover-foreground: oklch(0.18 0.035 145);
   --primary: oklch(0.52 0.145 148);
   --primary-foreground: oklch(0.99 0.01 110);
+
   --secondary: oklch(0.965 0.046 91);
   --secondary-foreground: oklch(0.25 0.07 76);
   --muted: oklch(0.96 0.024 114);
@@ -86,7 +88,7 @@
 }
 
 .dark {
-  --background: oklch(0.15 0.035 150);
+  --background: oklch(10.663% 0.03005 149.07);
   --foreground: oklch(0.97 0.018 110);
   --card: oklch(0.2 0.045 150);
   --card-foreground: oklch(0.97 0.018 110);
@@ -123,9 +125,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   html {
     @apply font-sans;
   }
@@ -149,10 +153,12 @@
     transform: scale(0.72);
     opacity: 0;
   }
+
   70% {
     transform: scale(1.12);
     opacity: 1;
   }
+
   100% {
     transform: scale(1);
     opacity: 1;
@@ -163,6 +169,7 @@
   0% {
     transform: translateX(-110%);
   }
+
   100% {
     transform: translateX(110%);
   }

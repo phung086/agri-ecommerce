@@ -120,7 +120,7 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#f7fbf1] text-slate-950">
+    <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
       <Image
         src="/market-assets/fresh-market-hero.png"
         alt="Nông sản tươi AgriMarket"
