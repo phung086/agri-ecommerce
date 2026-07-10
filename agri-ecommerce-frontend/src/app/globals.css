@@ -131,12 +131,16 @@
   }
   input[type="email"],
   input[type="tel"],
+  input[type="text"],
+  input[type="password"],
   input[inputmode="email"],
   input[inputmode="tel"],
-  input[autocomplete="username"] {
-    direction: ltr;
-    unicode-bidi: plaintext;
-    text-align: left;
+  input[autocomplete="email"],
+  input[autocomplete="username"],
+  input[data-agri-ltr-input="true"] {
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+    text-align: left !important;
   }
 }
 
