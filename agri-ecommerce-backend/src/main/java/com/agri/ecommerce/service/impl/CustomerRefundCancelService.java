@@ -4,12 +4,14 @@ import com.agri.ecommerce.common.exception.BadRequestException;
 import com.agri.ecommerce.common.exception.ResourceNotFoundException;
 import com.agri.ecommerce.dto.request.order.RefundCancelRequest;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
+import com.agri.ecommerce.entity.CouponEntity;
 import com.agri.ecommerce.entity.OrderEntity;
 import com.agri.ecommerce.entity.OrderItemEntity;
 import com.agri.ecommerce.entity.OrderStatusHistoryEntity;
 import com.agri.ecommerce.entity.PaymentEntity;
 import com.agri.ecommerce.entity.ProductEntity;
 import com.agri.ecommerce.mapper.OrderMapper;
+import com.agri.ecommerce.repository.CouponRepository;
 import com.agri.ecommerce.repository.OrderItemRepository;
 import com.agri.ecommerce.repository.OrderRepository;
 import com.agri.ecommerce.repository.OrderStatusHistoryRepository;
@@ -46,6 +48,7 @@ public class CustomerRefundCancelService {
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
     private final PaymentRepository paymentRepository;
     private final ProductRepository productRepository;
+    private final CouponRepository couponRepository;
     private final OrderMapper orderMapper;
     private final EmailService emailService;
 
@@ -75,6 +78,7 @@ public class CustomerRefundCancelService {
 
         List<OrderItemEntity> orderItems = orderItemRepository.findByOrder_IdOrderByIdAsc(orderId);
         restoreProductStock(orderItems);
+        releaseCouponUsage(order);
 
         order.setStatus(ORDER_CANCELED);
         OrderEntity savedOrder = orderRepository.save(order);
@@ -129,6 +133,24 @@ public class CustomerRefundCancelService {
 
         if (!products.isEmpty()) {
             productRepository.saveAll(products);
+        }
+    }
+
+    private void releaseCouponUsage(OrderEntity order) {
+        if (order == null || order.getCouponCode() == null || order.getCouponCode().isBlank()) {
+            return;
+        }
+
+        for (String rawCode : order.getCouponCode().split(",")) {
+            String code = rawCode == null ? null : rawCode.trim();
+            if (code == null || code.isBlank()) {
+                continue;
+            }
+            couponRepository.findByCodeIgnoreCaseForUpdate(code).ifPresent(coupon -> {
+                int currentTimesUsed = coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed();
+                coupon.setTimesUsed(Math.max(0, currentTimesUsed - 1));
+                couponRepository.save(coupon);
+            });
         }
     }
 
