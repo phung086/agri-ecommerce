@@ -12,14 +12,6 @@ const unwrapApiData = (response) => {
   return response?.data ?? response;
 };
 
-function formatCurrency(value) {
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
-}
-
 function formatDate(value) {
   if (!value) return "---";
   const date = new Date(value);
@@ -50,13 +42,6 @@ function isPaid(order) {
 
 function isRefundRequested(order) {
   return String(order?.payment?.status || "").toLowerCase() === "refund_requested";
-}
-
-function getOrderPaymentLabel(order) {
-  const method = String(order?.payment?.paymentMethod || order?.paymentMethod || "cash").toLowerCase();
-  if (method === "vnpay") return "VNPay";
-  if (method === "cash" || method === "cod") return "Thanh toán khi nhận hàng";
-  return method;
 }
 
 function findProfileArticle(order) {
