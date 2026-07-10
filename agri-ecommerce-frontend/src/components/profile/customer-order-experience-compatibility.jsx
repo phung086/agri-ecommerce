@@ -23,8 +23,16 @@ function normalizedOrderStatus(order) {
   return String(order?.status || "").toLowerCase();
 }
 
+function normalizedPaymentStatus(order) {
+  return String(order?.payment?.status || "").toLowerCase();
+}
+
 function isPending(order) {
   return normalizedOrderStatus(order) === "pending";
+}
+
+function isCanceled(order) {
+  return normalizedOrderStatus(order) === "canceled";
 }
 
 function canRequestVnpayRefund(order) {
@@ -37,11 +45,18 @@ function isVnpay(order) {
 }
 
 function isPaid(order) {
-  return String(order?.payment?.status || "").toLowerCase() === "completed";
+  return normalizedPaymentStatus(order) === "completed";
 }
 
 function isRefundRequested(order) {
-  return String(order?.payment?.status || "").toLowerCase() === "refund_requested";
+  return normalizedPaymentStatus(order) === "refund_requested";
+}
+
+function getOrdersContent(data) {
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data?.data?.content)) return data.data.content;
+  if (Array.isArray(data)) return data;
+  return [];
 }
 
 function findProfileArticle(order) {
@@ -54,8 +69,22 @@ function findProfileArticle(order) {
   );
 }
 
+function fixCanceledPaymentBadges(article, order) {
+  if (!article || !isCanceled(order)) return;
+  const headerButton = article.querySelector("button");
+  const headerBadges = Array.from(headerButton?.querySelectorAll("span") || []);
+  headerBadges.forEach((badge) => {
+    const text = badge.textContent?.trim().toLowerCase();
+    if (["chờ xử lý", "hoàn tất", "pending", "completed"].includes(text)) {
+      badge.remove();
+    }
+  });
+}
+
 function renderProfileOrderPanel(article, order) {
-  if (!article || article.querySelector(`[data-order-flow-panel="${order.id}"]`)) return;
+  if (!article) return;
+  fixCanceledPaymentBadges(article, order);
+  if (article.querySelector(`[data-order-flow-panel="${order.id}"]`)) return;
 
   const isVnpayOrder = isVnpay(order);
   const shouldShowCodCancel = !isVnpayOrder && isPending(order);
@@ -99,6 +128,10 @@ function renderProfileOrderPanel(article, order) {
       const reason = panel.querySelector("[data-refund-reason]")?.value?.trim();
       if (!bankName || !bankAccountNumber || !bankAccountHolder) {
         toast.error("Vui lòng nhập đủ ngân hàng, số tài khoản và tên chủ tài khoản.");
+        return;
+      }
+      if (!/^[0-9]{6,30}$/.test(bankAccountNumber)) {
+        toast.error("Số tài khoản chỉ gồm 6-30 chữ số.");
         return;
       }
       button.disabled = true;
@@ -237,20 +270,26 @@ export function CustomerOrderExperienceCompatibility() {
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
+    let cancelled = false;
     async function loadOrders() {
       if (!window.location.pathname.includes("/profile")) return;
       try {
         const response = await axiosClient.get("/customer/orders", {
-          params: { page: 0, size: 30, sort: "createdAt,desc" },
+          params: { page: 0, size: 50, sort: "createdAt,desc" },
         });
         const data = unwrapApiData(response);
-        setOrders(Array.isArray(data?.content) ? data.content : []);
+        if (!cancelled) setOrders(getOrdersContent(data));
       } catch {
-        setOrders([]);
+        if (!cancelled) setOrders([]);
       }
     }
 
     loadOrders();
+    const refreshId = window.setInterval(loadOrders, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshId);
+    };
   }, []);
 
   useEffect(() => {
