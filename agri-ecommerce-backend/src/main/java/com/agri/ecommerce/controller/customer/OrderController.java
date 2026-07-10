@@ -2,12 +2,14 @@ package com.agri.ecommerce.controller.customer;
 
 import com.agri.ecommerce.dto.request.order.CheckoutRequest;
 import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
+import com.agri.ecommerce.dto.request.order.RefundCancelRequest;
 import com.agri.ecommerce.dto.response.ApiResponse;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.order.CheckoutPreviewResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
 import com.agri.ecommerce.security.UserPrincipal;
 import com.agri.ecommerce.service.OrderService;
+import com.agri.ecommerce.service.impl.CustomerRefundCancelService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 public class OrderController {
 
     private final OrderService orderService;
+    private final CustomerRefundCancelService customerRefundCancelService;
 
     @Operation(summary = "Lấy danh sách đơn hàng của khách hàng")
     @GetMapping
@@ -100,6 +103,21 @@ public class OrderController {
 
         return ResponseEntity.ok(
                 ApiResponse.success("Hủy đơn hàng thành công", response, HttpStatus.OK.value())
+        );
+    }
+
+    @Operation(summary = "Yêu cầu hủy đơn VNPay đã thanh toán và ghi nhận thông tin hoàn tiền")
+    @PatchMapping("/{orderId}/refund-cancel")
+    public ResponseEntity<ApiResponse<OrderResponse>> requestRefundCancel(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID đơn hàng", example = "1")
+            @PathVariable Long orderId,
+            @Valid @RequestBody RefundCancelRequest request
+    ) {
+        OrderResponse response = customerRefundCancelService.requestRefundAndCancel(principal.getId(), orderId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Đã ghi nhận yêu cầu hủy đơn và hoàn tiền", response, HttpStatus.OK.value())
         );
     }
 
