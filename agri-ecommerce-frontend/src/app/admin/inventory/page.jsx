@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Search,
   Store,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -61,6 +62,25 @@ function formatCurrency(value) {
     currency: "VND",
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .trim();
+}
+
+function matchesKeyword(record, fields, keyword) {
+  const normalizedKeyword = normalizeSearchText(keyword);
+  if (!normalizedKeyword) return true;
+  return fields
+    .map((field) => (typeof field === "function" ? field(record) : record?.[field]))
+    .filter((value) => value !== null && value !== undefined)
+    .some((value) => normalizeSearchText(value).includes(normalizedKeyword));
 }
 
 function statusLabel(status) {
@@ -121,30 +141,83 @@ export default function AdminInventoryPage() {
   const [expiryAlerts, setExpiryAlerts] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [products, setProducts] = useState([]);
-  const [keyword, setKeyword] = useState("");
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
   const [batchStatus, setBatchStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [form, setForm] = useState(blankForm);
 
-  const filteredBatches = useMemo(() => {
-    const normalizedKeyword = keyword.trim().toLowerCase();
-    if (!normalizedKeyword) return batches;
-    return batches.filter((batch) =>
-      [batch.productName, batch.batchNumber, batch.supplierName, batch.storageLocation]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(normalizedKeyword))
+  const filteredProducts = useMemo(() => {
+    return inventoryProducts.filter((product) =>
+      matchesKeyword(product, [
+        "productName",
+        "productSlug",
+        "categoryName",
+        "categorySlug",
+        "unit",
+        "status",
+        "freshnessStatus",
+        (item) => freshnessLabel(item.freshnessStatus),
+      ], appliedKeyword)
     );
-  }, [batches, keyword]);
+  }, [inventoryProducts, appliedKeyword]);
+
+  const filteredBatches = useMemo(() => {
+    return batches.filter((batch) =>
+      matchesKeyword(batch, [
+        "productName",
+        "productSlug",
+        "categoryName",
+        "batchNumber",
+        "supplierName",
+        "storageLocation",
+        "status",
+        "note",
+        (item) => statusLabel(item.status),
+      ], appliedKeyword)
+    );
+  }, [batches, appliedKeyword]);
+
+  const filteredExpiryAlerts = useMemo(() => {
+    return expiryAlerts.filter((batch) =>
+      matchesKeyword(batch, [
+        "productName",
+        "productSlug",
+        "categoryName",
+        "batchNumber",
+        "supplierName",
+        "storageLocation",
+        "status",
+        (item) => statusLabel(item.status),
+      ], appliedKeyword)
+    );
+  }, [expiryAlerts, appliedKeyword]);
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) =>
+      matchesKeyword(transaction, [
+        "productName",
+        "batchNumber",
+        "type",
+        "referenceType",
+        "note",
+        (item) => item.quantity,
+        (item) => item.previousStock,
+        (item) => item.newStock,
+      ], appliedKeyword)
+    );
+  }, [transactions, appliedKeyword]);
 
   async function loadData() {
     setLoading(true);
     try {
+      const keywordParam = appliedKeyword.trim() || undefined;
       const [summaryResult, productsResult, batchesResult, alertsResult, transactionsResult, adminProductsResult] = await Promise.allSettled([
         adminService.getInventorySummary({ threshold: 10 }),
-        adminService.getInventoryProducts({ includeOk: true, size: 100, sort: "stock,asc" }),
-        adminService.getBatches({ status: batchStatus || undefined, includeDepleted: true }),
+        adminService.getInventoryProducts({ includeOk: true, keyword: keywordParam, size: 100, sort: "stock,asc" }),
+        adminService.getBatches({ status: batchStatus || undefined, productId: undefined, includeDepleted: true }),
         adminService.getExpiryAlerts({ days: 3 }),
         adminService.getTransactions(),
         adminService.getProducts({ size: 100, sort: "name,asc" }),
@@ -171,7 +244,17 @@ export default function AdminInventoryPage() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchStatus]);
+  }, [batchStatus, appliedKeyword]);
+
+  function handleSearchSubmit(event) {
+    event.preventDefault();
+    setAppliedKeyword(searchKeyword.trim());
+  }
+
+  function handleClearSearch() {
+    setSearchKeyword("");
+    setAppliedKeyword("");
+  }
 
   function handleInputChange(event) {
     const { name, value } = event.target;
@@ -234,12 +317,12 @@ export default function AdminInventoryPage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Quản lý kho & hạn sử dụng"
-        description="Đồng bộ sản phẩm với kho, quản lý lô hàng, ngày nhập, ngày sản xuất, hạn sử dụng, vị trí lưu trữ và voucher xả hàng cận date."
+        description="Theo dõi tồn kho, lô hàng, hạn sử dụng, vị trí lưu trữ và các chương trình xả hàng cận date."
         image="/market-assets/fresh-market-hero.png"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <ActionButton onClick={() => runAction(adminService.backfillLegacyBatches, "Đã đồng bộ sản phẩm cũ vào lô legacy")} disabled={actionLoading} tone="sky" icon={Database}>Đồng bộ SP cũ</ActionButton>
-          <ActionButton onClick={() => runAction(adminService.seedInventoryDemoData, "Đã bổ sung dữ liệu demo NSX/HSD/NCC/vị trí")} disabled={actionLoading} tone="emerald" icon={CalendarDays}>Bổ sung demo date</ActionButton>
+          <ActionButton onClick={() => runAction(adminService.backfillLegacyBatches, "Đã đồng bộ sản phẩm cũ vào kho")} disabled={actionLoading} tone="sky" icon={Database}>Đồng bộ SP cũ</ActionButton>
+          <ActionButton onClick={() => runAction(adminService.seedInventoryDemoData, "Đã cập nhật NSX/HSD/NCC/vị trí cho các lô còn thiếu")} disabled={actionLoading} tone="emerald" icon={CalendarDays}>Cập nhật date</ActionButton>
           <ActionButton
             onClick={() => runAction(
               () => adminService.generateNearExpiryCoupons({ days: 3, discountPercentage: 20 }),
@@ -254,6 +337,7 @@ export default function AdminInventoryPage() {
           <ActionButton onClick={() => runAction(adminService.recalculateInventory, "Đã tính lại tồn kho từ lô hàng")} disabled={actionLoading} tone="amber" icon={RotateCcw}>Tính lại tồn kho</ActionButton>
           <ActionButton onClick={() => runAction(adminService.triggerScan, "Quét kho hoàn tất")} disabled={actionLoading} tone="slate" icon={RefreshCw}>Quét hạn</ActionButton>
           <button
+            type="button"
             onClick={() => setShowImportModal(true)}
             disabled={actionLoading}
             className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-50"
@@ -266,13 +350,9 @@ export default function AdminInventoryPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Package} title="Tổng sản phẩm" value={summary?.totalProducts} caption="Không tính sản phẩm ẩn" />
-        <MetricCard icon={Store} title="Tồn kho sản phẩm" value={summary?.totalStockUnits} caption="Theo products.stock" />
-        <MetricCard icon={CalendarDays} title="Lô cần cập nhật date" value={summary?.needDateUpdateBatches} caption="Legacy/chưa có HSD" />
+        <MetricCard icon={Store} title="Tồn kho sản phẩm" value={summary?.totalStockUnits} caption="Tổng tồn đang ghi nhận" />
+        <MetricCard icon={CalendarDays} title="Lô cần cập nhật date" value={summary?.needDateUpdateBatches} caption="Các lô cần bổ sung HSD" />
         <MetricCard icon={AlertTriangle} title="Lô cận/hết hạn" value={(summary?.nearExpiryBatches || 0) + (summary?.expiredBatches || 0)} caption="Có thể tạo voucher xả hàng" />
-      </div>
-
-      <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
-        Luồng demo chuẩn: bấm <b>Đồng bộ SP cũ</b> để tạo lô legacy → bấm <b>Bổ sung demo date</b> để thêm NSX/HSD/NCC/vị trí → bấm <b>Tạo voucher cận date</b> để sinh mã giảm giá sản phẩm cho các lô sắp hết hạn.
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
@@ -280,6 +360,7 @@ export default function AdminInventoryPage() {
           {tabs.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
               className={`rounded-full px-4 py-2 text-sm font-black transition ${activeTab === tab.key ? "bg-emerald-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
             >
@@ -287,11 +368,29 @@ export default function AdminInventoryPage() {
             </button>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm sản phẩm/lô/kho..." className="h-10 rounded-[8px] border border-slate-200 pl-9 pr-3 text-sm outline-none transition focus:border-emerald-500" />
+            <input
+              value={searchKeyword}
+              onChange={(event) => setSearchKeyword(event.target.value)}
+              placeholder="Tìm sản phẩm, lô, NCC, vị trí..."
+              className="h-10 w-72 max-w-full rounded-[8px] border border-slate-200 pl-9 pr-9 text-sm outline-none transition focus:border-emerald-500"
+            />
+            {searchKeyword && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                title="Xóa tìm kiếm"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
           </div>
+          <button type="submit" className="h-10 rounded-[8px] bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700">
+            Tìm
+          </button>
           <select value={batchStatus} onChange={(event) => setBatchStatus(event.target.value)} className="h-10 rounded-[8px] border border-slate-200 px-3 text-sm font-semibold outline-none transition focus:border-emerald-500">
             <option value="">Tất cả trạng thái lô</option>
             <option value="ACTIVE">Khả dụng</option>
@@ -300,7 +399,7 @@ export default function AdminInventoryPage() {
             <option value="NEED_DATE_UPDATE">Cần cập nhật date</option>
             <option value="DEPLETED">Hết lô</option>
           </select>
-        </div>
+        </form>
       </div>
 
       {loading ? (
@@ -311,13 +410,13 @@ export default function AdminInventoryPage() {
           </div>
         </div>
       ) : activeTab === "products" ? (
-        <InventoryProductsTable products={inventoryProducts} />
+        <InventoryProductsTable products={filteredProducts} />
       ) : activeTab === "batches" ? (
         <BatchesTable batches={filteredBatches} />
       ) : activeTab === "alerts" ? (
-        <BatchesTable batches={expiryAlerts} emptyText="Không có cảnh báo hạn sử dụng trong ngưỡng hiện tại." />
+        <BatchesTable batches={filteredExpiryAlerts} emptyText="Không có cảnh báo hạn sử dụng phù hợp." />
       ) : (
-        <TransactionsTable transactions={transactions} />
+        <TransactionsTable transactions={filteredTransactions} />
       )}
 
       {showImportModal && (
@@ -328,7 +427,7 @@ export default function AdminInventoryPage() {
                 <h3 className="text-lg font-black text-slate-950">Nhập kho lô hàng mới</h3>
                 <p className="mt-1 text-sm font-semibold text-slate-500">Mỗi lô cần có ngày nhập, NSX và HSD để hệ thống kiểm soát date.</p>
               </div>
-              <button onClick={() => setShowImportModal(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-600">Đóng</button>
+              <button type="button" onClick={() => setShowImportModal(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-600">Đóng</button>
             </div>
 
             <form onSubmit={handleImportSubmit} className="grid gap-4 md:grid-cols-2">
@@ -373,7 +472,7 @@ function ActionButton({ children, onClick, disabled, icon: Icon, tone = "slate" 
     slate: "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
   };
   return (
-    <button onClick={onClick} disabled={disabled} className={`inline-flex h-10 items-center gap-2 rounded-[8px] border px-4 text-sm font-black transition disabled:opacity-50 ${tones[tone] || tones.slate}`}>
+    <button type="button" onClick={onClick} disabled={disabled} className={`inline-flex h-10 items-center gap-2 rounded-[8px] border px-4 text-sm font-black transition disabled:opacity-50 ${tones[tone] || tones.slate}`}>
       <Icon className="size-4" />
       {children}
     </button>
@@ -390,7 +489,7 @@ function InventoryProductsTable({ products }) {
       <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
         <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-600"><tr><th className="px-5 py-3">Sản phẩm</th><th className="px-5 py-3">Tồn kho</th><th className="px-5 py-3">Theo lô</th><th className="px-5 py-3">Hạn gần nhất</th><th className="px-5 py-3">Trạng thái tươi</th></tr></thead>
         <tbody className="divide-y divide-slate-100">
-          {products.length === 0 ? <tr><td colSpan={5} className="px-5 py-10 text-center font-semibold text-slate-400">Chưa có dữ liệu sản phẩm kho.</td></tr> : products.map((product) => (
+          {products.length === 0 ? <tr><td colSpan={5} className="px-5 py-10 text-center font-semibold text-slate-400">Không tìm thấy sản phẩm kho phù hợp.</td></tr> : products.map((product) => (
             <tr key={product.productId} className="hover:bg-slate-50">
               <td className="px-5 py-4"><p className="font-black text-slate-900">{product.productName}</p><p className="text-xs font-semibold text-slate-400">#{product.productId} · {product.categoryName || "Chưa phân loại"}</p></td>
               <td className="px-5 py-4 font-black text-slate-900">{product.stock || 0} {product.unit || ""}</td>
@@ -405,7 +504,7 @@ function InventoryProductsTable({ products }) {
   );
 }
 
-function BatchesTable({ batches, emptyText = "Chưa có lô hàng nào." }) {
+function BatchesTable({ batches, emptyText = "Không tìm thấy lô hàng phù hợp." }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
@@ -433,7 +532,7 @@ function TransactionsTable({ transactions }) {
       <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
         <thead className="bg-slate-50 text-xs font-black uppercase tracking-wider text-slate-600"><tr><th className="px-5 py-3">Thời gian</th><th className="px-5 py-3">Sản phẩm / Lô</th><th className="px-5 py-3">Số lượng</th><th className="px-5 py-3">Loại</th><th className="px-5 py-3">Tồn trước/sau</th><th className="px-5 py-3">Ghi chú</th></tr></thead>
         <tbody className="divide-y divide-slate-100">
-          {transactions.length === 0 ? <tr><td colSpan={6} className="px-5 py-10 text-center font-semibold text-slate-400">Chưa có nhật ký kho.</td></tr> : transactions.map((tx) => (
+          {transactions.length === 0 ? <tr><td colSpan={6} className="px-5 py-10 text-center font-semibold text-slate-400">Không tìm thấy nhật ký kho phù hợp.</td></tr> : transactions.map((tx) => (
             <tr key={tx.id} className="hover:bg-slate-50">
               <td className="px-5 py-4 text-xs font-semibold text-slate-500">{formatDateTime(tx.createdAt)}</td>
               <td className="px-5 py-4"><p className="font-black text-slate-900">{tx.productName}</p>{tx.batchNumber && <p className="font-mono text-xs font-semibold text-slate-400">Lô: {tx.batchNumber}</p>}</td>
