@@ -6,11 +6,9 @@ import { profileService } from "@/services/profile.service";
 const PATCH_FLAG = "__agriProfileEmailCompatibilityInstalled";
 const PROFILE_TIMEOUT_FLAG = "__agriProfileGetProfileTimeoutInstalled";
 const PROFILE_REQUEST_TIMEOUT_MS = 10000;
+
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const VIETNAM_PHONE_REGEX = /^(0[2-9][0-9]{8}|84[2-9][0-9]{8}|\+84[2-9][0-9]{8})$/;
-const CREDENTIAL_ERROR = "Nhập email đúng mẫu, ví dụ ten@email.com, hoặc SĐT Việt Nam hợp lệ, ví dụ 0987654321.";
-const EMAIL_ERROR = "Email phải đúng định dạng, ví dụ customer@example.com.";
-const PHONE_ERROR = "Số điện thoại phải đúng đầu số Việt Nam, ví dụ 0987654321 hoặc +84987654321.";
 const ERROR_CLASSES = ["border-red-500", "focus:border-red-500", "focus:ring-red-500", "ring-red-200"];
 const NORMAL_CLASSES = ["border-emerald-200"];
 
@@ -25,27 +23,138 @@ function withTimeout(promise, timeoutMs, message) {
   });
 }
 
+function cleanValue(value) {
+  return String(value || "").trim();
+}
+
 function cleanPhoneLike(value) {
-  return String(value || "")
-    .trim()
-    .replace(/[\s.-]/g, "");
+  return cleanValue(value).replace(/[\s.-]/g, "");
+}
+
+function normalizePhoneForLength(value) {
+  const phone = cleanPhoneLike(value);
+  if (phone.startsWith("+84")) return `0${phone.slice(3)}`;
+  if (phone.startsWith("84")) return `0${phone.slice(2)}`;
+  return phone;
+}
+
+function looksLikePhone(value) {
+  return /^[+\d\s.-]+$/.test(cleanValue(value));
 }
 
 function isValidEmail(value) {
-  return EMAIL_REGEX.test(String(value || "").trim());
+  return EMAIL_REGEX.test(cleanValue(value));
 }
 
 function isValidVietnamPhone(value) {
   return VIETNAM_PHONE_REGEX.test(cleanPhoneLike(value));
 }
 
-function isProbablyPhone(value) {
-  return /^[+\d\s.-]+$/.test(String(value || "").trim());
+function getEmailError(value, { required = true, fieldLabel = "Email" } = {}) {
+  const email = cleanValue(value);
+
+  if (!email) {
+    return required ? `Vui lòng nhập ${fieldLabel.toLowerCase()}.` : "";
+  }
+
+  if (/\s/.test(email)) {
+    return `${fieldLabel} không được chứa khoảng trắng.`;
+  }
+
+  const atCount = (email.match(/@/g) || []).length;
+  if (atCount === 0) {
+    return `${fieldLabel} phải có ký tự @, ví dụ ten@email.com.`;
+  }
+
+  if (atCount > 1) {
+    return `${fieldLabel} chỉ được có một ký tự @.`;
+  }
+
+  const [localPart, domainPart] = email.split("@");
+  if (!localPart) {
+    return `${fieldLabel} thiếu tên trước @, ví dụ ten@email.com.`;
+  }
+
+  if (!domainPart) {
+    return `${fieldLabel} thiếu tên miền sau @, ví dụ ten@email.com.`;
+  }
+
+  if (!domainPart.includes(".")) {
+    return `${fieldLabel} thiếu phần mở rộng tên miền, ví dụ .com hoặc .vn.`;
+  }
+
+  const domainParts = domainPart.split(".");
+  if (domainParts.some((part) => !part)) {
+    return `${fieldLabel} có dấu chấm tên miền không hợp lệ.`;
+  }
+
+  const tld = domainParts.at(-1) || "";
+  if (tld.length < 2) {
+    return `${fieldLabel} cần phần đuôi tên miền tối thiểu 2 ký tự, ví dụ .com hoặc .vn.`;
+  }
+
+  if (!EMAIL_REGEX.test(email)) {
+    return `${fieldLabel} chưa đúng định dạng, ví dụ ten@email.com.`;
+  }
+
+  return "";
+}
+
+function getVietnamPhoneError(value, { required = false } = {}) {
+  const raw = cleanValue(value);
+  const phone = cleanPhoneLike(raw);
+
+  if (!phone) {
+    return required ? "Vui lòng nhập số điện thoại." : "";
+  }
+
+  if (!/^\+?\d+$/.test(phone)) {
+    return "Số điện thoại chỉ được gồm chữ số, có thể bắt đầu bằng +84.";
+  }
+
+  const normalized = normalizePhoneForLength(phone);
+  if (!/^0\d*$/.test(normalized)) {
+    return "Số điện thoại Việt Nam phải bắt đầu bằng 0, 84 hoặc +84.";
+  }
+
+  if (normalized.length < 10) {
+    return "Số điện thoại Việt Nam đang thiếu chữ số, cần đúng 10 chữ số, ví dụ 0987654321.";
+  }
+
+  if (normalized.length > 10) {
+    return "Số điện thoại Việt Nam đang quá dài, cần đúng 10 chữ số, ví dụ 0987654321.";
+  }
+
+  if (!/^0[2-9]/.test(normalized)) {
+    return "Đầu số điện thoại Việt Nam không hợp lệ. SĐT phải bắt đầu bằng 02, 03, 05, 07, 08 hoặc 09.";
+  }
+
+  if (!VIETNAM_PHONE_REGEX.test(phone)) {
+    return "Số điện thoại chưa đúng định dạng Việt Nam, ví dụ 0987654321 hoặc +84987654321.";
+  }
+
+  return "";
+}
+
+function getCredentialError(value) {
+  const credential = cleanValue(value);
+
+  if (!credential) {
+    return "Vui lòng nhập email hoặc số điện thoại.";
+  }
+
+  if (looksLikePhone(credential)) {
+    return getVietnamPhoneError(credential, { required: true });
+  }
+
+  return getEmailError(credential, {
+    required: true,
+    fieldLabel: "Email đăng nhập",
+  });
 }
 
 function isValidCredential(value) {
-  const credential = String(value || "").trim();
-  return isValidEmail(credential) || isValidVietnamPhone(credential);
+  return !getCredentialError(value);
 }
 
 function preserveSelection(input, callback) {
@@ -65,7 +174,7 @@ function preserveSelection(input, callback) {
     try {
       input.setSelectionRange(start, end, direction || "none");
     } catch {
-      // Some input types do not support selection. Ignore safely.
+      // Một số type input không hỗ trợ selection range.
     }
   }
 }
@@ -75,8 +184,9 @@ function forceLtrInput(input, options = {}) {
 
   preserveSelection(input, () => {
     input.setAttribute("dir", "ltr");
+    input.dataset.agriLtrInput = "true";
     input.style.direction = "ltr";
-    input.style.unicodeBidi = "plaintext";
+    input.style.unicodeBidi = "isolate";
     input.style.textAlign = "left";
 
     if (options.type && input.getAttribute("type") !== options.type) {
@@ -110,12 +220,22 @@ function setFieldVisualState(input, hasError) {
   }
 }
 
+function getFieldWrapper(input) {
+  return (
+    input.closest("[data-auth-field]") ||
+    input.closest(".space-y-2") ||
+    input.closest(".space-y-1\\.5") ||
+    input.parentElement?.parentElement ||
+    input.parentElement
+  );
+}
+
 function showFieldError(input, message) {
   if (!input) return;
   input.setCustomValidity(message || "");
   setFieldVisualState(input, Boolean(message));
 
-  const wrapper = input.closest(".space-y-2") || input.closest(".space-y-1\.5") || input.parentElement;
+  const wrapper = getFieldWrapper(input);
   let errorNode = wrapper?.querySelector("[data-profile-field-error]");
   if (message) {
     if (!errorNode && wrapper) {
@@ -130,10 +250,9 @@ function showFieldError(input, message) {
   }
 }
 
-function validateEmailInput(input, { required = true, report = false } = {}) {
+function validateEmailInput(input, { required = true, report = false, fieldLabel = "Email" } = {}) {
   if (!input) return true;
-  const value = input.value.trim();
-  const message = (!value && required) || (value && !isValidEmail(value)) ? EMAIL_ERROR : "";
+  const message = getEmailError(input.value, { required, fieldLabel });
   showFieldError(input, message);
   if (message && report) input.reportValidity();
   return !message;
@@ -141,8 +260,7 @@ function validateEmailInput(input, { required = true, report = false } = {}) {
 
 function validatePhoneInput(input, { required = false, report = false } = {}) {
   if (!input) return true;
-  const value = input.value.trim();
-  const message = (!value && required) || (value && !isValidVietnamPhone(value)) ? PHONE_ERROR : "";
+  const message = getVietnamPhoneError(input.value, { required });
   showFieldError(input, message);
   if (message && report) input.reportValidity();
   return !message;
@@ -151,8 +269,7 @@ function validatePhoneInput(input, { required = false, report = false } = {}) {
 function validateLoginCredential({ report = false } = {}) {
   const loginInput = document.getElementById("login-email");
   if (!loginInput) return true;
-  const value = loginInput.value.trim();
-  const message = isValidCredential(value) ? "" : CREDENTIAL_ERROR;
+  const message = getCredentialError(loginInput.value);
   showFieldError(loginInput, message);
   if (message && report) loginInput.reportValidity();
   return !message;
@@ -160,7 +277,7 @@ function validateLoginCredential({ report = false } = {}) {
 
 function validateProfileEmail({ report = false } = {}) {
   const emailInput = document.getElementById("profile-email");
-  return validateEmailInput(emailInput, { required: false, report });
+  return validateEmailInput(emailInput, { required: false, report, fieldLabel: "Email" });
 }
 
 function applyLoginInputMode(loginInput) {
@@ -171,7 +288,7 @@ function applyLoginInputMode(loginInput) {
     removePattern: true,
     autocomplete: "username",
     placeholder: "Email hoặc số điện thoại",
-    inputMode: isProbablyPhone(value) ? "tel" : "email",
+    inputMode: looksLikePhone(value) ? "tel" : "email",
   });
 }
 
@@ -193,7 +310,7 @@ function applyAuthFieldCompatibility() {
     forceLtrInput(registerEmailInput, {
       type: "email",
       autocomplete: "email",
-      placeholder: "customer@example.com",
+      placeholder: "ten@email.com",
       inputMode: "email",
     });
   }
@@ -208,12 +325,16 @@ function applyAuthFieldCompatibility() {
     });
   }
 
-  ["admin-email", "del-email"].forEach((id) => {
-    const emailInput = document.getElementById(id);
+  [
+    { id: "admin-email", placeholder: "admin@example.com", label: "Email quản trị" },
+    { id: "del-email", placeholder: "shipper@example.com", label: "Email nhân viên giao hàng" },
+  ].forEach((field) => {
+    const emailInput = document.getElementById(field.id);
     if (emailInput) {
       forceLtrInput(emailInput, {
         type: "email",
         autocomplete: "email",
+        placeholder: field.placeholder,
         inputMode: "email",
       });
     }
@@ -225,6 +346,7 @@ function applyAuthFieldCompatibility() {
       type: "tel",
       autocomplete: "tel",
       inputMode: "tel",
+      placeholder: "0987654321",
     });
   }
 
@@ -241,12 +363,12 @@ function applyAuthFieldCompatibility() {
       inputMode: "email",
     });
   }
+
+  document
+    .querySelectorAll('input[type="email"], input[type="tel"], input[inputmode="email"], input[inputmode="tel"], input[autocomplete="username"], input[data-agri-ltr-input="true"]')
+    .forEach((input) => forceLtrInput(input));
 }
 
-/**
- * Compatibility bridge for auth/profile forms while the large profile/delivery pages are being refactored.
- * It only applies direction/validation attributes and never replaces page containers.
- */
 export function ProfileLoginPhoneCompatibility() {
   useEffect(() => {
     if (!profileService[PATCH_FLAG]) {
@@ -255,7 +377,7 @@ export function ProfileLoginPhoneCompatibility() {
         let nextPayload = { ...payload };
         if (typeof document !== "undefined" && window.location.pathname === "/profile") {
           if (!validateProfileEmail({ report: true })) {
-            throw new Error(EMAIL_ERROR);
+            throw new Error(getEmailError(document.getElementById("profile-email")?.value, { required: false }));
           }
           const emailInput = document.getElementById("profile-email");
           const email = String(emailInput?.value || "").trim().toLowerCase();
@@ -289,39 +411,44 @@ export function ProfileLoginPhoneCompatibility() {
       const form = event.target;
       if (!form?.querySelector) return;
 
-      if (form.querySelector("#login-email") && !validateLoginCredential({ report: true })) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (form.querySelector("#register-email") && !validateEmailInput(form.querySelector("#register-email"), { report: true })) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (form.querySelector("#register-phone") && !validatePhoneInput(form.querySelector("#register-phone"), { required: true, report: true })) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (form.querySelector("#admin-email") && !validateEmailInput(form.querySelector("#admin-email"), { report: true })) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (form.querySelector("#del-email") && !validateEmailInput(form.querySelector("#del-email"), { report: true })) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (form.querySelector("#track-phone") && !validatePhoneInput(form.querySelector("#track-phone"), { required: true, report: true })) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (form.querySelector("#profile-email") && !validateProfileEmail({ report: true })) {
-        event.preventDefault();
-        event.stopPropagation();
+      const rules = [
+        {
+          selector: "#login-email",
+          validate: () => validateLoginCredential({ report: true }),
+        },
+        {
+          selector: "#register-email",
+          validate: (input) => validateEmailInput(input, { report: true, fieldLabel: "Email đăng ký" }),
+        },
+        {
+          selector: "#register-phone",
+          validate: (input) => validatePhoneInput(input, { required: true, report: true }),
+        },
+        {
+          selector: "#admin-email",
+          validate: (input) => validateEmailInput(input, { report: true, fieldLabel: "Email quản trị" }),
+        },
+        {
+          selector: "#del-email",
+          validate: (input) => validateEmailInput(input, { report: true, fieldLabel: "Email nhân viên giao hàng" }),
+        },
+        {
+          selector: "#track-phone",
+          validate: (input) => validatePhoneInput(input, { required: true, report: true }),
+        },
+        {
+          selector: "#profile-email",
+          validate: () => validateProfileEmail({ report: true }),
+        },
+      ];
+
+      for (const rule of rules) {
+        const input = form.querySelector(rule.selector);
+        if (input && !rule.validate(input)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
       }
     }
 
@@ -332,11 +459,33 @@ export function ProfileLoginPhoneCompatibility() {
       if (target.id === "login-email") {
         applyLoginInputMode(target);
         validateLoginCredential();
+        return;
       }
-      if (["register-email", "admin-email", "del-email", "profile-email"].includes(target.id)) {
+
+      if (target.id === "register-email") {
         forceLtrInput(target, { type: "email", autocomplete: "email", inputMode: "email" });
-        validateEmailInput(target, { required: target.id !== "profile-email" });
+        validateEmailInput(target, { required: true, fieldLabel: "Email đăng ký" });
+        return;
       }
+
+      if (target.id === "admin-email") {
+        forceLtrInput(target, { type: "email", autocomplete: "email", inputMode: "email" });
+        validateEmailInput(target, { required: true, fieldLabel: "Email quản trị" });
+        return;
+      }
+
+      if (target.id === "del-email") {
+        forceLtrInput(target, { type: "email", autocomplete: "email", inputMode: "email" });
+        validateEmailInput(target, { required: true, fieldLabel: "Email nhân viên giao hàng" });
+        return;
+      }
+
+      if (target.id === "profile-email") {
+        forceLtrInput(target, { type: "email", autocomplete: "email", inputMode: "email" });
+        validateEmailInput(target, { required: false, fieldLabel: "Email" });
+        return;
+      }
+
       if (["register-phone", "track-phone"].includes(target.id)) {
         forceLtrInput(target, { type: "tel", autocomplete: "tel", inputMode: "tel" });
         validatePhoneInput(target, { required: true });
