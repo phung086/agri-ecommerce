@@ -34,6 +34,7 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -41,8 +42,11 @@ public class AuthServiceImpl implements AuthService {
 
     private static final String CUSTOMER_ROLE = "customer";
     private static final String INVALID_LOGIN_MESSAGE = "Email/phone or password is incorrect";
+    private static final String INVALID_CREDENTIAL_FORMAT_MESSAGE = "Vui lòng nhập email đúng định dạng hoặc số điện thoại Việt Nam hợp lệ";
     private static final String GENERIC_RESET_MESSAGE = "If the email exists, password reset instructions are ready.";
     private static final String RESET_TOKEN_DIGEST_ALGORITHM = "SHA-256";
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final Pattern VIETNAM_PHONE_PATTERN = Pattern.compile("^(0[2-9][0-9]{8}|84[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$");
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
@@ -69,6 +73,9 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         String email = normalizeEmail(request.getEmail());
+        if (!isEmailCredential(email)) {
+            throw new BadRequestException("Email phải đúng định dạng, ví dụ customer@example.com");
+        }
 
         if (userRepository.existsByEmail(email)) {
             throw new BadRequestException("Email is already used");
@@ -82,7 +89,7 @@ public class AuthServiceImpl implements AuthService {
                 .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .status(UserStatus.active)
-                .phoneNumber(cleanBlank(request.getPhoneNumber()))
+                .phoneNumber(normalizeOptionalVietnamPhone(request.getPhoneNumber()))
                 .address(cleanBlank(request.getAddress()))
                 .role(customerRole)
                 .build();
@@ -96,7 +103,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        String credential = normalizeEmail(request.getEmail());
+        String credential = normalizeLoginCredential(request.getEmail());
         loginAttemptService.assertNotBlocked(credential);
 
         Optional<UserEntity> userOptional = findLoginUser(credential);
@@ -208,8 +215,58 @@ public class AuthServiceImpl implements AuthService {
         return userRepository.findByEmail(credential);
     }
 
+    private String normalizeLoginCredential(String rawCredential) {
+        String credential = cleanBlank(rawCredential);
+        if (credential == null) {
+            throw new BadRequestException("Vui lòng nhập email hoặc số điện thoại");
+        }
+
+        String normalizedPhone = normalizeVietnamPhoneIfPossible(credential);
+        if (normalizedPhone != null) {
+            return normalizedPhone;
+        }
+
+        String email = normalizeEmail(credential);
+        if (!isEmailCredential(email)) {
+            throw new BadRequestException(INVALID_CREDENTIAL_FORMAT_MESSAGE);
+        }
+
+        return email;
+    }
+
     private boolean isVietnamPhoneCredential(String credential) {
-        return credential != null && credential.matches("^0\\d{9}$");
+        return credential != null && credential.matches("^0[2-9][0-9]{8}$");
+    }
+
+    private String normalizeOptionalVietnamPhone(String rawPhone) {
+        String cleanPhone = cleanBlank(rawPhone);
+        if (cleanPhone == null) {
+            return null;
+        }
+
+        String normalizedPhone = normalizeVietnamPhoneIfPossible(cleanPhone);
+        if (normalizedPhone == null) {
+            throw new BadRequestException("Số điện thoại phải đúng đầu số Việt Nam, ví dụ 0987654321 hoặc +84987654321");
+        }
+        return normalizedPhone;
+    }
+
+    private String normalizeVietnamPhoneIfPossible(String rawPhone) {
+        String cleanPhone = rawPhone == null ? null : rawPhone.trim().replaceAll("[\\s.-]", "");
+        if (cleanPhone == null || !VIETNAM_PHONE_PATTERN.matcher(cleanPhone).matches()) {
+            return null;
+        }
+        if (cleanPhone.startsWith("+84")) {
+            return "0" + cleanPhone.substring(3);
+        }
+        if (cleanPhone.startsWith("84")) {
+            return "0" + cleanPhone.substring(2);
+        }
+        return cleanPhone;
+    }
+
+    private boolean isEmailCredential(String email) {
+        return email != null && EMAIL_PATTERN.matcher(email).matches();
     }
 
     private AuthResponse buildAuthResponse(UserEntity user) {
