@@ -108,7 +108,7 @@ class AuthServiceImplTest {
         // When / Then
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Email or password is incorrect");
+                .hasMessageContaining("Email/phone or password is incorrect");
         verify(loginAttemptService).recordFailure("missing@test.com");
     }
 
@@ -123,7 +123,7 @@ class AuthServiceImplTest {
         // When / Then
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Email or password is incorrect");
+                .hasMessageContaining("Email/phone or password is incorrect");
         verify(loginAttemptService).recordFailure("user@test.com");
     }
 

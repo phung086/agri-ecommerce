@@ -8,6 +8,7 @@ import com.agri.ecommerce.dto.request.order.OrderStatusNoteRequest;
 import com.agri.ecommerce.dto.response.common.PageResponse;
 import com.agri.ecommerce.dto.response.order.OrderResponse;
 import com.agri.ecommerce.service.OrderService;
+import com.agri.ecommerce.service.impl.CustomerRefundCancelService;
 import com.agri.ecommerce.testsupport.ControllerTestSecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,9 @@ class OrderControllerTest {
 
     @MockitoBean
     private OrderService orderService;
+
+    @MockitoBean
+    private CustomerRefundCancelService customerRefundCancelService;
 
     @Test
     void getOrders_authenticated_returns200() throws Exception {
