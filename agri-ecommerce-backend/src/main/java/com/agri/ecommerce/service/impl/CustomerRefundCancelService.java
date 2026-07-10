@@ -98,7 +98,7 @@ public class CustomerRefundCancelService {
         emailService.sendOrderStatusUpdate(
                 savedOrder,
                 "Đã ghi nhận yêu cầu hủy đơn và hoàn tiền",
-                "AgriMarket đã nhận thông tin ngân hàng của bạn và sẽ xử lý hoàn tiền VNPay theo quy trình đối soát. Đây là luồng demo cho đồ án, trạng thái thanh toán đã được chuyển sang chờ hoàn tiền."
+                "AgriMarket đã nhận thông tin ngân hàng của bạn. Bộ phận bán hàng sẽ kiểm tra giao dịch VNPay và xử lý hoàn tiền theo quy trình đối soát. Trạng thái thanh toán đã chuyển sang chờ hoàn tiền."
         );
 
         return orderMapper.toOrderResponse(savedOrder, orderItems, payment, history);
