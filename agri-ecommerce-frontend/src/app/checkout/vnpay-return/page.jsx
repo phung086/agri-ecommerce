@@ -8,7 +8,6 @@ import {
   CreditCard,
   Loader2,
   Printer,
-  ReceiptText,
   RefreshCw,
   ShoppingBasket,
 } from "lucide-react";
@@ -85,38 +84,64 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
   const items = Array.isArray(order?.items) ? order.items : [];
   const invoiceNumber = getInvoiceNumber(result?.orderId);
   const totalAmount = Number(order?.totalPrice ?? result?.amount ?? 0);
+  const transactionNo = result?.transactionNo || params?.vnp_TransactionNo || "-";
 
   return (
     <section
       id="payment-invoice"
-      className="mt-6 rounded-[8px] border border-emerald-100 bg-white p-4 shadow-sm print:shadow-none"
+      className="mt-6 rounded-[8px] border border-slate-200 bg-white p-6 text-slate-950 shadow-sm print:border-0 print:shadow-none"
     >
-      <div className="flex flex-col gap-3 border-b border-emerald-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex size-10 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-            <ReceiptText className="size-5" />
-          </div>
-          <div>
-            <p className="text-xs font-black uppercase text-emerald-700">
-              Hóa đơn thanh toán
-            </p>
-            <h2 className="text-xl font-black text-emerald-950">
-              {invoiceNumber}
-            </h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">
-              Hiển thị ngay khi VNPay xác nhận payment completed.
-            </p>
-          </div>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-black uppercase leading-5 text-emerald-800">
+            AgriMarket
+          </p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">
+            Fresh agricultural ecommerce
+          </p>
+        </div>
+
+        <div className="text-right">
+          <p className="text-xs font-bold uppercase text-slate-500">
+            No. {invoiceNumber}
+          </p>
+          <h2 className="mt-1 text-4xl font-black tracking-wide text-slate-950 sm:text-5xl">
+            INVOICE
+          </h2>
         </div>
 
         <button
           type="button"
           onClick={() => window.print()}
-          className="print:hidden inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border border-emerald-100 bg-white px-3 text-sm font-bold text-emerald-800 transition hover:bg-emerald-50"
+          className="print:hidden hidden h-9 items-center justify-center gap-2 rounded-[8px] border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 transition hover:bg-slate-50 sm:inline-flex"
         >
           <Printer className="size-4" />
           In hóa đơn
         </button>
+      </div>
+
+      <div className="mt-8 grid gap-6 text-sm sm:grid-cols-2">
+        <div>
+          <p className="font-black">Billed to:</p>
+          <p className="mt-1 font-semibold">{getCustomerName(order)}</p>
+          <p className="text-slate-600">{getShippingAddressText(order)}</p>
+          <p className="text-slate-600">{getCustomerPhone(order)}</p>
+        </div>
+
+        <div className="sm:text-right">
+          <p>
+            <span className="font-black">Date:</span>{" "}
+            <span className="text-slate-700">
+              {formatDate(getPaymentPaidAt(order, params))}
+            </span>
+          </p>
+          <div className="mt-5 sm:inline-block sm:text-left">
+            <p className="font-black">From:</p>
+            <p className="mt-1 font-semibold">AgriMarket</p>
+            <p className="text-slate-600">Thanh toán qua VNPay</p>
+            <p className="text-slate-600">Mã GD: {transactionNo}</p>
+          </div>
+        </div>
       </div>
 
       {orderLoading && (
@@ -132,7 +157,7 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
         </div>
       )}
 
-      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+      <div className="hidden">
         <div className="rounded-[8px] border border-emerald-100 p-3">
           <p className="text-xs font-black uppercase text-slate-500">
             Mã đơn hàng
@@ -181,7 +206,7 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+      <div className="hidden">
         <div className="rounded-[8px] bg-[#f6faef] p-3">
           <p className="text-xs font-black uppercase text-slate-500">
             Khách hàng
@@ -211,21 +236,21 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
         </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-[8px] border border-emerald-100">
+      <div className="mt-10 overflow-hidden">
         <table className="w-full text-left text-sm">
-          <thead className="bg-emerald-50 text-xs font-black uppercase text-emerald-800">
+          <thead className="bg-slate-950 text-white">
             <tr>
-              <th className="px-3 py-2">Sản phẩm</th>
-              <th className="px-3 py-2 text-right">SL</th>
-              <th className="px-3 py-2 text-right">Đơn giá</th>
-              <th className="px-3 py-2 text-right">Thành tiền</th>
+              <th className="px-3 py-3 font-black">Item</th>
+              <th className="px-3 py-3 text-right font-black">Quantity</th>
+              <th className="px-3 py-3 text-right font-black">Price</th>
+              <th className="px-3 py-3 text-right font-black">Amount</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-emerald-100">
+          <tbody>
             {items.length > 0 ? (
               items.map((item) => (
-                <tr key={item.id || item.productId}>
-                  <td className="px-3 py-2 font-semibold text-slate-800">
+                <tr key={item.id || item.productId} className="border-b border-slate-100">
+                  <td className="px-3 py-3 font-semibold text-slate-800">
                     {item.productName || "Sản phẩm"}
                     {item.unit && (
                       <span className="ml-1 text-xs text-slate-500">
@@ -233,13 +258,13 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-bold">
+                  <td className="px-3 py-3 text-right">
                     {item.quantity || 0}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-3 text-right">
                     {formatCurrency(item.price)}
                   </td>
-                  <td className="px-3 py-2 text-right font-bold text-emerald-700">
+                  <td className="px-3 py-3 text-right font-semibold">
                     {formatCurrency(
                       item.lineTotal ??
                         Number(item.price || 0) * Number(item.quantity || 0)
@@ -258,23 +283,43 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
         </table>
       </div>
 
-      <div className="mt-4 ml-auto w-full max-w-sm space-y-2 text-sm">
-        <div className="flex justify-between text-slate-600">
+      <div className="mt-10 border-y border-slate-950 py-3">
+        <div className="hidden justify-between text-slate-600">
           <span>Tạm tính</span>
           <span>{formatCurrency(order?.subtotal ?? totalAmount)}</span>
         </div>
-        <div className="flex justify-between text-slate-600">
+        <div className="hidden justify-between text-slate-600">
           <span>Giảm giá</span>
           <span>-{formatCurrency(order?.discountAmount ?? 0)}</span>
         </div>
-        <div className="flex justify-between text-slate-600">
+        <div className="hidden justify-between text-slate-600">
           <span>Phí giao hàng</span>
           <span>{formatCurrency(order?.shippingFee ?? 0)}</span>
         </div>
-        <div className="flex justify-between border-t border-emerald-100 pt-2 text-base font-black text-emerald-800">
-          <span>Tổng thanh toán</span>
+        <div className="ml-auto flex max-w-xs justify-between text-base font-black text-slate-950">
+          <span>Total</span>
           <span>{formatCurrency(totalAmount)}</span>
         </div>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-3 text-sm sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p>
+            <span className="font-black">Payment method:</span> VNPay
+          </p>
+          <p>
+            <span className="font-black">Note:</span> Cảm ơn bạn đã mua hàng.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="print:hidden inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 transition hover:bg-slate-50 sm:hidden"
+        >
+          <Printer className="size-4" />
+          In hóa đơn
+        </button>
       </div>
     </section>
   );
