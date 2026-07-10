@@ -31,6 +31,7 @@ import {
 } from "@/lib/auth-storage";
 import { getAssetUrl } from "@/lib/admin-utils";
 import { cn } from "@/lib/utils";
+import { adminService } from "@/services/admin.service";
 
 const navItems = [
   {
@@ -99,7 +100,31 @@ function getActiveItem(pathname) {
   );
 }
 
-function SidebarContent({ pathname, onNavigate }) {
+function formatCompactNumber(value) {
+  return new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+}
+
+function getAvailableProductPercent(summary) {
+  const totalProducts = Number(summary?.totalProducts || 0);
+  const activeProducts = Number(summary?.activeProducts || 0);
+
+  if (totalProducts <= 0) {
+    return 0;
+  }
+
+  return Math.round((activeProducts / totalProducts) * 100);
+}
+
+function SidebarContent({ pathname, onNavigate, sidebarStats }) {
+  const todayOrdersLabel = sidebarStats.loading
+    ? "..."
+    : formatCompactNumber(sidebarStats.todayOrders);
+  const availablePercentLabel = sidebarStats.loading
+    ? "..."
+    : `${formatCompactNumber(sidebarStats.availableProductPercent)}%`;
+
   return (
     <div className="flex h-full flex-col bg-[#10291b] text-white">
       <div className="border-b border-white/10 px-5 py-5">
@@ -110,22 +135,24 @@ function SidebarContent({ pathname, onNavigate }) {
           <div className="min-w-0">
             <p className="truncate text-base font-bold">AgriMarket</p>
             <p className="truncate text-xs font-medium text-emerald-100/75">
-              Sàn nông sản trực tuyến
+              Quản trị sàn nông sản
             </p>
           </div>
         </Link>
 
         <div className="mt-5 grid grid-cols-2 gap-2">
           <div className="rounded-[8px] border border-white/10 bg-white/[0.08] p-3">
-            <p className="text-lg font-bold leading-none">24</p>
+            <p className="text-lg font-bold leading-none">{todayOrdersLabel}</p>
             <p className="mt-1 text-[11px] font-medium text-emerald-100/70">
-              đơn mới
+              đơn hôm nay
             </p>
           </div>
           <div className="rounded-[8px] border border-white/10 bg-white/[0.08] p-3">
-            <p className="text-lg font-bold leading-none">98%</p>
+            <p className="text-lg font-bold leading-none">
+              {availablePercentLabel}
+            </p>
             <p className="mt-1 text-[11px] font-medium text-emerald-100/70">
-              sẵn hàng
+              SP đang bán
             </p>
           </div>
         </div>
@@ -181,11 +208,10 @@ function SidebarContent({ pathname, onNavigate }) {
         <div className="rounded-[8px] border border-white/10 bg-white/[0.08] p-3">
           <div className="flex items-center gap-2 text-xs font-bold text-emerald-50">
             <BarChart3 className="size-4 text-amber-300" />
-            Trực vận hành hôm nay
+            Vận hành hôm nay
           </div>
           <p className="mt-2 text-xs leading-5 text-emerald-100/70">
-            Ưu tiên xử lý đơn tươi, tồn kho thấp và các chương trình khuyến mãi
-            theo mùa.
+            Ưu tiên đơn mới, sản phẩm tồn thấp và các lô cần xử lý trong ngày.
           </p>
         </div>
       </div>
@@ -200,6 +226,11 @@ export function AdminShell({ children }) {
   const [authState, setAuthState] = useState({
     status: "checking",
     session: null,
+  });
+  const [sidebarStats, setSidebarStats] = useState({
+    loading: true,
+    todayOrders: 0,
+    availableProductPercent: 0,
   });
 
   const activeItem = useMemo(() => getActiveItem(pathname), [pathname]);
@@ -254,6 +285,44 @@ export function AdminShell({ children }) {
     return () => window.clearTimeout(timeoutId);
   }, [authState.status, isAuthPage, pathname, router]);
 
+  useEffect(() => {
+    if (isAuthPage || authState.status !== "authenticated") {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadSidebarStats() {
+      setSidebarStats((current) => ({ ...current, loading: true }));
+      try {
+        const summary = await adminService.getDashboardSummary();
+        if (cancelled) {
+          return;
+        }
+
+        setSidebarStats({
+          loading: false,
+          todayOrders: Number(summary?.todayOrders || 0),
+          availableProductPercent: getAvailableProductPercent(summary),
+        });
+      } catch {
+        if (!cancelled) {
+          setSidebarStats({
+            loading: false,
+            todayOrders: 0,
+            availableProductPercent: 0,
+          });
+        }
+      }
+    }
+
+    loadSidebarStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authState.status, isAuthPage]);
+
   function handleLogout() {
     clearAuthSession(AUTH_SCOPES.admin);
     setMobileOpen(false);
@@ -261,143 +330,103 @@ export function AdminShell({ children }) {
   }
 
   if (isAuthPage) {
-    return children;
-  }
-
-  if (authState.status !== "authenticated") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6faef] px-4">
-        <div className="w-full max-w-sm rounded-[8px] border border-emerald-100 bg-white p-5 text-center shadow-[0_18px_55px_rgba(15,61,38,0.08)]">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-[8px] bg-emerald-600 text-white">
-            <Leaf className="size-6" />
-          </div>
-          <p className="mt-4 font-black text-emerald-950">
-            Đang kiểm tra phiên đăng nhập
-          </p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Nếu phiên không hợp lệ, hệ thống sẽ chuyển bạn về màn hình đăng
-            nhập.
-          </p>
-        </div>
-      </div>
-    );
+    return <>{children}</>;
   }
 
   return (
-    <div className="min-h-screen bg-[#f6faef] text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-emerald-950/10 md:flex">
-        <SidebarContent pathname={pathname} />
+    <div className="min-h-screen bg-[#f6faef] text-slate-950">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[280px] xl:block">
+        <SidebarContent
+          pathname={pathname}
+          sidebarStats={sidebarStats}
+          onNavigate={() => setMobileOpen(false)}
+        />
       </aside>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <button
-            type="button"
-            aria-label="Đóng menu"
-            className="absolute inset-0 bg-emerald-950/45 backdrop-blur-sm"
+        <div className="fixed inset-0 z-50 xl:hidden">
+          <div
+            className="absolute inset-0 bg-slate-950/50"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[min(88vw,22rem)] flex-col border-r border-emerald-950/10 shadow-2xl">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="absolute right-3 top-3 z-10 text-white hover:bg-white/10 hover:text-white"
-              onClick={() => setMobileOpen(false)}
-              aria-label="Đóng menu"
-            >
-              <X className="size-4" />
-            </Button>
+          <div className="absolute inset-y-0 left-0 w-[280px] max-w-[85vw] shadow-2xl">
             <SidebarContent
               pathname={pathname}
+              sidebarStats={sidebarStats}
               onNavigate={() => setMobileOpen(false)}
             />
-          </aside>
+          </div>
         </div>
       )}
 
-      <div className="min-h-screen md:pl-72">
+      <div className="xl:pl-[280px]">
         <header className="sticky top-0 z-30 border-b border-emerald-900/10 bg-white/88 backdrop-blur-xl">
           <div className="flex min-h-16 items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="xl:hidden"
               onClick={() => setMobileOpen(true)}
-              aria-label="Mở menu"
             >
               <Menu className="size-5" />
             </Button>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-lg font-bold tracking-normal text-emerald-950">
-                  {pageTitle}
-                </h1>
-                <Link href="/" className="inline-flex h-6 items-center gap-1 rounded-[8px] bg-emerald-50 px-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 transition hover:bg-emerald-100/70 hover:text-emerald-800" title="Trở lại trang mua hàng">
-                  <Store className="size-3" />
-                  Marketplace
-                </Link>
-              </div>
+            <div className="min-w-0">
+              <p className="text-lg font-bold text-emerald-950">{pageTitle}</p>
               <p className="hidden text-sm text-muted-foreground sm:block">
                 Quản trị đơn hàng, tồn kho và trải nghiệm mua nông sản tươi.
               </p>
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-lg"
-              className="hidden border-emerald-100 bg-white text-emerald-800 shadow-sm sm:inline-flex"
-              aria-label="Thông báo"
-            >
-              <Bell className="size-4" />
-            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="hidden border-emerald-100 bg-white text-emerald-800 shadow-sm sm:inline-flex"
+              >
+                <Bell className="size-4" />
+              </Button>
 
-            <Link
-              href="/admin/profile"
-              className="flex items-center gap-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50"
-              title="Chỉnh sửa hồ sơ admin"
-            >
-              <div className="flex size-9 items-center justify-center overflow-hidden rounded-[8px] bg-emerald-600 text-sm font-bold text-white">
+              <div className="hidden items-center gap-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 shadow-[0_10px_24px_rgba(15,61,38,0.08)] sm:flex">
                 {adminAvatarUrl ? (
-                  <span
-                    className="size-full bg-cover bg-center"
-                    style={{ backgroundImage: `url("${adminAvatarUrl}")` }}
+                  <img
+                    src={adminAvatarUrl}
+                    alt={adminName}
+                    className="size-9 rounded-[8px] object-cover"
                   />
                 ) : (
-                  adminInitial
+                  <div className="flex size-9 items-center justify-center rounded-[8px] bg-emerald-600 text-sm font-black text-white">
+                    {adminInitial}
+                  </div>
                 )}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-emerald-950">
+                    {adminName}
+                  </p>
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <ShieldCheck className="size-3 text-emerald-600" />
+                    {adminRole}
+                  </p>
+                </div>
               </div>
-              <div className="hidden text-sm sm:block">
-                <p className="font-bold leading-none text-emerald-950">
-                  {adminName}
-                </p>
-                <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                  <ShieldCheck className="size-3 text-emerald-600" />
-                  {adminRole}
-                </p>
-              </div>
-            </Link>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-lg"
-              className="border-emerald-100 bg-white text-emerald-800 shadow-sm"
-              onClick={handleLogout}
-              aria-label="Đăng xuất"
-              title="Đăng xuất"
-            >
-              <LogOut className="size-4" />
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="border-emerald-100 bg-white text-emerald-800 shadow-sm"
+                onClick={handleLogout}
+                title="Đăng xuất"
+              >
+                <LogOut className="size-4" />
+              </Button>
+            </div>
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-6 lg:px-8">
-          {children}
-        </main>
+        <main className="px-4 py-5 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>
   );
