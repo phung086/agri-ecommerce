@@ -8,8 +8,10 @@ const PROFILE_TIMEOUT_FLAG = "__agriProfileGetProfileTimeoutInstalled";
 const PROFILE_REQUEST_TIMEOUT_MS = 10000;
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const VIETNAM_PHONE_REGEX = /^(0[2-9][0-9]{8}|84[2-9][0-9]{8}|\+84[2-9][0-9]{8})$/;
-const CREDENTIAL_ERROR = "Vui lòng nhập email đúng định dạng hoặc số điện thoại Việt Nam hợp lệ.";
+const CREDENTIAL_ERROR = "Nhập email đúng mẫu, ví dụ ten@email.com, hoặc SĐT Việt Nam hợp lệ, ví dụ 0987654321.";
 const EMAIL_ERROR = "Email phải đúng định dạng, ví dụ customer@example.com.";
+const ERROR_CLASSES = ["border-red-500", "focus:border-red-500", "focus:ring-red-500", "ring-red-200"];
+const NORMAL_CLASSES = ["border-emerald-200"];
 
 function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
@@ -38,21 +40,37 @@ function isValidVietnamPhone(value) {
   return VIETNAM_PHONE_REGEX.test(cleanPhoneLike(value));
 }
 
+function isProbablyPhone(value) {
+  return /^[+\d\s.-]+$/.test(String(value || "").trim());
+}
+
 function isValidCredential(value) {
   const credential = String(value || "").trim();
   return isValidEmail(credential) || isValidVietnamPhone(credential);
 }
 
+function setFieldVisualState(input, hasError) {
+  if (!input) return;
+  if (hasError) {
+    input.classList.add(...ERROR_CLASSES);
+    input.classList.remove(...NORMAL_CLASSES);
+  } else {
+    input.classList.remove(...ERROR_CLASSES);
+  }
+}
+
 function showFieldError(input, message) {
   if (!input) return;
   input.setCustomValidity(message || "");
+  setFieldVisualState(input, Boolean(message));
+
   const wrapper = input.closest(".space-y-2") || input.parentElement;
   let errorNode = wrapper?.querySelector("[data-profile-field-error]");
   if (message) {
     if (!errorNode && wrapper) {
       errorNode = document.createElement("p");
       errorNode.dataset.profileFieldError = "true";
-      errorNode.className = "text-sm font-medium text-red-600";
+      errorNode.className = "text-sm font-semibold text-red-600";
       wrapper.appendChild(errorNode);
     }
     if (errorNode) errorNode.textContent = message;
@@ -81,16 +99,22 @@ function validateProfileEmail({ report = false } = {}) {
   return !message;
 }
 
+function applyLoginInputMode(loginInput) {
+  if (!loginInput) return;
+  const value = loginInput.value.trim();
+  loginInput.type = "text";
+  loginInput.removeAttribute("pattern");
+  loginInput.setAttribute("autocomplete", "username");
+  loginInput.setAttribute("placeholder", "Email hoặc số điện thoại");
+  loginInput.setAttribute("inputmode", isProbablyPhone(value) ? "tel" : "email");
+}
+
 /**
  * Compatibility bridge for the existing profile page.
  *
- * - Login identifier is relaxed from email-only to email/phone so default guest
- *   accounts can log in using phone + password 123456.
- * - Profile email field is made editable and injected into updateProfile payload
- *   without rewriting the large profile page component.
- * - Profile auth check is guarded with a timeout so the page never stays forever
- *   at "Đang kiểm tra phiên đăng nhập" when an old token or deploy hiccup blocks
- *   the profile API response.
+ * - Customer login uses one identifier field: valid email OR Vietnamese phone.
+ * - Profile email can be edited, but must pass email format validation before saving.
+ * - Profile auth check has a timeout so the page cannot hang forever on stale tokens.
  */
 export function ProfileLoginPhoneCompatibility() {
   useEffect(() => {
@@ -136,11 +160,7 @@ export function ProfileLoginPhoneCompatibility() {
 
       const loginInput = document.getElementById("login-email");
       if (loginInput) {
-        loginInput.type = "text";
-        loginInput.removeAttribute("pattern");
-        loginInput.setAttribute("inputmode", "text");
-        loginInput.setAttribute("autocomplete", "username");
-        loginInput.setAttribute("placeholder", "Email hoặc số điện thoại");
+        applyLoginInputMode(loginInput);
       }
 
       const loginLabel = document.querySelector('label[for="login-email"]');
@@ -177,6 +197,7 @@ export function ProfileLoginPhoneCompatibility() {
 
     function handleInputCapture(event) {
       if (event.target?.id === "login-email") {
+        applyLoginInputMode(event.target);
         validateLoginCredential();
       }
       if (event.target?.id === "profile-email") {
