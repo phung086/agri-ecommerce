@@ -35,7 +35,7 @@ const moduleCards = [
   {
     title: "Người dùng",
     description:
-      "Theo dõi khách hàng, nhà bán, vai trò và trạng thái hoạt động.",
+      "Theo dõi khách hàng, nhân viên, vai trò và trạng thái hoạt động.",
     href: "/admin/users",
     image: "/admin-assets/users.svg",
     icon: Users,
@@ -51,7 +51,7 @@ const moduleCards = [
   {
     title: "Sản phẩm",
     description:
-      "Kiểm tra tồn kho, giá bán, trạng thái mở bán và ảnh đại diện.",
+      "Kiểm tra giá bán, hình ảnh, trạng thái mở bán và tồn kho hiện tại.",
     href: "/admin/products",
     image: "/admin-assets/products.svg",
     icon: PackageCheck,
@@ -59,7 +59,7 @@ const moduleCards = [
   {
     title: "Đơn hàng",
     description:
-      "Theo dõi giỏ hàng, thanh toán, trạng thái xử lý và tổng tiền.",
+      "Theo dõi khách mua, thanh toán, trạng thái xử lý và tổng tiền.",
     href: "/admin/orders",
     image: "/admin-assets/orders.svg",
     icon: ShoppingCart,
@@ -67,7 +67,7 @@ const moduleCards = [
   {
     title: "Giao hàng",
     description:
-      "Phân công tuyến giao, kiểm tra tiến độ và đơn cần giao nhanh.",
+      "Phân công đơn, theo dõi tuyến giao và xử lý đơn cần giao nhanh.",
     href: "/admin/delivery",
     image: "/admin-assets/delivery.svg",
     icon: Truck,
@@ -75,7 +75,7 @@ const moduleCards = [
   {
     title: "Mã giảm giá",
     description:
-      "Tạo ưu đãi mùa vụ, bật tắt mã và theo dõi lượt sử dụng.",
+      "Tạo ưu đãi, bật tắt mã và theo dõi lượt sử dụng thực tế.",
     href: "/admin/coupons",
     image: "/admin-assets/coupons.svg",
     icon: TicketPercent,
@@ -93,15 +93,15 @@ const moduleCards = [
 const operationSteps = [
   {
     title: "Kiểm đơn mới",
-    description: "Ưu tiên đơn có rau lá, trái cây mềm và khung giao sớm.",
+    description: "Ưu tiên đơn vừa đặt, đơn đã thanh toán và đơn có khung giao sớm.",
   },
   {
     title: "Đối soát kho",
-    description: "Rà soát sản phẩm tồn thấp trước khi tiếp tục mở bán.",
+    description: "Rà soát sản phẩm tồn thấp, lô cận date và khả năng tiếp tục mở bán.",
   },
   {
     title: "Chốt tuyến giao",
-    description: "Gom đơn theo khu vực để giữ hàng tươi và giảm thời gian.",
+    description: "Gom đơn theo khu vực để giữ hàng tươi và giảm thời gian giao nhận.",
   },
 ];
 
@@ -256,9 +256,9 @@ export default function AdminDashboardPage() {
     <div className="space-y-5">
       <AdminPageHeader
         title="Bảng điều khiển AgriMarket"
-        description="Theo dõi doanh thu, đơn hàng, tồn kho và các khu vực quản trị cốt lõi của sàn thương mại điện tử nông sản trong một màn hình."
+        description="Theo dõi doanh thu, đơn hàng, tồn kho và các khu vực quản trị chính trong một màn hình."
         image="/admin-assets/dashboard.svg"
-        badges={["Marketplace admin", "Nông sản tươi", "Dữ liệu API"]}
+        badges={["Quản trị", "Đơn hàng", "Tồn kho"]}
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -285,7 +285,7 @@ export default function AdminDashboardPage() {
           value={
             loading && !summary.userError ? "..." : formatNumber(summary.users)
           }
-          description={summary.userError ? "Cần quyền admin" : "Từ API admin"}
+          description={summary.userError ? "Chưa tải được dữ liệu" : "Tài khoản trong hệ thống"}
           icon={Users}
           tone="amber"
         />
@@ -296,7 +296,7 @@ export default function AdminDashboardPage() {
               ? "..."
               : formatNumber(summary.categories)
           }
-          description={summary.categoryError ? "Chưa tải được" : "Từ public API"}
+          description={summary.categoryError ? "Chưa tải được dữ liệu" : "Nhóm sản phẩm đang quản lý"}
           icon={FolderTree}
           tone="rose"
         />
@@ -307,7 +307,7 @@ export default function AdminDashboardPage() {
               ? "..."
               : formatNumber(summary.products)
           }
-          description={summary.productError ? "Chưa tải được" : "Từ public API"}
+          description={summary.productError ? "Chưa tải được dữ liệu" : "Mặt hàng trong hệ thống"}
           icon={PackageCheck}
           tone="green"
         />
