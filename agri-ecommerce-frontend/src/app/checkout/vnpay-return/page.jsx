@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   CreditCard,
   Loader2,
-  Printer,
   RefreshCw,
   ShoppingBasket,
 } from "lucide-react";
@@ -85,62 +84,84 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
   const invoiceNumber = getInvoiceNumber(result?.orderId);
   const totalAmount = Number(order?.totalPrice ?? result?.amount ?? 0);
   const transactionNo = result?.transactionNo || params?.vnp_TransactionNo || "-";
+  const subtotal = Number(order?.subtotal ?? totalAmount);
+  const discountAmount = Number(order?.discountAmount ?? 0);
+  const shippingFee = Number(order?.shippingFee ?? 0);
+  const paidAt = getPaymentPaidAt(order, params);
+  const hasPriceBreakdown =
+    order?.subtotal != null || order?.discountAmount != null || order?.shippingFee != null;
 
   return (
     <section
       id="payment-invoice"
-      className="mt-6 rounded-[8px] border border-slate-200 bg-white p-6 text-slate-950 shadow-sm print:border-0 print:shadow-none"
+      className="mt-6 rounded-[8px] border border-slate-200 bg-white p-5 text-slate-950 shadow-sm sm:p-6"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-black uppercase leading-5 text-emerald-800">
-            AgriMarket
-          </p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">
-            Fresh agricultural ecommerce
-          </p>
-        </div>
-
-        <div className="text-right">
-          <p className="text-xs font-bold uppercase text-slate-500">
-            No. {invoiceNumber}
-          </p>
-          <h2 className="mt-1 text-4xl font-black tracking-wide text-slate-950 sm:text-5xl">
-            INVOICE
+          <p className="text-xs font-black uppercase text-emerald-700">AgriMarket</p>
+          <h2 className="mt-1 text-2xl font-black text-slate-950">
+            Hóa đơn thanh toán
           </h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">
+            Cảm ơn bạn đã mua hàng tại AgriMarket.
+          </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="print:hidden hidden h-9 items-center justify-center gap-2 rounded-[8px] border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 transition hover:bg-slate-50 sm:inline-flex"
-        >
-          <Printer className="size-4" />
-          In hóa đơn
-        </button>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:text-right">
+          <div>
+            <dt className="font-bold text-slate-500">Số hóa đơn</dt>
+            <dd className="mt-0.5 font-black">{invoiceNumber}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-500">Mã đơn hàng</dt>
+            <dd className="mt-0.5 font-black">#{result?.orderId || "-"}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-500">Ngày thanh toán</dt>
+            <dd className="mt-0.5 font-black">{formatDate(paidAt)}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-500">Trạng thái</dt>
+            <dd className="mt-0.5 font-black text-emerald-700">Đã thanh toán</dd>
+          </div>
+        </dl>
       </div>
 
-      <div className="mt-8 grid gap-6 text-sm sm:grid-cols-2">
-        <div>
-          <p className="font-black">Billed to:</p>
-          <p className="mt-1 font-semibold">{getCustomerName(order)}</p>
-          <p className="text-slate-600">{getShippingAddressText(order)}</p>
-          <p className="text-slate-600">{getCustomerPhone(order)}</p>
+      <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+        <div className="rounded-[8px] bg-slate-50 p-4">
+          <p className="font-black text-slate-950">Thông tin khách hàng</p>
+          <dl className="mt-3 space-y-2">
+            <div>
+              <dt className="font-bold text-slate-500">Tên khách hàng</dt>
+              <dd className="font-semibold">{getCustomerName(order)}</dd>
+            </div>
+            <div>
+              <dt className="font-bold text-slate-500">Số điện thoại</dt>
+              <dd className="font-semibold">{getCustomerPhone(order)}</dd>
+            </div>
+            <div>
+              <dt className="font-bold text-slate-500">Địa chỉ giao hàng</dt>
+              <dd className="font-semibold leading-5">{getShippingAddressText(order)}</dd>
+            </div>
+          </dl>
         </div>
 
-        <div className="sm:text-right">
-          <p>
-            <span className="font-black">Date:</span>{" "}
-            <span className="text-slate-700">
-              {formatDate(getPaymentPaidAt(order, params))}
-            </span>
-          </p>
-          <div className="mt-5 sm:inline-block sm:text-left">
-            <p className="font-black">From:</p>
-            <p className="mt-1 font-semibold">AgriMarket</p>
-            <p className="text-slate-600">Thanh toán qua VNPay</p>
-            <p className="text-slate-600">Mã GD: {transactionNo}</p>
-          </div>
+        <div className="rounded-[8px] bg-slate-50 p-4">
+          <p className="font-black text-slate-950">Thông tin thanh toán</p>
+          <dl className="mt-3 space-y-2">
+            <div>
+              <dt className="font-bold text-slate-500">Phương thức</dt>
+              <dd className="font-semibold">VNPay</dd>
+            </div>
+            <div>
+              <dt className="font-bold text-slate-500">Mã giao dịch</dt>
+              <dd className="font-semibold">{transactionNo}</dd>
+            </div>
+            <div>
+              <dt className="font-bold text-slate-500">Người bán</dt>
+              <dd className="font-semibold">AgriMarket</dd>
+            </div>
+          </dl>
         </div>
       </div>
 
@@ -157,93 +178,14 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
         </div>
       )}
 
-      <div className="hidden">
-        <div className="rounded-[8px] border border-emerald-100 p-3">
-          <p className="text-xs font-black uppercase text-slate-500">
-            Mã đơn hàng
-          </p>
-          <p className="mt-1 font-black text-slate-950">
-            #{result?.orderId || "-"}
-          </p>
-        </div>
-        <div className="rounded-[8px] border border-emerald-100 p-3">
-          <p className="text-xs font-black uppercase text-slate-500">
-            Mã giao dịch
-          </p>
-          <p className="mt-1 font-black text-slate-950">
-            {result?.transactionNo || params?.vnp_TransactionNo || "-"}
-          </p>
-        </div>
-        <div className="rounded-[8px] border border-emerald-100 p-3">
-          <p className="text-xs font-black uppercase text-slate-500">
-            Số tiền
-          </p>
-          <p className="mt-1 font-black text-emerald-700">
-            {formatCurrency(totalAmount)}
-          </p>
-        </div>
-        <div className="rounded-[8px] border border-emerald-100 p-3">
-          <p className="text-xs font-black uppercase text-slate-500">
-            Phương thức
-          </p>
-          <p className="mt-1 font-black text-slate-950">VNPay</p>
-        </div>
-        <div className="rounded-[8px] border border-emerald-100 p-3">
-          <p className="text-xs font-black uppercase text-slate-500">
-            Thời gian thanh toán
-          </p>
-          <p className="mt-1 font-black text-slate-950">
-            {formatDate(getPaymentPaidAt(order, params))}
-          </p>
-        </div>
-        <div className="rounded-[8px] border border-emerald-100 p-3">
-          <p className="text-xs font-black uppercase text-slate-500">
-            Trạng thái
-          </p>
-          <p className="mt-1 font-black text-emerald-700">
-            Đã thanh toán qua VNPay
-          </p>
-        </div>
-      </div>
-
-      <div className="hidden">
-        <div className="rounded-[8px] bg-[#f6faef] p-3">
-          <p className="text-xs font-black uppercase text-slate-500">
-            Khách hàng
-          </p>
-          <p className="mt-1 font-black text-slate-950">
-            {getCustomerName(order)}
-          </p>
-          <p className="mt-1 font-semibold text-slate-600">
-            {getCustomerPhone(order)}
-          </p>
-          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
-            {getShippingAddressText(order)}
-          </p>
-        </div>
-
-        <div className="rounded-[8px] bg-[#f6faef] p-3">
-          <p className="text-xs font-black uppercase text-slate-500">
-            Thanh toán
-          </p>
-          <p className="mt-1 font-black text-slate-950">VNPay</p>
-          <p className="mt-1 font-semibold text-slate-600">
-            Mã giao dịch: {result?.transactionNo || params?.vnp_TransactionNo || "-"}
-          </p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">
-            Ngày thanh toán: {formatDate(getPaymentPaidAt(order, params))}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-10 overflow-hidden">
+      <div className="mt-5 overflow-hidden rounded-[8px] border border-slate-200">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-950 text-white">
             <tr>
-              <th className="px-3 py-3 font-black">Item</th>
-              <th className="px-3 py-3 text-right font-black">Quantity</th>
-              <th className="px-3 py-3 text-right font-black">Price</th>
-              <th className="px-3 py-3 text-right font-black">Amount</th>
+              <th className="px-3 py-3 font-black">Sản phẩm</th>
+              <th className="px-3 py-3 text-right font-black">SL</th>
+              <th className="px-3 py-3 text-right font-black">Đơn giá</th>
+              <th className="px-3 py-3 text-right font-black">Thành tiền</th>
             </tr>
           </thead>
           <tbody>
@@ -283,43 +225,36 @@ function PaymentInvoicePanel({ order, result, params, orderLoading, orderError }
         </table>
       </div>
 
-      <div className="mt-10 border-y border-slate-950 py-3">
-        <div className="hidden justify-between text-slate-600">
-          <span>Tạm tính</span>
-          <span>{formatCurrency(order?.subtotal ?? totalAmount)}</span>
-        </div>
-        <div className="hidden justify-between text-slate-600">
-          <span>Giảm giá</span>
-          <span>-{formatCurrency(order?.discountAmount ?? 0)}</span>
-        </div>
-        <div className="hidden justify-between text-slate-600">
-          <span>Phí giao hàng</span>
-          <span>{formatCurrency(order?.shippingFee ?? 0)}</span>
-        </div>
-        <div className="ml-auto flex max-w-xs justify-between text-base font-black text-slate-950">
-          <span>Total</span>
-          <span>{formatCurrency(totalAmount)}</span>
-        </div>
+      <div className="mt-5 flex justify-end">
+        <dl className="w-full max-w-sm space-y-2 text-sm">
+          {hasPriceBreakdown && (
+            <>
+              <div className="flex justify-between gap-4 text-slate-600">
+                <dt>Tạm tính</dt>
+                <dd className="font-semibold">{formatCurrency(subtotal)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 text-slate-600">
+                <dt>Giảm giá</dt>
+                <dd className="font-semibold">-{formatCurrency(discountAmount)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 text-slate-600">
+                <dt>Phí giao hàng</dt>
+                <dd className="font-semibold">{formatCurrency(shippingFee)}</dd>
+              </div>
+            </>
+          )}
+          <div className="flex justify-between gap-4 border-t border-slate-200 pt-3 text-base font-black text-slate-950">
+            <dt>Tổng thanh toán</dt>
+            <dd>{formatCurrency(totalAmount)}</dd>
+          </div>
+        </dl>
       </div>
 
-      <div className="mt-5 flex flex-col gap-3 text-sm sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p>
-            <span className="font-black">Payment method:</span> VNPay
-          </p>
-          <p>
-            <span className="font-black">Note:</span> Cảm ơn bạn đã mua hàng.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="print:hidden inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 transition hover:bg-slate-50 sm:hidden"
-        >
-          <Printer className="size-4" />
-          In hóa đơn
-        </button>
+      <div className="mt-5 rounded-[8px] bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">
+        <p>
+          Hóa đơn đã được thanh toán qua VNPay. Vui lòng giữ mã giao dịch{" "}
+          <span className="font-black">{transactionNo}</span> để đối soát khi cần.
+        </p>
       </div>
     </section>
   );
@@ -506,31 +441,6 @@ function VnpayReturnContent() {
                 </button>
               </div>
             )}
-
-            <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
-              <div className="rounded-[8px] border border-emerald-100 p-3">
-                <dt className="font-bold text-slate-500">Mã đơn hàng</dt>
-                <dd className="mt-1 font-black">#{result?.orderId || "-"}</dd>
-              </div>
-              <div className="rounded-[8px] border border-emerald-100 p-3">
-                <dt className="font-bold text-slate-500">Số tiền</dt>
-                <dd className="mt-1 font-black">
-                  {result?.amount != null ? formatCurrency(result.amount) : "-"}
-                </dd>
-              </div>
-              <div className="rounded-[8px] border border-emerald-100 p-3">
-                <dt className="font-bold text-slate-500">Mã giao dịch</dt>
-                <dd className="mt-1 font-black">
-                  {result?.transactionNo || "-"}
-                </dd>
-              </div>
-              <div className="rounded-[8px] border border-emerald-100 p-3">
-                <dt className="font-bold text-slate-500">Trạng thái VNPay</dt>
-                <dd className="mt-1 font-black">
-                  {gatewaySuccess ? "Thành công" : "Không thành công"}
-                </dd>
-              </div>
-            </dl>
 
             {gatewaySuccess && (
               <PaymentInvoicePanel
