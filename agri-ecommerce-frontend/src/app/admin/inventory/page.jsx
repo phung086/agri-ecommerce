@@ -242,7 +242,9 @@ export default function AdminInventoryPage() {
   }
 
   useEffect(() => {
-    loadData();
+    const timeoutId = window.setTimeout(loadData, 0);
+
+    return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchStatus, appliedKeyword]);
 

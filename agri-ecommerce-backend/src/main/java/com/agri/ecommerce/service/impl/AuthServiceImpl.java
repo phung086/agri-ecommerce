@@ -124,7 +124,9 @@ public class AuthServiceImpl implements AuthService {
         }
 
         loginAttemptService.clear(credential);
-        loginAttemptService.clear(user.getEmail());
+        if (!credential.equalsIgnoreCase(user.getEmail())) {
+            loginAttemptService.clear(user.getEmail());
+        }
         return buildAuthResponse(user);
     }
 

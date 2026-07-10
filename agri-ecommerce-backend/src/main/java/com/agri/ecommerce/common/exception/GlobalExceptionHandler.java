@@ -2,6 +2,7 @@ package com.agri.ecommerce.common.exception;
 
 import com.agri.ecommerce.dto.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -14,6 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BadRequestException.class)
@@ -66,8 +68,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleGeneralException(Exception ex) {
+        log.error("Unhandled application exception", ex);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Có lỗi xảy ra trong hệ thống", ex.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR.value()));
+                .body(ApiResponse.error("Có lỗi xảy ra trong hệ thống", null, HttpStatus.INTERNAL_SERVER_ERROR.value()));
     }
 }

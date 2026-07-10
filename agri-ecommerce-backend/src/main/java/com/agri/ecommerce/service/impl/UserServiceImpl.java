@@ -11,27 +11,32 @@ import com.agri.ecommerce.mapper.UserMapper;
 import com.agri.ecommerce.repository.UserRepository;
 import com.agri.ecommerce.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.agri.ecommerce.dto.request.user.ChangePasswordRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.agri.ecommerce.service.LoyaltyService;
-import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserServiceImpl implements UserService {
+
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final Pattern VIETNAM_PHONE_PATTERN = Pattern.compile("^(0[2-9][0-9]{8}|84[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$");
 
     private final UserRepository userRepository;
 
     private final UserMapper userMapper;
 
     private final PasswordEncoder passwordEncoder;
-    @Autowired
-    private LoyaltyService loyaltyService;
+
+    private final LoyaltyService loyaltyService;
 
     @Override
     @Transactional
@@ -40,7 +45,7 @@ public class UserServiceImpl implements UserService {
         try {
             loyaltyService.recalculateMembershipTier(userId);
         } catch (Exception ex) {
-            // Tránh làm gián đoạn luồng lấy thông tin cá nhân chính
+            log.warn("Không thể cập nhật hạng thành viên cho userId={}", userId, ex);
         }
         UserEntity user = findUserById(userId);
         return userMapper.toUserResponse(user);
@@ -52,6 +57,9 @@ public class UserServiceImpl implements UserService {
         UserEntity user = findUserById(userId);
 
         String nextEmail = normalizeEmail(request.getEmail());
+        if (nextEmail != null && !EMAIL_PATTERN.matcher(nextEmail).matches()) {
+            throw new BadRequestException("Email phải đúng định dạng, ví dụ customer@example.com");
+        }
         if (nextEmail != null && !nextEmail.equalsIgnoreCase(user.getEmail())) {
             if (userRepository.existsByEmailAndIdNot(nextEmail, userId)) {
                 throw new BadRequestException("Email đã được sử dụng bởi tài khoản khác");
@@ -60,7 +68,7 @@ public class UserServiceImpl implements UserService {
         }
 
         user.setName(request.getName().trim());
-        user.setPhoneNumber(cleanBlank(request.getPhoneNumber()));
+        user.setPhoneNumber(normalizeOptionalVietnamPhone(request.getPhoneNumber()));
         user.setAddress(cleanBlank(request.getAddress()));
         user.setAvatar(cleanBlank(request.getAvatar()));
 
@@ -146,6 +154,26 @@ public class UserServiceImpl implements UserService {
     private String normalizeEmail(String value) {
         String email = cleanBlank(value);
         return email == null ? null : email.toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeOptionalVietnamPhone(String value) {
+        String phone = cleanBlank(value);
+        if (phone == null) {
+            return null;
+        }
+
+        String compactPhone = phone.replaceAll("[\\s.-]", "");
+        if (!VIETNAM_PHONE_PATTERN.matcher(compactPhone).matches()) {
+            throw new BadRequestException("Số điện thoại phải đúng đầu số Việt Nam, ví dụ 0987654321 hoặc +84987654321");
+        }
+
+        if (compactPhone.startsWith("+84")) {
+            return "0" + compactPhone.substring(3);
+        }
+        if (compactPhone.startsWith("84")) {
+            return "0" + compactPhone.substring(2);
+        }
+        return compactPhone;
     }
 
     private String cleanBlank(String value) {
