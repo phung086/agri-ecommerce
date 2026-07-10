@@ -21,18 +21,24 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class CustomerRefundCancelService {
 
-    private static final String ORDER_PENDING = "pending";
     private static final String ORDER_CANCELED = "canceled";
     private static final String PAYMENT_COMPLETED = "completed";
     private static final String PAYMENT_REFUND_REQUESTED = "refund_requested";
     private static final String PAYMENT_METHOD_VNPAY = "vnpay";
     private static final String IN_STOCK_STATUS = "in_stock";
     private static final String HIDDEN_STATUS = "hidden";
+    private static final Set<String> REFUND_CANCEL_ALLOWED_ORDER_STATUSES = Set.of(
+            "pending",
+            "processing",
+            "confirmed",
+            "ready_for_delivery"
+    );
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -46,8 +52,8 @@ public class CustomerRefundCancelService {
         OrderEntity order = orderRepository.findByIdAndUserIdForUpdate(orderId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng"));
 
-        if (!ORDER_PENDING.equalsIgnoreCase(order.getStatus())) {
-            throw new BadRequestException("Chỉ có thể hủy đơn hàng đang chờ xử lý");
+        if (!canRequestRefundCancel(order.getStatus())) {
+            throw new BadRequestException("Chỉ có thể yêu cầu hoàn tiền trước khi đơn được giao cho đơn vị vận chuyển");
         }
 
         PaymentEntity payment = paymentRepository.findByOrderIdForUpdateOrderByCreatedAtDesc(orderId)
@@ -88,6 +94,10 @@ public class CustomerRefundCancelService {
         }
 
         return orderMapper.toOrderResponse(savedOrder, orderItems, payment, history);
+    }
+
+    private boolean canRequestRefundCancel(String orderStatus) {
+        return orderStatus != null && REFUND_CANCEL_ALLOWED_ORDER_STATUSES.contains(orderStatus.toLowerCase());
     }
 
     private void restoreProductStock(List<OrderItemEntity> orderItems) {
