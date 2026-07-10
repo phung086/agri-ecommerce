@@ -1,4 +1,4 @@
-export const VIETNAM_PHONE_REGEX = /^(?:\+84|84|0)(3|5|7|8|9|2)\d{8}$/;
+export const VIETNAM_PHONE_REGEX = /^(?:\+84|84|0)(2|3|5|7|8|9)\d{8}$/;
 
 export function sanitizeVietnamPhone(value) {
   return String(value || "")
@@ -34,7 +34,7 @@ export function getVietnamPhoneError(value) {
       return "Số điện thoại phải gồm 10 chữ số.";
     }
 
-    return "Số điện thoại không hợp lệ.";
+    return "Số điện thoại phải đúng đầu số Việt Nam, ví dụ 0987654321 hoặc +84987654321.";
   }
 
   return "";
