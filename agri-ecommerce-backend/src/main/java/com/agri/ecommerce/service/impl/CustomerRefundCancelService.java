@@ -19,13 +19,17 @@ import com.agri.ecommerce.repository.PaymentRepository;
 import com.agri.ecommerce.repository.ProductRepository;
 import com.agri.ecommerce.service.EmailService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CustomerRefundCancelService {
@@ -99,11 +103,7 @@ public class CustomerRefundCancelService {
             history.add(refundHistory);
         }
 
-        emailService.sendOrderStatusUpdate(
-                savedOrder,
-                "Đã ghi nhận yêu cầu hủy đơn và hoàn tiền",
-                "AgriMarket đã nhận thông tin ngân hàng của bạn. Bộ phận bán hàng sẽ kiểm tra giao dịch VNPay và xử lý hoàn tiền theo quy trình đối soát. Trạng thái thanh toán đã chuyển sang chờ hoàn tiền."
-        );
+        sendRefundRequestEmailAfterCommit(savedOrder.getId(), request);
 
         return orderMapper.toOrderResponse(savedOrder, orderItems, payment, history);
     }
@@ -170,6 +170,44 @@ public class CustomerRefundCancelService {
                 + " - STK " + request.getBankAccountNumber().trim()
                 + " - Chủ TK " + request.getBankAccountHolder().trim()
                 + ". Lý do: " + reason;
+    }
+
+    private void sendRefundRequestEmailAfterCommit(Long orderId, RefundCancelRequest request) {
+        Runnable emailTask = () -> {
+            try {
+                OrderEntity emailOrder = orderRepository.findById(orderId).orElse(null);
+                if (emailOrder == null) {
+                    log.warn("[Refund Cancel] Order #{} not found after commit, skip refund email.", orderId);
+                    return;
+                }
+
+                emailService.sendOrderStatusUpdate(
+                        emailOrder,
+                        "Đã ghi nhận yêu cầu hủy đơn và hoàn tiền",
+                        "AgriMarket đã nhận yêu cầu hủy đơn VNPay đã thanh toán. "
+                                + "Thông tin hoàn tiền đã được ghi nhận: "
+                                + request.getBankName().trim()
+                                + " - STK " + request.getBankAccountNumber().trim()
+                                + " - Chủ tài khoản " + request.getBankAccountHolder().trim()
+                                + ". Bộ phận bán hàng sẽ kiểm tra giao dịch VNPay và xử lý hoàn tiền theo quy trình đối soát."
+                );
+            } catch (Exception exception) {
+                log.error("[Refund Cancel] Failed to send refund request email for Order #{}: {}",
+                        orderId, exception.getMessage(), exception);
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    emailTask.run();
+                }
+            });
+            return;
+        }
+
+        emailTask.run();
     }
 
     private boolean isBlank(String value) {
