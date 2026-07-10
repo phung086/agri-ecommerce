@@ -15,8 +15,11 @@ public class ShippingAddressRequest {
     private String fullName;
 
     @NotBlank(message = "Số điện thoại không được để trống")
-    @Size(max = 255, message = "Số điện thoại không được vượt quá 255 ký tự")
-    @Pattern(regexp = "^0\\d{9}$", message = "Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng số 0.")
+    @Size(max = 20, message = "Số điện thoại không được vượt quá 20 ký tự")
+    @Pattern(
+            regexp = "^(?:\\+84|84|0)(?:2[0-9]|3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])\\d{7}$",
+            message = "Số điện thoại phải đúng đầu số Việt Nam hợp lệ, ví dụ 0987654321"
+    )
     private String phone;
 
     @NotBlank(message = "Địa chỉ không được để trống")

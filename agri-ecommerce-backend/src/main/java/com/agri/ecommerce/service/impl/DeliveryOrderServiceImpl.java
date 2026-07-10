@@ -14,6 +14,10 @@ import com.agri.ecommerce.repository.OrderItemRepository;
 import com.agri.ecommerce.repository.OrderRepository;
 import com.agri.ecommerce.repository.OrderStatusHistoryRepository;
 import com.agri.ecommerce.repository.PaymentRepository;
+import com.agri.ecommerce.repository.ProductRepository;
+import com.agri.ecommerce.repository.CouponRepository;
+import com.agri.ecommerce.repository.InventoryBatchRepository;
+import com.agri.ecommerce.repository.InventoryTransactionRepository;
 import com.agri.ecommerce.service.NotificationService;
 import com.agri.ecommerce.service.DeliveryOrderService;
 import com.agri.ecommerce.service.PaymentService;
@@ -87,6 +91,18 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
     private final OrderMapper orderMapper;
 
     private final LoyaltyService loyaltyService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private ProductRepository productRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private CouponRepository couponRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private InventoryBatchRepository inventoryBatchRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private InventoryTransactionRepository inventoryTransactionRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -251,8 +267,12 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
         order.setStatus(nextStatus);
         OrderEntity savedOrder = orderRepository.save(order);
 
-        if ("canceled".equals(nextStatus) && savedOrder.getUser() != null && savedOrder.getPointsUsed() != null && savedOrder.getPointsUsed() > 0) {
-            loyaltyService.refundPointsForCancellation(savedOrder.getUser().getId(), savedOrder.getPointsUsed());
+        if ("canceled".equals(nextStatus)) {
+            restoreInventoryAndCoupon(savedOrder);
+            settlePaymentForCanceledOrder(savedOrder, note);
+            if (savedOrder.getUser() != null && savedOrder.getPointsUsed() != null && savedOrder.getPointsUsed() > 0) {
+                loyaltyService.refundPointsForCancellation(savedOrder.getUser().getId(), savedOrder.getPointsUsed());
+            }
         }
 
         String historyNote = "Lý do: " + order.getDeliveryFailureReason();
@@ -616,5 +636,88 @@ public class DeliveryOrderServiceImpl implements DeliveryOrderService {
                 + (order.getTrackingNumber() != null ? order.getTrackingNumber() : "#" + order.getId()) 
                 + " của bạn. Vui lòng chuẩn bị nhận hàng và giữ liên lạc điện thoại nhé!"
         );
+    }
+
+    private void restoreInventoryAndCoupon(OrderEntity order) {
+        List<OrderItemEntity> orderItems = orderItemRepository.findByOrder_IdOrderByIdAsc(order.getId());
+        restoreProductStock(orderItems);
+        releaseCouponUsage(order);
+    }
+
+    private void restoreProductStock(List<OrderItemEntity> orderItems) {
+        if (orderItems.isEmpty()) {
+            return;
+        }
+
+        Map<Long, Integer> quantityByProductId = new LinkedHashMap<>();
+        orderItems.forEach(orderItem -> quantityByProductId.merge(
+                orderItem.getProduct().getId(),
+                orderItem.getQuantity(),
+                Integer::sum
+        ));
+
+        Map<Long, ProductEntity> productsById = productRepository.findAllByIdInForUpdate(quantityByProductId.keySet())
+                .stream()
+                .collect(Collectors.toMap(ProductEntity::getId, Function.identity()));
+
+        quantityByProductId.forEach((productId, quantity) -> {
+            ProductEntity product = productsById.get(productId);
+            if (product == null) {
+                return;
+            }
+
+            List<InventoryBatchEntity> availableBatches = inventoryBatchRepository.findAvailableBatchesFifo(product.getId(), LocalDateTime.now());
+            if (!availableBatches.isEmpty()) {
+                InventoryBatchEntity latestBatch = availableBatches.get(availableBatches.size() - 1);
+                latestBatch.setRemainingQuantity(latestBatch.getRemainingQuantity() + quantity);
+                inventoryBatchRepository.save(latestBatch);
+
+                inventoryTransactionRepository.save(InventoryTransactionEntity.builder()
+                        .product(product)
+                        .batch(latestBatch)
+                        .quantity(quantity)
+                        .type("IMPORT")
+                        .note("Hoàn trả tồn kho từ Đơn hàng hủy")
+                        .build());
+            }
+
+            int currentStock = product.getStock() == null ? 0 : product.getStock();
+            int restoredStock = currentStock + quantity;
+            product.setStock(restoredStock);
+
+            if (restoredStock > 0 && "out_of_stock".equals(product.getStatus())) {
+                product.setStatus("in_stock");
+            }
+        });
+
+        productRepository.saveAll(productsById.values());
+    }
+
+    private void releaseCouponUsage(OrderEntity order) {
+        CouponEntity coupon = order.getCoupon();
+        if (coupon == null) {
+            return;
+        }
+        int timesUsed = coupon.getTimesUsed() == null ? 0 : coupon.getTimesUsed();
+        if (timesUsed > 0) {
+            coupon.setTimesUsed(timesUsed - 1);
+            couponRepository.save(coupon);
+        }
+    }
+
+    private void settlePaymentForCanceledOrder(OrderEntity order, String note) {
+        paymentRepository.findByOrderIdForUpdateOrderByCreatedAtDesc(order.getId())
+                .stream()
+                .findFirst()
+                .ifPresent(payment -> {
+                    if ("pending".equals(payment.getStatus())) {
+                        payment.setStatus("failed");
+                        payment.setPaidAt(null);
+                        paymentRepository.save(payment);
+                    } else if ("completed".equals(payment.getStatus())) {
+                        payment.setStatus("refunded");
+                        paymentRepository.save(payment);
+                    }
+                });
     }
 }

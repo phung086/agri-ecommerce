@@ -236,12 +236,17 @@ export default function AdminLoginPage() {
                 <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   id="admin-email"
-                  type="email"
+                  type="text"
+                  inputMode="email"
                   value={form.email}
                   onChange={(event) => updateForm("email", event.target.value)}
                   placeholder="admin@example.com"
                   className="h-11 pl-9"
                   autoComplete="email"
+                  dir="ltr"
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="none"
                   required
                 />
               </div>

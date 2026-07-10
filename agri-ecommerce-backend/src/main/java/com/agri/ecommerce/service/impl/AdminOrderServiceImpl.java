@@ -431,6 +431,12 @@ public class AdminOrderServiceImpl implements AdminOrderService {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private InventoryBatchRepository inventoryBatchRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private InventoryTransactionRepository inventoryTransactionRepository;
+
     private void restoreInventoryAndCoupon(OrderEntity order) {
         List<OrderItemEntity> orderItems = orderItemRepository.findByOrder_IdOrderByIdAsc(order.getId());
         restoreProductStock(orderItems);
@@ -457,6 +463,21 @@ public class AdminOrderServiceImpl implements AdminOrderService {
             ProductEntity product = productsById.get(productId);
             if (product == null) {
                 return;
+            }
+
+            List<InventoryBatchEntity> availableBatches = inventoryBatchRepository.findAvailableBatchesFifo(product.getId(), LocalDateTime.now());
+            if (!availableBatches.isEmpty()) {
+                InventoryBatchEntity latestBatch = availableBatches.get(availableBatches.size() - 1);
+                latestBatch.setRemainingQuantity(latestBatch.getRemainingQuantity() + quantity);
+                inventoryBatchRepository.save(latestBatch);
+
+                inventoryTransactionRepository.save(InventoryTransactionEntity.builder()
+                        .product(product)
+                        .batch(latestBatch)
+                        .quantity(quantity)
+                        .type("IMPORT")
+                        .note("Hoàn trả tồn kho từ Đơn hàng hủy")
+                        .build());
             }
 
             int currentStock = product.getStock() == null ? 0 : product.getStock();

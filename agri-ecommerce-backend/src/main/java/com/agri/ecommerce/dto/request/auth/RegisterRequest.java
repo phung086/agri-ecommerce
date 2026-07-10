@@ -30,8 +30,8 @@ public class RegisterRequest {
 
     @Size(max = 20, message = "Số điện thoại không được vượt quá 20 ký tự")
     @Pattern(
-            regexp = "^$|^(0[2-9][0-9]{8}|84[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$",
-            message = "Số điện thoại phải đúng đầu số Việt Nam, ví dụ 0987654321 hoặc +84987654321"
+            regexp = "^$|^(?:\\+84|84|0)(?:2[0-9]|3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])\\d{7}$",
+            message = "Số điện thoại phải đúng đầu số Việt Nam hợp lệ, ví dụ 0987654321 hoặc +84987654321"
     )
     private String phoneNumber;
 

@@ -64,13 +64,14 @@ import {
   saveAuthSession,
 } from "@/lib/auth-storage";
 import {
+  EMAIL_ERROR_MESSAGE,
+  getEmailError,
+  getLoginCredentialError,
   getVietnamPhoneError,
+  normalizeEmailAddress,
   normalizeVietnamPhone,
 } from "@/lib/profile-validation";
-import {
-  PHONE_ERROR_MESSAGE,
-  isValidPhoneNumber,
-} from "@/lib/phone-utils";
+import { PHONE_ERROR_MESSAGE, isValidPhoneNumber } from "@/lib/phone-utils";
 import {
   buildProfileAddress,
   createVietnamAddressForm,
@@ -220,6 +221,8 @@ function AuthPanel({ onAuthenticated }) {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [phoneError, setPhoneError] = useState("");
+  const [loginEmailError, setLoginEmailError] = useState("");
+  const [registerEmailError, setRegisterEmailError] = useState("");
 
   // Tracking State
   const [trackOrderId, setTrackOrderId] = useState("");
@@ -230,33 +233,70 @@ function AuthPanel({ onAuthenticated }) {
   const isLogin = mode === "login";
   const isTrack = mode === "track";
 
-  // Validate phone number: must be 0 followed by 9 digits
-  function validatePhoneNumber(phone) {
-    const phoneRegex = /^0\d{9}$/;
-    return phoneRegex.test(phone);
-  }
-
   const [registerAddress, setRegisterAddress] = useState(() => createVietnamAddressForm());
 
   function updateLogin(field, value) {
     setLoginForm((current) => ({ ...current, [field]: value }));
+    // Real-time validate login credential (email or phone)
+    if (field === "email") {
+      if (!value.trim()) {
+        setLoginEmailError("");
+      } else {
+        setLoginEmailError(getLoginCredentialError(value));
+      }
+    }
   }
 
   function updateRegister(field, value) {
     if (field === "phoneNumber") {
-      const digitsOnly = value.replace(/\D/g, "");
-      const limited = digitsOnly.slice(0, 10);
-      setRegisterForm((current) => ({ ...current, [field]: limited }));
-      if (limited === "") {
-        setPhoneError("");
-      } else if (!validatePhoneNumber(limited)) {
-        setPhoneError("Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số");
-      } else {
-        setPhoneError("");
-      }
-    } else {
       setRegisterForm((current) => ({ ...current, [field]: value }));
+      if (!value.trim()) {
+        setPhoneError("");
+      } else {
+        setPhoneError(getVietnamPhoneError(value));
+      }
+      return;
     }
+
+    if (field === "email") {
+      setRegisterForm((current) => ({ ...current, [field]: value }));
+      // Real-time email validate for register form
+      if (!value.trim()) {
+        setRegisterEmailError("");
+      } else {
+        setRegisterEmailError(getEmailError(value));
+      }
+      return;
+    }
+
+    setRegisterForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function validateLoginInput() {
+    const credentialError = getLoginCredentialError(loginForm.email);
+    if (credentialError) {
+      setError(credentialError);
+      return false;
+    }
+
+    return true;
+  }
+
+  function validateRegisterInput() {
+    const emailError = getEmailError(registerForm.email);
+    if (emailError) {
+      setError(emailError);
+      return false;
+    }
+
+    const phoneErrorMessage = getVietnamPhoneError(registerForm.phoneNumber);
+    if (phoneErrorMessage) {
+      setPhoneError(phoneErrorMessage);
+      setError(phoneErrorMessage);
+      return false;
+    }
+
+    return true;
   }
 
   async function handleTrackOrder(event) {
@@ -305,8 +345,7 @@ function AuthPanel({ onAuthenticated }) {
 
     try {
       if (!isLogin) {
-        if (registerForm.phoneNumber && !validatePhoneNumber(registerForm.phoneNumber)) {
-          setError("Vui lòng nhập số điện thoại hợp lệ (bắt đầu bằng 0 và có 10 chữ số)");
+        if (!validateRegisterInput()) {
           setLoading(false);
           return;
         }
@@ -323,15 +362,15 @@ function AuthPanel({ onAuthenticated }) {
         // 1. Đăng ký tài khoản khách hàng
         const registerResponse = await authService.register({
           name: registerForm.name.trim(),
-          email: registerForm.email.trim(),
+          email: normalizeEmailAddress(registerForm.email),
           password: registerForm.password,
-          phoneNumber: registerForm.phoneNumber.trim(),
+          phoneNumber: normalizeVietnamPhone(registerForm.phoneNumber),
           address: fullAddr,
         });
 
         // 2. Đăng nhập ngay lập tức để lấy token lưu session
         const loginResponse = await authService.login({
-          email: registerForm.email.trim(),
+          email: normalizeEmailAddress(registerForm.email),
           password: registerForm.password,
         });
         const payload = unwrapApiData(loginResponse);
@@ -343,7 +382,7 @@ function AuthPanel({ onAuthenticated }) {
           try {
             await shippingAddressService.createAddress({
               fullName: registerForm.name.trim(),
-              phone: registerForm.phoneNumber.trim(),
+              phone: normalizeVietnamPhone(registerForm.phoneNumber),
               city: registerAddress.provinceName,
               address: buildDetailedAddress(registerAddress),
               defaultAddress: true,
@@ -358,7 +397,7 @@ function AuthPanel({ onAuthenticated }) {
         }
 
         setLoginForm({
-          email: registerForm.email.trim(),
+          email: normalizeEmailAddress(registerForm.email),
           password: "",
         });
         setRegisterForm(blankRegisterForm);
@@ -369,8 +408,13 @@ function AuthPanel({ onAuthenticated }) {
         return;
       }
 
+      if (!validateLoginInput()) {
+        setLoading(false);
+        return;
+      }
+
       const response = await authService.login({
-        email: loginForm.email.trim(),
+        email: normalizeEmailAddress(loginForm.email),
         password: loginForm.password,
       });
       const payload = unwrapApiData(response);
@@ -685,26 +729,46 @@ function AuthPanel({ onAuthenticated }) {
 
           <div className="space-y-2">
             <Label htmlFor={isLogin ? "login-email" : "register-email"}>
-              Địa chỉ email
+              {isLogin ? "Email hoặc số điện thoại" : "Email"}
             </Label>
             <div className="relative">
               <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <Input
                 id={isLogin ? "login-email" : "register-email"}
-                type="email"
+                type="text"
+                inputMode={isLogin ? "email" : "email"}
                 value={isLogin ? loginForm.email : registerForm.email}
                 onChange={(event) =>
                   isLogin
                     ? updateLogin("email", event.target.value)
                     : updateRegister("email", event.target.value)
                 }
-                className="h-11 pl-9"
-                placeholder="customer@example.com"
+                className={`h-11 pl-9 ${
+                  isLogin
+                    ? loginEmailError
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                      : ""
+                    : registerEmailError
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                    : ""
+                }`}
+                placeholder={isLogin ? "ten@email.com hoặc 0987654321" : "customer@example.com"}
                 autoComplete="email"
+                dir="ltr"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="none"
                 required
               />
             </div>
+            {isLogin && loginEmailError && (
+              <p className="text-sm font-medium text-red-600">{loginEmailError}</p>
+            )}
+            {!isLogin && registerEmailError && (
+              <p className="text-sm font-medium text-red-600">{registerEmailError}</p>
+            )}
           </div>
+
 
           <div className="space-y-2">
             <Label htmlFor={isLogin ? "login-password" : "register-password"}>
@@ -758,6 +822,11 @@ function AuthPanel({ onAuthenticated }) {
                     className={`h-11 pl-9 ${phoneError ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                     placeholder="090xxxxxxxx"
                     maxLength="10"
+                    dir="ltr"
+                    inputMode="tel"
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="none"
                     required
                   />
                 </div>
@@ -1788,6 +1857,11 @@ export default function CustomerProfilePage() {
         !payload.address
       ) {
         throw new Error("Vui lòng nhập đầy đủ thông tin địa chỉ giao hàng.");
+      }
+
+      const phoneErrorMsg = getVietnamPhoneError(payload.phone);
+      if (phoneErrorMsg) {
+        throw new Error(phoneErrorMsg);
       }
 
       // Nếu đang sửa địa chỉ và nó là mặc định, hoặc đây là địa chỉ duy nhất

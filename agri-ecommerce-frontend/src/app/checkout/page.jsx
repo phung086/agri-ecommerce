@@ -63,7 +63,12 @@ import {
 import {
   PHONE_PATTERN_SOURCE,
   isValidPhoneNumber,
+  PHONE_ERROR_MESSAGE,
 } from "@/lib/phone-utils";
+import {
+  getVietnamPhoneError,
+  getEmailError,
+} from "@/lib/profile-validation";
 import { cartService } from "@/services/cart.service";
 import { orderService } from "@/services/order.service";
 import { promotionService } from "@/services/promotion.service";
@@ -146,13 +151,8 @@ function buildDetailedAddress(form) {
     .join(", ");
 }
 
-const PHONE_REGEX = /^0\d{9}$/;
-const PHONE_ERROR_MESSAGE =
-  "Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng số 0.";
-
 function getPhoneError(phone) {
-  if (!phone) return "Vui lòng nhập số điện thoại.";
-  return PHONE_REGEX.test(phone) ? "" : PHONE_ERROR_MESSAGE;
+  return getVietnamPhoneError(phone);
 }
 
 function getActiveCustomerSession() {
@@ -788,6 +788,7 @@ export default function CheckoutPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [phoneError, setPhoneError] = useState("");
+  const [guestEmailError, setGuestEmailError] = useState("");
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState(null);
   const [editAddressForm, setEditAddressForm] = useState(() =>
@@ -1165,8 +1166,18 @@ export default function CheckoutPage() {
     const nextPhoneError = getPhoneError(addressForm.phone.trim());
     setPhoneError(nextPhoneError);
 
+    let nextEmailError = "";
+    if (isGuestCheckout) {
+      nextEmailError = getEmailError(guestEmail, { required: false });
+      setGuestEmailError(nextEmailError);
+    }
+
     if (nextPhoneError) {
       phoneInputRef.current?.focus();
+      return false;
+    }
+
+    if (nextEmailError) {
       return false;
     }
 
@@ -2079,20 +2090,33 @@ export default function CheckoutPage() {
                       </div>
                       {isGuestCheckout && (
                         <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="guest-email">Email nhận hóa đơn(Không bắt buộc)</Label>
+                          <Label htmlFor="guest-email">Email nhận hóa đơn (Không bắt buộc)</Label>
                           <Input
                             id="guest-email"
-                            type="email"
+                            type="text"
+                            inputMode="email"
                             value={guestEmail}
                             onChange={(e) => {
                               setGuestEmail(e.target.value);
+                              setGuestEmailError(getEmailError(e.target.value, { required: false }));
                               setPreview(null);
                             }}
+                            className={
+                              guestEmailError
+                                ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                                : undefined
+                            }
                             placeholder="Bỏ trống nếu không dùng email"
                           />
-                          <p className="text-xs font-semibold text-slate-500">
-                            Hệ thống sẽ gửi hóa đơn điện tử về email này (không bắt buộc).
-                          </p>
+                          {guestEmailError ? (
+                            <p className="text-xs font-semibold text-red-600">
+                              {guestEmailError}
+                            </p>
+                          ) : (
+                            <p className="text-xs font-semibold text-slate-500">
+                              Hệ thống sẽ gửi hóa đơn điện tử về email này (không bắt buộc).
+                            </p>
+                          )}
                         </div>
                       )}
                       <div className="space-y-2">

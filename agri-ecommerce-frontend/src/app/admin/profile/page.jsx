@@ -38,7 +38,7 @@ import {
   createVietnamAddressForm,
   parseFullVietnamAddress,
   buildProfileAddress,
-  getVietnamAddressError
+  getVietnamAddressError,
 } from "@/lib/vietnam-addresses";
 
 const blankProfileForm = {
@@ -130,7 +130,7 @@ export default function AdminProfilePage() {
         tone: "amber",
       },
     ],
-    [profile]
+    [profile],
   );
 
   function updateProfileForm(field, value) {
@@ -160,7 +160,7 @@ export default function AdminProfilePage() {
       {
         remember: isAuthSessionRemembered(AUTH_SCOPES.admin),
         scope: AUTH_SCOPES.admin,
-      }
+      },
     );
 
     window.dispatchEvent(new Event("admin-auth-session-updated"));
@@ -196,7 +196,9 @@ export default function AdminProfilePage() {
     setPhoneError("");
 
     try {
-      const phoneValidationError = getVietnamPhoneError(profileForm.phoneNumber);
+      const phoneValidationError = getVietnamPhoneError(
+        profileForm.phoneNumber,
+      );
       if (phoneValidationError) {
         setPhoneError(phoneValidationError);
         setError(phoneValidationError);
@@ -204,7 +206,9 @@ export default function AdminProfilePage() {
         return;
       }
 
-      const addressValidationError = getVietnamAddressError(addressForm, { required: false });
+      const addressValidationError = getVietnamAddressError(addressForm, {
+        required: false,
+      });
       if (addressValidationError) {
         setError(addressValidationError);
         setSavingProfile(false);
@@ -479,10 +483,17 @@ export default function AdminProfilePage() {
                 }}
                 className={`h-11 ${phoneError ? "border-red-500" : ""}`}
                 placeholder="Nhập: 099999999 hoặc +84999999999"
+                dir="ltr"
+                inputMode="tel"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="none"
                 disabled={loading || uploadingAvatar}
               />
               {phoneError && (
-                <p className="text-xs font-semibold text-red-600">{phoneError}</p>
+                <p className="text-xs font-semibold text-red-600">
+                  {phoneError}
+                </p>
               )}
             </div>
             <div className="space-y-2 sm:col-span-2">
@@ -517,7 +528,9 @@ export default function AdminProfilePage() {
               )}
             </div>
             <div className="space-y-4 sm:col-span-2 border-t border-slate-100 pt-4 mt-2">
-              <h3 className="text-sm font-bold text-slate-800">Địa chỉ liên hệ</h3>
+              <h3 className="text-sm font-bold text-slate-800">
+                Địa chỉ liên hệ
+              </h3>
               <VietnamAddressFields
                 value={addressForm}
                 onChange={setAddressForm}
