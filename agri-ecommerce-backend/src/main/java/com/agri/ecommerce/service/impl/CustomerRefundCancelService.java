@@ -15,6 +15,7 @@ import com.agri.ecommerce.repository.OrderRepository;
 import com.agri.ecommerce.repository.OrderStatusHistoryRepository;
 import com.agri.ecommerce.repository.PaymentRepository;
 import com.agri.ecommerce.repository.ProductRepository;
+import com.agri.ecommerce.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,7 @@ public class CustomerRefundCancelService {
     private final PaymentRepository paymentRepository;
     private final ProductRepository productRepository;
     private final OrderMapper orderMapper;
+    private final EmailService emailService;
 
     @Transactional
     public OrderResponse requestRefundAndCancel(Long userId, Long orderId, RefundCancelRequest request) {
@@ -92,6 +94,12 @@ public class CustomerRefundCancelService {
             history = new java.util.ArrayList<>(history);
             history.add(refundHistory);
         }
+
+        emailService.sendOrderStatusUpdate(
+                savedOrder,
+                "Đã ghi nhận yêu cầu hủy đơn và hoàn tiền",
+                "AgriMarket đã nhận thông tin ngân hàng của bạn và sẽ xử lý hoàn tiền VNPay theo quy trình đối soát. Đây là luồng demo cho đồ án, trạng thái thanh toán đã được chuyển sang chờ hoàn tiền."
+        );
 
         return orderMapper.toOrderResponse(savedOrder, orderItems, payment, history);
     }
