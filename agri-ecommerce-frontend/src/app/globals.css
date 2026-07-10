@@ -52,9 +52,9 @@
   --font-geist-sans: "Segoe UI", Roboto, Arial, sans-serif;
   --font-geist-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 
-  --background: oklch(98.294% 0.00836 146.135);
+  --background: oklch(94.384% 0.02372 145.595);
   --foreground: oklch(0.18 0.035 145);
-  --card: oklch(1 0 0);
+  --card: oklch(96.723% 0.00426 15.811);
   --card-foreground: oklch(0.18 0.035 145);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.035 145);
