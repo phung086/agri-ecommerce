@@ -129,6 +129,15 @@
   html {
     @apply font-sans;
   }
+  input[type="email"],
+  input[type="tel"],
+  input[inputmode="email"],
+  input[inputmode="tel"],
+  input[autocomplete="username"] {
+    direction: ltr;
+    unicode-bidi: plaintext;
+    text-align: left;
+  }
 }
 
 @keyframes add-to-cart-pop {
