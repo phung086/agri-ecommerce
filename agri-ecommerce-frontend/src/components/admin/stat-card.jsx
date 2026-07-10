@@ -36,11 +36,11 @@ export function StatCard({
     <Card className="relative rounded-[8px] border border-emerald-100 bg-white py-0 shadow-[0_16px_42px_rgba(15,61,38,0.07)]">
       <div className={cn("h-1 w-full", currentTone.stripe)} />
       <CardContent className="flex items-start justify-between gap-4 p-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-muted-foreground">{title}</p>
           <p
             className={cn(
-              "mt-2 truncate text-2xl font-black tracking-normal",
+              "mt-2 break-words text-2xl font-black leading-tight tracking-normal",
               currentTone.value
             )}
           >
