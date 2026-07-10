@@ -17,6 +17,10 @@ public class RegisterRequest {
 
     @NotBlank(message = "Email không được để trống")
     @Email(message = "Email không đúng định dạng")
+    @Pattern(
+            regexp = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$",
+            message = "Email phải đúng định dạng, ví dụ customer@example.com"
+    )
     @Size(max = 255, message = "Email không được vượt quá 255 ký tự")
     private String email;
 
@@ -24,13 +28,12 @@ public class RegisterRequest {
     @Size(min = 6, max = 72, message = "Mật khẩu phải từ 6 đến 72 ký tự")
     private String password;
 
-    @Pattern(regexp = "^0\\d{9}$", message = "Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số")
-    @Size(max = 255, message = "Số điện thoại không được vượt quá 255 ký tự")
+    @Size(max = 20, message = "Số điện thoại không được vượt quá 20 ký tự")
     @Pattern(
-            regexp = "^$|^(0[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$",
-            message = "Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0987654321 hoặc +84987654321"
+            regexp = "^$|^(0[2-9][0-9]{8}|84[2-9][0-9]{8}|\\+84[2-9][0-9]{8})$",
+            message = "Số điện thoại phải đúng đầu số Việt Nam, ví dụ 0987654321 hoặc +84987654321"
     )
     private String phoneNumber;
 
     private String address;
-} 
+}
