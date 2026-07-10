@@ -56,6 +56,7 @@ function setFieldVisualState(input, hasError) {
     input.classList.remove(...NORMAL_CLASSES);
   } else {
     input.classList.remove(...ERROR_CLASSES);
+    input.classList.add(...NORMAL_CLASSES);
   }
 }
 

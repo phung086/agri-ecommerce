@@ -1,0 +1,2 @@
+cd agri-ecommerce-frontend
+npx lint-staged

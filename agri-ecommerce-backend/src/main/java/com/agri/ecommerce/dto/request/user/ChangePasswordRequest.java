@@ -17,5 +17,6 @@ public class ChangePasswordRequest {
     private String newPassword;
 
     @NotBlank(message = "Xác nhận mật khẩu mới không được để trống")
+    @Size(max = 72, message = "Xác nhận mật khẩu mới không được vượt quá 72 ký tự")
     private String confirmPassword;
 }

@@ -389,7 +389,11 @@ export function AdminShell({ children }) {
                 <Bell className="size-4" />
               </Button>
 
-              <div className="hidden items-center gap-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 shadow-[0_10px_24px_rgba(15,61,38,0.08)] sm:flex">
+              <Link
+                href="/admin/profile"
+                aria-label="Xem và chỉnh sửa hồ sơ admin"
+                className="hidden items-center gap-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 shadow-[0_10px_24px_rgba(15,61,38,0.08)] transition hover:border-emerald-200 hover:bg-emerald-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 sm:flex"
+              >
                 {adminAvatarUrl ? (
                   <img
                     src={adminAvatarUrl}
@@ -410,7 +414,7 @@ export function AdminShell({ children }) {
                     {adminRole}
                   </p>
                 </div>
-              </div>
+              </Link>
 
               <Button
                 type="button"

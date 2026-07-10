@@ -1128,8 +1128,11 @@ export default function CheckoutPage() {
     }
 
     if (!canPreview) {
-      setPreview(null);
-      return undefined;
+      const timeoutId = window.setTimeout(() => {
+        setPreview(null);
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
     }
 
     const timeoutId = window.setTimeout(() => {
