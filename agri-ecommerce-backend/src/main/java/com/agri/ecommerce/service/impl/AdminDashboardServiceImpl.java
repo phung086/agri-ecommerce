@@ -88,7 +88,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .completedOrders(orderRepository.countByStatus(ORDER_STATUS_COMPLETED))
                 .canceledOrders(orderRepository.countByStatus(ORDER_STATUS_CANCELED))
                 .completedPayments(paymentRepository.countByStatus(PAYMENT_STATUS_COMPLETED))
-                .totalRevenue(safeMoney(orderRepository.sumTotalPriceByStatus(ORDER_STATUS_COMPLETED)))
+                .totalRevenue(safeMoney(paymentRepository.sumAmountByStatus(PAYMENT_STATUS_COMPLETED)))
                 .todayRevenue(safeMoney(paymentRepository.sumAmountByStatusAndPaidAtRange(PAYMENT_STATUS_COMPLETED, todayStart, tomorrowStart)))
                 .totalCustomers(userRepository.countByRole_Name(ROLE_CUSTOMER))
                 .activeCustomers(userRepository.countByRole_NameAndStatus(ROLE_CUSTOMER, UserStatus.active))
@@ -257,46 +257,43 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         if (value == null) {
             return BigDecimal.ZERO;
         }
-
-        if (value instanceof BigDecimal bigDecimal) {
-            return bigDecimal;
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
         }
-
         if (value instanceof Number number) {
             return BigDecimal.valueOf(number.doubleValue());
         }
-
         return new BigDecimal(value.toString());
     }
 
-    private Long longValue(Object value) {
+    private long longValue(Object value) {
         if (value == null) {
             return 0L;
         }
-
         if (value instanceof Number number) {
             return number.longValue();
         }
-
         return Long.parseLong(value.toString());
     }
 
     private String stringValue(Object value) {
-        return value == null ? null : value.toString();
-    }
-
-    private double roundOneDecimal(Double value) {
-        return BigDecimal.valueOf(value == null ? 0 : value)
-                .setScale(1, RoundingMode.HALF_UP)
-                .doubleValue();
+        return value == null ? "" : value.toString();
     }
 
     private String cleanBlank(String value) {
         if (value == null || value.trim().isBlank()) {
             return null;
         }
-
         return value.trim();
+    }
+
+    private double roundOneDecimal(Double value) {
+        if (value == null) {
+            return 0;
+        }
+        return BigDecimal.valueOf(value)
+                .setScale(1, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
     private record DateRange(LocalDateTime from, LocalDateTime to) {
