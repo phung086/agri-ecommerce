@@ -1612,7 +1612,7 @@ export default function DeliveryPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f3f4f6] pb-28 text-slate-900 md:pb-10">
+    <main className="min-h-screen bg-background pb-28 text-foreground md:pb-10">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-emerald-600 text-white shadow-md">
         <div className="mx-auto flex h-14 w-full max-w-lg items-center justify-between px-4">

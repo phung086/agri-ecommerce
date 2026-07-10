@@ -377,7 +377,7 @@ function VnpayReturnContent() {
   }, [gatewaySuccess, result?.orderId]);
 
   return (
-    <main className="min-h-screen bg-[#f6faef] px-4 py-10 text-slate-950">
+    <main className="min-h-screen bg-background px-4 py-10 text-foreground">
       <section className="mx-auto w-full max-w-3xl rounded-[8px] border border-emerald-100 bg-white p-6 shadow-[0_16px_42px_rgba(15,61,38,0.08)]">
         <div className="flex items-center gap-3">
           <div className="flex size-11 items-center justify-center rounded-[8px] bg-emerald-600 text-white">
@@ -478,7 +478,7 @@ export default function VnpayReturnPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-[#f6faef] px-4 py-10 text-slate-950">
+        <main className="min-h-screen bg-background px-4 py-10 text-foreground">
           <section className="mx-auto w-full max-w-3xl rounded-[8px] border border-emerald-100 bg-white p-6">
             <div className="flex items-center gap-3 font-semibold text-emerald-800">
               <Loader2 className="size-5 animate-spin" />

@@ -1641,7 +1641,7 @@ export default function CheckoutPage() {
 
   /* ── render ──────────────────────────────────────────────────────────────── */
   return (
-    <main className="min-h-screen bg-[#f6faef] text-slate-950">
+    <main className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-emerald-900/10 bg-white/88 backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 w-full max-w-[1480px] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <Link href="/" className="flex min-w-0 items-center gap-3">

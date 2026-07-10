@@ -433,7 +433,7 @@ export default function PromotionsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f6faef]">
+    <main className="min-h-screen bg-background text-foreground">
       {/* ── Header ──────────────────────────────────────────────── */}
       <header className="border-b border-emerald-100 bg-white">
         <div className="mx-auto flex w-full max-w-[1480px] items-center gap-4 px-4 py-4 sm:px-6 lg:px-8">
